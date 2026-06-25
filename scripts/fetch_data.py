@@ -26,7 +26,7 @@ SYMBOLS = ['TA', 'MA', 'SA']
 OPT_NAMES = {'TA': 'PTA期权', 'MA': '甲醇期权', 'SA': '纯碱期权'}
 
 _UPLOAD_INTERVAL = 100  # 每处理多少天中途上传一次
-_TIMEOUT = 45  # 单次 API 调用超时（秒）
+_TIMEOUT = 120  # 单次 API 调用超时（秒）
 _timeout_executor = ThreadPoolExecutor(max_workers=1)
 
 
@@ -67,7 +67,8 @@ def make_calendar() -> list[str]:
     try:
         df = ak.tool_trade_date_hist_sina()
         df['trade_date'] = pd.to_datetime(df['trade_date']).dt.strftime('%Y-%m-%d')
-        cal = [d for d in sorted(df['trade_date']) if d >= '2020-01-01']
+        today = datetime.now().strftime('%Y-%m-%d')
+        cal = [d for d in sorted(df['trade_date']) if '2020-01-01' <= d <= today]
         print(f'交易日历: {len(cal)} 天', flush=True)
         return cal
     except Exception as e:
