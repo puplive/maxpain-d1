@@ -198,12 +198,15 @@ def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
     elif max_dates > 0:
         cal = cal[:max_dates]
 
+    # 倒序遍历：最新数据优先处理，用户能更快看到近期数据
+    cal = list(reversed(cal))
+
     result = {s: [] for s in symbols}
     total = len(cal)
     success = 0
     t0 = time.time()
 
-    print(f'📡 逐日处理 {total} 天...', flush=True)
+    print(f'📡 逐日处理 {total} 天（倒序，最新优先）...', flush=True)
 
     for i, d in enumerate(cal):
         ds = d.replace('-', '')
@@ -279,6 +282,10 @@ def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
                 for sym in symbols:
                     if result[sym]:
                         _upload_batch(sym, result[sym], worker_url, api_key)
+
+    # 恢复为按日期正序
+    for s in (symbols or SYMBOLS):
+        result[s].sort(key=lambda r: r['d'])
 
     elapsed = time.time() - t0
     print(f'✅ 完成: {success} 天 ({elapsed:.0f}s)')
