@@ -38,18 +38,16 @@ def _call_with_timeout(fn, timeout=_TIMEOUT):
         return None
 
 
-def _upload_batch(symbol: str, records: list[dict], worker_url: str, api_key: str):
+def _upload_batch(symbol: str, records: list[dict], worker_url: str, api_key: str, gh_token: str = ''):
     """上传一批数据到 Worker API"""
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {api_key}',
+    }
+    if gh_token:
+        headers['X-GitHub-Token'] = gh_token
     payload = json.dumps({'symbol': symbol, 'data': records}).encode('utf-8')
-    req = Request(
-        f'{worker_url}/api/update',
-        data=payload,
-        headers={
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {api_key}',
-        },
-        method='POST',
-    )
+    req = Request(f'{worker_url}/api/update', data=payload, headers=headers, method='POST')
     try:
         with urlopen(req, timeout=120) as resp:
             result = json.loads(resp.read())
@@ -199,7 +197,8 @@ def calc_be(opt_df: pd.DataFrame, px: float, is_call: bool) -> float | None:
 
 
 def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
-        worker_url: str | None = None, api_key: str | None = None) -> dict:
+        worker_url: str | None = None, api_key: str | None = None,
+        gh_token: str = '') -> dict:
     """逐日获取并处理数据"""
     symbols = symbols or SYMBOLS
     cal = make_calendar()
@@ -217,6 +216,10 @@ def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
     t0 = time.time()
 
     print(f'📡 逐日处理 {total} 天（倒序，最新优先）...', flush=True)
+
+    MAX_EMPTY = 30
+    empty_days = {s: 0 for s in symbols}
+    opt_names = {sym: name for sym, name in OPT_NAMES.items() if sym in symbols}
 
     for i, d in enumerate(cal):
         ds = d.replace('-', '')
@@ -236,7 +239,7 @@ def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
 
         # ── 期权（三个品种并行拉取，超时跳过） ──
         opts = {}
-        opt_items = list(OPT_NAMES.items())
+        opt_items = list(opt_names.items())
         with ThreadPoolExecutor(max_workers=3) as ex:
             fs = {ex.submit(_fetch_one_option, sym, oname, ds, d): sym for sym, oname in opt_items}
             try:
@@ -292,6 +295,15 @@ def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
                 'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs,
             })
 
+        # ── 空日计数 + 提前终止 ──
+        got_data = {s for s in symbols if result[s] and result[s][-1]['d'] == d}
+        for sym in symbols:
+            empty_days[sym] = 0 if sym in got_data else empty_days[sym] + 1
+        if all(empty_days[s] >= MAX_EMPTY for s in symbols):
+            print(f'  所有品种连续 {MAX_EMPTY} 天无数据，提前终止', flush=True)
+            cal = cal[:i+1]
+            break
+
         if (i + 1) % 50 == 0:
             elapsed = time.time() - t0
             print(f'  进度: {i+1}/{total} ({success}成功, {elapsed:.0f}s)', flush=True)
@@ -300,7 +312,7 @@ def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
                 print(f'  中途上传数据...', flush=True)
                 for sym in symbols:
                     if result[sym]:
-                        _upload_batch(sym, result[sym], worker_url, api_key)
+                        _upload_batch(sym, result[sym], worker_url, api_key, gh_token)
 
     # 恢复为按日期正序
     for s in (symbols or SYMBOLS):
@@ -318,21 +330,45 @@ def main():
     parser.add_argument('--output', '-o', default='data.json')
     parser.add_argument('--max-dates', type=int, default=0, help='测试用限制处理日期数')
     parser.add_argument('--recent', type=int, default=0, help='仅处理最近 N 个交易日')
-    parser.add_argument('--symbol', help='品种，用逗号分隔 (如 TA,MA)，默认全部')
+    parser.add_argument('--symbol', help='品种，用逗号分隔 (如 TA,MA)；不传则逐个处理')
     parser.add_argument('--worker-url', default=os.getenv('WORKER_URL', ''),
                         help='Worker API 地址，设置后每 100 天中途上传一次')
     parser.add_argument('--api-key', default=os.getenv('D1_API_KEY', ''),
                         help='API 密钥')
+    parser.add_argument('--gh-token', default=os.getenv('GH_UPLOAD_TOKEN', ''),
+                        help='GitHub Token')
     args = parser.parse_args()
 
-    syms = [s.strip() for s in args.symbol.split(',')] if args.symbol else None
     upload = args.worker_url and args.api_key
-    data = run(args.max_dates, recent=args.recent, symbols=syms,
-               worker_url=args.worker_url if upload else None,
-               api_key=args.api_key if upload else None)
+    all_data = {}
+
+    if args.symbol:
+        syms = [s.strip() for s in args.symbol.split(',')]
+        data = run(max_dates=args.max_dates, recent=args.recent, symbols=syms,
+                   worker_url=args.worker_url if upload else None,
+                   api_key=args.api_key if upload else None,
+                   gh_token=args.gh_token)
+        all_data.update(data)
+        if upload:
+            for sym in syms:
+                if data.get(sym):
+                    _upload_batch(sym, data[sym], args.worker_url, args.api_key, args.gh_token)
+    else:
+        for sym in SYMBOLS:
+            print(f'\n{"="*40}')
+            print(f'处理品种: {sym}')
+            print(f'{"="*40}')
+            data = run(max_dates=args.max_dates, recent=args.recent, symbols=[sym],
+                       worker_url=args.worker_url if upload else None,
+                       api_key=args.api_key if upload else None,
+                       gh_token=args.gh_token)
+            all_data[sym] = data.get(sym, [])
+            if upload and all_data[sym]:
+                _upload_batch(sym, all_data[sym], args.worker_url, args.api_key, args.gh_token)
+
     out = Path(args.output)
-    out.write_text(json.dumps(data, ensure_ascii=False))
-    total = sum(len(v) for v in data.values())
+    out.write_text(json.dumps(all_data, ensure_ascii=False))
+    total = sum(len(v) for v in all_data.values())
     print(f'📦 {total} 条 → {out}')
 
 
