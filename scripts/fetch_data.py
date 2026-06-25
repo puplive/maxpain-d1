@@ -7,6 +7,7 @@
 增量: --max-dates 10
 """
 import argparse, json, os, re, sys, time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -120,6 +121,31 @@ def _filter_nearby_month(opt_df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     return opt_df[opt_df['合约代码'].isin(filter_codes)]
 
 
+def _fetch_one_option(sym: str, oname: str, trade_date: str, day: str) -> tuple[str, pd.DataFrame]:
+    """拉取并处理单个品种的期权数据（用于 ThreadPoolExecutor）"""
+    try:
+        o = ak.option_hist_czce(symbol=oname, trade_date=trade_date)
+        if o.empty:
+            return sym, pd.DataFrame()
+        o.columns = o.columns.str.strip()
+        for c in o.select_dtypes(include='object'):
+            o[c] = o[c].str.strip()
+        parsed = o['合约代码'].apply(parse_opt_code)
+        o['strike'] = parsed.apply(lambda x: x[0] if x else None)
+        o['type'] = parsed.apply(lambda x: x[1] if x else None)
+        o = o.dropna(subset=['strike'])
+        o['strike'] = o['strike'].astype(float)
+        o['oi'] = pd.to_numeric(o['持仓量'], errors='coerce').fillna(0)
+        o['close'] = pd.to_numeric(o['今收盘'], errors='coerce').fillna(0)
+        o['volume'] = pd.to_numeric(o['成交量(手)'], errors='coerce').fillna(0)
+        o['iv'] = pd.to_numeric(o['隐含波动率'], errors='coerce')
+        o['delta'] = pd.to_numeric(o['DELTA'], errors='coerce')
+        o = _filter_nearby_month(o, day)
+        return sym, o
+    except Exception:
+        return sym, pd.DataFrame()
+
+
 def calc_max_pain(opt_df: pd.DataFrame) -> int:
     if opt_df.empty:
         return 0
@@ -193,33 +219,14 @@ def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
         except Exception:
             continue
 
-        # ── 期权（三个品种并行） ──
+        # ── 期权（三个品种并行拉取） ──
         opts = {}
-        for sym, oname in OPT_NAMES.items():
-            try:
-                o = ak.option_hist_czce(symbol=oname, trade_date=ds)
-                if o.empty:
-                    opts[sym] = pd.DataFrame()
-                    continue
-                o.columns = o.columns.str.strip()
-                for c in o.select_dtypes(include='object'):
-                    o[c] = o[c].str.strip()
-                parsed = o['合约代码'].apply(parse_opt_code)
-                o['strike'] = parsed.apply(lambda x: x[0] if x else None)
-                o['type'] = parsed.apply(lambda x: x[1] if x else None)
-                o = o.dropna(subset=['strike'])
-                o['strike'] = o['strike'].astype(float)
-                o['oi'] = pd.to_numeric(o['持仓量'], errors='coerce').fillna(0)
-                o['close'] = pd.to_numeric(o['今收盘'], errors='coerce').fillna(0)
-                o['volume'] = pd.to_numeric(o['成交量(手)'], errors='coerce').fillna(0)
-                o['iv'] = pd.to_numeric(o['隐含波动率'], errors='coerce')
-                o['delta'] = pd.to_numeric(o['DELTA'], errors='coerce')
-                # 过滤到近月合约
-                o = _filter_nearby_month(o, d)
-                opts[sym] = o
-            except Exception:
-                opts[sym] = pd.DataFrame()
-            time.sleep(0.2)
+        opt_items = list(OPT_NAMES.items())
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            fs = {ex.submit(_fetch_one_option, sym, oname, ds, d): sym for sym, oname in opt_items}
+            for f in as_completed(fs):
+                sym, df = f.result()
+                opts[sym] = df
 
         success += 1
 
