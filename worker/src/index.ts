@@ -1,7 +1,6 @@
-import { D1Database } from '@cloudflare/workers-types';
-
+// 类型使用内联方式，避免 @cloudflare/workers-types 运行时问题
 interface Env {
-  DB: D1Database;
+  DB: any; // D1Database
   API_KEY: string;
 }
 
