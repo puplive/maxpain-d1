@@ -1,6 +1,6 @@
 name = "maxpain-api"
 main = "src/index.ts"
-compatibility_date = "2025-06-01"
+compatibility_date = "2026-06-01"
 
 [[d1_databases]]
 binding = "DB"
@@ -9,3 +9,10 @@ database_id = "3efbb89c-d56b-407d-a0d3-bb4245c412b9"
 
 [vars]
 API_KEY = "MYW1Ku-gD5C9CZBIUWP753ljADzu3D-4BPnXIMic0Qc"
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
