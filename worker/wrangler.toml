@@ -1,0 +1,13 @@
+name = "maxpain-api"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "maxpain-db"
+database_id = ""
+# ^ 部署后填入: wrangler d1 create maxpain-db
+
+[vars]
+API_KEY = ""
+# ^ 部署后设为随机密钥，与 GitHub Secrets 保持一致

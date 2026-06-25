@@ -1,0 +1,28 @@
+name: Daily Data Update
+on:
+  schedule:
+    - cron: '0 8 * * 1-5'  # 工作日 16:00 CST = 08:00 UTC
+  workflow_dispatch:         # 手动触发
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Fetch data
+        run: python scripts/fetch_data.py --output data.json
+
+      - name: Upload to D1
+        run: python scripts/upload_to_d1.py --input data.json
+        env:
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+          D1_API_KEY: ${{ secrets.D1_API_KEY }}
