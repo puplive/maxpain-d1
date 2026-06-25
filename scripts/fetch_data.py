@@ -132,15 +132,16 @@ def calc_be(opt_df: pd.DataFrame, px: float, is_call: bool) -> float | None:
     return round((low + high) / 2, 2)
 
 
-def run(max_dates: int = 0, recent: int = 0) -> dict:
+def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None) -> dict:
     """逐日获取并处理数据"""
+    symbols = symbols or SYMBOLS
     cal = make_calendar()
     if recent > 0:
         cal = cal[-recent:]
     elif max_dates > 0:
         cal = cal[:max_dates]
 
-    result = {s: [] for s in SYMBOLS}
+    result = {s: [] for s in symbols}
     total = len(cal)
     success = 0
     t0 = time.time()
@@ -192,7 +193,7 @@ def run(max_dates: int = 0, recent: int = 0) -> dict:
         success += 1
 
         # ── 逐品种处理 ──
-        for sym in SYMBOLS:
+        for sym in symbols:
             opt = opts.get(sym)
             if opt is None or opt.empty:
                 continue
@@ -237,7 +238,7 @@ def run(max_dates: int = 0, recent: int = 0) -> dict:
 
     elapsed = time.time() - t0
     print(f'✅ 完成: {success} 天 ({elapsed:.0f}s)')
-    for s in SYMBOLS:
+    for s in (symbols or SYMBOLS):
         print(f'  {s}: {len(result[s])} 条')
     return result
 
@@ -247,9 +248,11 @@ def main():
     parser.add_argument('--output', '-o', default='data.json')
     parser.add_argument('--max-dates', type=int, default=0, help='测试用限制处理日期数')
     parser.add_argument('--recent', type=int, default=0, help='仅处理最近 N 个交易日')
+    parser.add_argument('--symbol', help='品种，用逗号分隔 (如 TA,MA)，默认全部')
     args = parser.parse_args()
 
-    data = run(args.max_dates, recent=args.recent)
+    syms = [s.strip() for s in args.symbol.split(',')] if args.symbol else None
+    data = run(args.max_dates, recent=args.recent, symbols=syms)
     out = Path(args.output)
     out.write_text(json.dumps(data, ensure_ascii=False))
     total = sum(len(v) for v in data.values())
