@@ -18,8 +18,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/requirements.txt
 
-      - name: Fetch data
+      - name: Fetch data (incremental)
+        run: python scripts/fetch_data.py --output data.json --recent 1
+        if: github.event_name == 'schedule'
+
+      - name: Fetch data (full history)
         run: python scripts/fetch_data.py --output data.json
+        if: github.event_name == 'workflow_dispatch'
 
       - name: Upload to D1
         run: python scripts/upload_to_d1.py --input data.json

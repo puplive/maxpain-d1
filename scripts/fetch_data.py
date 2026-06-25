@@ -132,10 +132,12 @@ def calc_be(opt_df: pd.DataFrame, px: float, is_call: bool) -> float | None:
     return round((low + high) / 2, 2)
 
 
-def run(max_dates: int = 0) -> dict:
+def run(max_dates: int = 0, recent: int = 0) -> dict:
     """逐日获取并处理数据"""
     cal = make_calendar()
-    if max_dates > 0:
+    if recent > 0:
+        cal = cal[-recent:]
+    elif max_dates > 0:
         cal = cal[:max_dates]
 
     result = {s: [] for s in SYMBOLS}
@@ -244,9 +246,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', '-o', default='data.json')
     parser.add_argument('--max-dates', type=int, default=0, help='测试用限制处理日期数')
+    parser.add_argument('--recent', type=int, default=0, help='仅处理最近 N 个交易日')
     args = parser.parse_args()
 
-    data = run(args.max_dates)
+    data = run(args.max_dates, recent=args.recent)
     out = Path(args.output)
     out.write_text(json.dumps(data, ensure_ascii=False))
     total = sum(len(v) for v in data.values())
