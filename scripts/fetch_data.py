@@ -7,7 +7,7 @@
 增量: --max-dates 10
 """
 import argparse, json, os, re, sys, time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -26,6 +26,16 @@ SYMBOLS = ['TA', 'MA', 'SA']
 OPT_NAMES = {'TA': 'PTA期权', 'MA': '甲醇期权', 'SA': '纯碱期权'}
 
 _UPLOAD_INTERVAL = 100  # 每处理多少天中途上传一次
+_TIMEOUT = 45  # 单次 API 调用超时（秒）
+_timeout_executor = ThreadPoolExecutor(max_workers=1)
+
+
+def _call_with_timeout(fn, timeout=_TIMEOUT):
+    """调用 fn()，超时返回 None"""
+    try:
+        return _timeout_executor.submit(fn).result(timeout=timeout)
+    except:
+        return None
 
 
 def _upload_batch(symbol: str, records: list[dict], worker_url: str, api_key: str):
@@ -212,7 +222,9 @@ def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
         ds = d.replace('-', '')
         # ── 期货 ──
         try:
-            fut = ak.get_czce_daily(date=ds)
+            fut = _call_with_timeout(lambda: ak.get_czce_daily(date=ds))
+            if fut is None:
+                continue
             if fut.empty:
                 continue
             fut['date'] = d
@@ -222,14 +234,21 @@ def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
         except Exception:
             continue
 
-        # ── 期权（三个品种并行拉取） ──
+        # ── 期权（三个品种并行拉取，超时跳过） ──
         opts = {}
         opt_items = list(OPT_NAMES.items())
         with ThreadPoolExecutor(max_workers=3) as ex:
             fs = {ex.submit(_fetch_one_option, sym, oname, ds, d): sym for sym, oname in opt_items}
-            for f in as_completed(fs):
-                sym, df = f.result()
-                opts[sym] = df
+            try:
+                for f in as_completed(fs, timeout=_TIMEOUT):
+                    sym, df = f.result()
+                    opts[sym] = df
+            except TimeoutError:
+                # 超时的品种留空
+                for f, sym in fs.items():
+                    if sym not in opts:
+                        opts[sym] = pd.DataFrame()
+                print(f'  ⚠ {d} 期权部分超时', flush=True)
 
         success += 1
 
