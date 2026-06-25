@@ -6,9 +6,11 @@
 首次全量: ~1500 交易日 × 4 调用 × 0.3s ≈ 30min
 增量: --max-dates 10
 """
-import argparse, json, re, sys, time
+import argparse, json, os, re, sys, time
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 import numpy as np
 import pandas as pd
@@ -21,6 +23,34 @@ except ImportError:
 
 SYMBOLS = ['TA', 'MA', 'SA']
 OPT_NAMES = {'TA': 'PTA期权', 'MA': '甲醇期权', 'SA': '纯碱期权'}
+
+_UPLOAD_INTERVAL = 100  # 每处理多少天中途上传一次
+
+
+def _upload_batch(symbol: str, records: list[dict], worker_url: str, api_key: str):
+    """上传一批数据到 Worker API"""
+    payload = json.dumps({'symbol': symbol, 'data': records}).encode('utf-8')
+    req = Request(
+        f'{worker_url}/api/update',
+        data=payload,
+        headers={
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}',
+        },
+        method='POST',
+    )
+    try:
+        with urlopen(req, timeout=120) as resp:
+            result = json.loads(resp.read())
+            if result.get('ok'):
+                print(f'    ↗ {symbol}: {result["count"]} 条已上传', flush=True)
+            else:
+                print(f'    ⚠ {symbol}: {result}', flush=True)
+    except HTTPError as e:
+        print(f'    ⚠ {symbol}: HTTP {e.code} {e.read().decode()[:100]}', flush=True)
+    except Exception as e:
+        print(f'    ⚠ {symbol}: {e}', flush=True)
+
 
 
 def make_calendar() -> list[str]:
@@ -132,7 +162,8 @@ def calc_be(opt_df: pd.DataFrame, px: float, is_call: bool) -> float | None:
     return round((low + high) / 2, 2)
 
 
-def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None) -> dict:
+def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
+        worker_url: str | None = None, api_key: str | None = None) -> dict:
     """逐日获取并处理数据"""
     symbols = symbols or SYMBOLS
     cal = make_calendar()
@@ -235,6 +266,12 @@ def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None) -
         if (i + 1) % 50 == 0:
             elapsed = time.time() - t0
             print(f'  进度: {i+1}/{total} ({success}成功, {elapsed:.0f}s)', flush=True)
+            # 每处理 _UPLOAD_INTERVAL 天中途上传一次
+            if worker_url and api_key and (i + 1) % _UPLOAD_INTERVAL == 0:
+                print(f'  中途上传数据...', flush=True)
+                for sym in symbols:
+                    if result[sym]:
+                        _upload_batch(sym, result[sym], worker_url, api_key)
 
     elapsed = time.time() - t0
     print(f'✅ 完成: {success} 天 ({elapsed:.0f}s)')
@@ -249,10 +286,17 @@ def main():
     parser.add_argument('--max-dates', type=int, default=0, help='测试用限制处理日期数')
     parser.add_argument('--recent', type=int, default=0, help='仅处理最近 N 个交易日')
     parser.add_argument('--symbol', help='品种，用逗号分隔 (如 TA,MA)，默认全部')
+    parser.add_argument('--worker-url', default=os.getenv('WORKER_URL', ''),
+                        help='Worker API 地址，设置后每 100 天中途上传一次')
+    parser.add_argument('--api-key', default=os.getenv('D1_API_KEY', ''),
+                        help='API 密钥')
     args = parser.parse_args()
 
     syms = [s.strip() for s in args.symbol.split(',')] if args.symbol else None
-    data = run(args.max_dates, recent=args.recent, symbols=syms)
+    upload = args.worker_url and args.api_key
+    data = run(args.max_dates, recent=args.recent, symbols=syms,
+               worker_url=args.worker_url if upload else None,
+               api_key=args.api_key if upload else None)
     out = Path(args.output)
     out.write_text(json.dumps(data, ensure_ascii=False))
     total = sum(len(v) for v in data.values())
