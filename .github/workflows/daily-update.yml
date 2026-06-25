@@ -1,8 +1,11 @@
 name: Daily Data Update
 on:
   schedule:
-    - cron: '0 8 * * 1-5'  # 工作日 16:00 CST = 08:00 UTC
-    - cron: '30 8 * * 1-5'  # 16:30 重试
+    - cron: '0 8 * * 1-5'   # 16:00 CST
+    - cron: '30 8 * * 1-5'  # 16:30
+    - cron: '0 9 * * 1-5'   # 17:00
+    - cron: '30 9 * * 1-5'  # 17:30
+    - cron: '0 10 * * 1-5'  # 18:00
   workflow_dispatch:         # 手动触发
 
 jobs:
