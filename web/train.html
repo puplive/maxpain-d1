@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f1923">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>MP模拟交易训练</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { font: 14px/1.6 -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0f1923; color: #c8d6e5; padding: 20px; }
+.container { max-width: 1100px; margin: 0 auto; }
+
+/* Nav */
+.nav { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; font-size: 13px; }
+.nav a { color: #576574; text-decoration: none; padding: 4px 10px; border: 1px solid #2d3436; border-radius: 4px; transition: all .2s; }
+.nav a:hover { color: #54a0ff; border-color: #54a0ff; }
+.nav span { color: #54a0ff; font-weight: 600; font-size: 18px; }
+.nav .badge { font-size: 11px; color: #576574; font-weight: normal; }
+
+/* Controls */
+.controls { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+.controls select { padding: 8px 16px; border: 1px solid #2d3436; border-radius: 6px; background: #1a2a3a; color: #c8d6e5; font-size: 14px; cursor: pointer; }
+.controls select:focus { outline: none; border-color: #54a0ff; }
+.controls select:disabled { opacity: .5; cursor: not-allowed; }
+.btn { padding: 8px 24px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; transition: background .15s; touch-action: manipulation; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-primary { background: #54a0ff; color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #2e86de; }
+.status { color: #8395a7; font-size: 13px; margin-left: auto; }
+
+/* Score summary */
+.score-bar { display: none; gap: 16px; align-items: center; padding: 12px 16px; background: #1a2a3a; border-radius: 8px; margin-bottom: 16px; flex-wrap: wrap; font-size: 13px; }
+.score-bar.show { display: flex; }
+.score-item { text-align: center; }
+.score-item .val { font-size: 18px; font-weight: 700; }
+.score-item .val.pos { color: #5cd85a; }
+.score-item .val.neg { color: #ff6b6b; }
+.score-item .label { font-size: 11px; color: #576574; }
+.score-grade { font-size: 28px; font-weight: 700; padding: 0 16px; border-right: 1px solid #2d3436; }
+.score-grade.S { color: #e8c84a; }
+.score-grade.A { color: #5cd85a; }
+.score-grade.B { color: #54a0ff; }
+.score-grade.C { color: #f5a623; }
+.score-grade.D { color: #ff6b6b; }
+
+/* Chart */
+.chart-wrap { background: #1a2a3a; border: 1px solid #2d3436; border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+#chart { width: 100%; height: 380px; display: block; }
+.hint { text-align: center; padding: 80px 20px; color: #576574; font-size: 14px; }
+
+/* Action panel */
+.action-panel { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 16px; background: #1a2a3a; border-radius: 8px; margin-bottom: 16px; }
+.pos-info { flex: 1; min-width: 200px; font-size: 13px; }
+.pos-info .row { display: flex; gap: 16px; flex-wrap: wrap; }
+.pos-info .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.tag.long { background: #5cd85a22; color: #5cd85a; border: 1px solid #5cd85a44; }
+.tag.short { background: #ff6b6b22; color: #ff6b6b; border: 1px solid #ff6b6b44; }
+.pos-info .pnl { font-weight: 700; font-variant-numeric: tabular-nums; }
+.pos-info .detail { color: #576574; font-size: 12px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn-long { background: #5cd85a; color: #0f1923; }
+.btn-long:hover:not(:disabled) { background: #3cb83a; }
+.btn-short { background: #ff6b6b; color: #fff; }
+.btn-short:hover:not(:disabled) { background: #e04040; }
+.btn-close { background: #ff9f43; color: #0f1923; }
+.btn-close:hover:not(:disabled) { background: #e08830; }
+.btn-next { background: #2d3436; color: #c8d6e5; }
+.btn-next:hover:not(:disabled) { background: #3d4446; }
+.btn-auto { background: transparent; color: #576574; border: 1px solid #2d3436; padding: 8px 14px; font-size: 12px; }
+.btn-auto.on { color: #54a0ff; border-color: #54a0ff44; background: #54a0ff11; }
+.progress { font-size: 12px; color: #576574; white-space: nowrap; }
+
+/* Trade history */
+.section { margin-bottom: 24px; }
+.section h2 { font-size: 15px; color: #8395a7; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #2d3436; display: flex; gap: 8px; align-items: center; }
+.section h2 small { font-size: 12px; color: #576574; font-weight: normal; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 8px 10px; background: #1a2a3a; color: #8395a7; font-weight: 600; border-bottom: 1px solid #2d3436; white-space: nowrap; }
+td { padding: 8px 10px; border-bottom: 1px solid #1a2a3a; }
+tr:hover td { background: #1a2a3a; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pos { color: #5cd85a; }
+.neg { color: #ff6b6b; }
+.center { text-align: center; }
+.empty { text-align: center; padding: 30px 0; color: #576574; font-size: 13px; }
+
+/* Rating map */
+.rating-bar { display: flex; gap: 0; margin-top: 8px; border-radius: 4px; overflow: hidden; height: 6px; }
+.rating-bar div { height: 100%; }
+.rating-label { display: flex; justify-content: space-between; font-size: 10px; color: #576574; margin-top: 2px; }
+
+/* Responsive */
+@media (max-width: 600px) {
+  body { padding: 10px; }
+  .controls select { padding: 6px 10px; font-size: 12px; flex: 1; min-width: 0; }
+  .btn { padding: 6px 14px; font-size: 12px; }
+  #chart { height: 260px; }
+  .action-panel { flex-direction: column; align-items: stretch; }
+  .pos-info .row { gap: 8px; }
+  .actions { justify-content: center; }
+  .score-bar { gap: 8px; font-size: 12px; }
+  .score-item .val { font-size: 15px; }
+  .score-grade { font-size: 22px; }
+  table { font-size: 11px; }
+  th, td { padding: 5px 6px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="nav">
+    <a href="index.html">← 回测</a>
+    <span>MP模拟交易训练 <span class="badge">随机数据段 · 逐根K线</span></span>
+  </div>
+
+  <div class="controls">
+    <select id="symbol">
+      <option value="TA">PTA (TA)</option>
+      <option value="MA">甲醇 (MA)</option>
+      <option value="SA">纯碱 (SA)</option>
+      <option value="random">🎲 随机品种</option>
+    </select>
+    <button class="btn btn-primary" id="startBtn" onclick="startTraining()">开始训练</button>
+    <span class="status" id="status">就绪</span>
+  </div>
+
+  <div class="score-bar" id="scoreBar">
+    <div class="score-grade" id="scoreGrade">S</div>
+    <div class="score-item"><div class="val" id="sTotalPnl">0</div><div class="label">总PnL</div></div>
+    <div class="score-item"><div class="val" id="sWinRate">0%</div><div class="label">胜率</div></div>
+    <div class="score-item"><div class="val" id="sTrades">0</div><div class="label">笔数</div></div>
+    <div class="score-item"><div class="val" id="sAvgPnl">0</div><div class="label">均PnL</div></div>
+    <div class="score-item"><div class="val" id="sMaxWin">0</div><div class="label">最大盈利</div></div>
+    <div class="score-item"><div class="val" id="sMaxLoss">0</div><div class="label">最大亏损</div></div>
+  </div>
+
+  <div class="chart-wrap">
+    <canvas id="chart"></canvas>
+    <div class="hint" id="chartHint">点击「开始训练」随机选取数据段<br>逐根K线揭示，模拟实盘决策</div>
+  </div>
+
+  <div class="action-panel">
+    <div class="pos-info" id="posInfo">
+      <div class="detail" id="noPos">空仓 — 选择方向开仓</div>
+      <div class="row" id="posDetail" style="display:none;">
+        <span><span class="tag" id="posDirTag">多</span> <span id="posQty">1</span>手</span>
+        <span>入场: <b id="posEntryPx">0</b></span>
+        <span class="pnl" id="posPnl">+0</span>
+        <span class="detail" id="posPnlPct">(+0%)</span>
+        <span class="detail" id="posHold">0根</span>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-long" id="btnLong" onclick="openLong()">开多</button>
+      <button class="btn btn-short" id="btnShort" onclick="openShort()">开空</button>
+      <button class="btn btn-close" id="btnClose" onclick="closePosition()" disabled>平仓</button>
+      <button class="btn btn-next" id="btnNext" onclick="nextCandle()">下一步 →</button>
+      <button class="btn btn-auto" id="btnAuto" onclick="toggleAuto()">▶ 自动</button>
+    </div>
+    <div class="progress" id="progress">—</div>
+  </div>
+
+  <div class="section">
+    <h2>交易记录 <small id="recordSummary"></small></h2>
+    <table>
+      <thead><tr>
+        <th>#</th><th>入场</th><th class="center">方向</th><th class="num">入场价</th><th>出场</th><th class="num">出场价</th><th class="num">持仓</th><th class="num">PnL</th>
+      </tr></thead>
+      <tbody id="tradeBody">
+        <tr><td colspan="8" class="empty">暂无交易</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const API_BASE = 'https://api.starrysay.com';
+const SYM_CFG = { TA: { name: 'PTA', mult: 5 }, MA: { name: '甲醇', mult: 10 }, SA: { name: '纯碱', mult: 20 } };
+const LOOKBACK = 15;
+const MIN_SEG = 40;
+const MAX_SEG = 70;
+const FEE_PER_LOT = 10; // per side
+
+let ALL_DATA = {};
+let segment = [];
+let segmentSymbol = '';
+let segmentStartIdx = 0;
+let currentIdx = 0; // index within segment (first LOOKBACK are hidden context)
+let visibleIdx = 0; // last revealed candle index
+let position = null;
+let trades = [];
+let state = 'idle'; // idle | playing | done
+let autoTimer = null;
+let totalTradesInSegment = 0;
+
+async function loadData(symbol) {
+  const status = document.getElementById('status');
+  status.textContent = '加载 ' + symbol + ' ...';
+  try {
+    const resp = await fetch(API_BASE + '/api/data?symbol=' + symbol);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const json = await resp.json();
+    return json.data || [];
+  } catch (e) {
+    status.textContent = '加载失败: ' + e.message;
+    return null;
+  }
+}
+
+async function loadAllData() {
+  const status = document.getElementById('status');
+  status.textContent = '加载数据中...';
+  const syms = ['TA', 'MA', 'SA'];
+  for (const sym of syms) {
+    const d = await loadData(sym);
+    if (d) ALL_DATA[sym] = d;
+  }
+  if (Object.keys(ALL_DATA).length === 0) {
+    status.textContent = '数据加载失败';
+    return false;
+  }
+  status.textContent = '数据就绪 (' + Object.keys(ALL_DATA).length + ' 品种)';
+  return true;
+}
+
+function pickSegment() {
+  let sym = document.getElementById('symbol').value;
+  if (sym === 'random') {
+    const keys = Object.keys(ALL_DATA);
+    sym = keys[Math.floor(Math.random() * keys.length)];
+    document.getElementById('symbol').value = sym;
+  }
+
+  const data = ALL_DATA[sym];
+  if (!data || data.length < MIN_SEG + LOOKBACK + 5) {
+    document.getElementById('status').textContent = sym + ' 数据不足';
+    return false;
+  }
+
+  const segLen = MIN_SEG + Math.floor(Math.random() * (MAX_SEG - MIN_SEG));
+  const maxStart = data.length - segLen - 5;
+  const rawStart = LOOKBACK + Math.floor(Math.random() * (maxStart - LOOKBACK));
+
+  segmentSymbol = sym;
+  segmentStartIdx = rawStart - LOOKBACK;
+  segment = data.slice(segmentStartIdx, rawStart + segLen);
+  currentIdx = LOOKBACK; // first revealable candle
+  visibleIdx = LOOKBACK; // only lookback candles visible initially
+
+  return true;
+}
+
+// ── Game Actions ──
+
+function startTraining() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  document.getElementById('btnAuto').classList.remove('on');
+  document.getElementById('btnAuto').textContent = '▶ 自动';
+
+  if (!pickSegment()) return;
+
+  position = null;
+  trades = [];
+  totalTradesInSegment = 0;
+  state = 'playing';
+  visibleIdx = LOOKBACK;
+
+  document.getElementById('startBtn').textContent = '重新训练';
+  document.getElementById('scoreBar').classList.remove('show');
+  document.getElementById('chartHint').style.display = 'none';
+  document.getElementById('symbol').disabled = true;
+
+  updateUI();
+  drawChart();
+  document.getElementById('status').textContent = '训练中… 第 1/' + (segment.length - LOOKBACK) + ' 根';
+}
+
+function nextCandle() {
+  if (state !== 'playing') return;
+  if (visibleIdx >= segment.length - 1) {
+    endTraining();
+    return;
+  }
+  visibleIdx++;
+  if (position) updateFloatingPnl();
+  updateUI();
+  drawChart();
+
+  const total = segment.length - LOOKBACK;
+  const cur = visibleIdx - LOOKBACK + 1;
+  document.getElementById('status').textContent = '训练中… 第 ' + cur + '/' + total + ' 根';
+}
+
+function openLong() {
+  if (state !== 'playing' || position) return;
+  const row = segment[visibleIdx];
+  position = {
+    dir: 'long',
+    entryPx: row.c,
+    entryDate: row.d,
+    entryIdx: visibleIdx,
+    qty: 1,
+    floatingPnl: 0,
+  };
+  updateUI();
+  drawChart();
+}
+
+function openShort() {
+  if (state !== 'playing' || position) return;
+  const row = segment[visibleIdx];
+  position = {
+    dir: 'short',
+    entryPx: row.c,
+    entryDate: row.d,
+    entryIdx: visibleIdx,
+    qty: 1,
+    floatingPnl: 0,
+  };
+  updateUI();
+  drawChart();
+}
+
+function closePosition() {
+  if (!position) return;
+  const row = segment[visibleIdx];
+  const mult = SYM_CFG[segmentSymbol].mult;
+  const diff = position.dir === 'long' ? row.c - position.entryPx : position.entryPx - row.c;
+  const pnl = diff * position.qty * mult;
+  const fee = FEE_PER_LOT * 2 * position.qty;
+  const netPnl = pnl - fee;
+
+  trades.push({
+    dir: position.dir,
+    entryPx: position.entryPx,
+    exitPx: row.c,
+    entryDate: position.entryDate,
+    exitDate: row.d,
+    hold: visibleIdx - position.entryIdx,
+    pnl: netPnl,
+    qty: position.qty,
+  });
+  totalTradesInSegment++;
+
+  position = null;
+  updateUI();
+  drawChart();
+}
+
+function toggleAuto() {
+  if (autoTimer) {
+    clearInterval(autoTimer);
+    autoTimer = null;
+    document.getElementById('btnAuto').classList.remove('on');
+    document.getElementById('btnAuto').textContent = '▶ 自动';
+    return;
+  }
+  if (state !== 'playing') return;
+  document.getElementById('btnAuto').classList.add('on');
+  document.getElementById('btnAuto').textContent = '⏸ 暂停';
+  autoTimer = setInterval(function() {
+    if (state !== 'playing') { toggleAuto(); return; }
+    nextCandle();
+  }, 1500);
+}
+
+function updateFloatingPnl() {
+  if (!position) return;
+  const row = segment[visibleIdx];
+  const mult = SYM_CFG[segmentSymbol].mult;
+  const diff = position.dir === 'long' ? row.c - position.entryPx : position.entryPx - row.c;
+  position.floatingPnl = diff * position.qty * mult;
+}
+
+function endTraining() {
+  state = 'done';
+  document.getElementById('symbol').disabled = false;
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  document.getElementById('btnAuto').classList.remove('on');
+  document.getElementById('btnAuto').textContent = '▶ 自动';
+
+  // Force close any open position
+  if (position) {
+    closePosition();
+  }
+  showScore();
+  updateUI();
+  drawChart();
+  document.getElementById('status').textContent = '训练完成！共 ' + totalTradesInSegment + ' 笔交易';
+}
+
+function showScore() {
+  if (trades.length === 0) return;
+
+  const pnls = trades.map(t => t.pnl);
+  const totalPnl = pnls.reduce((s, v) => s + v, 0);
+  const wins = trades.filter(t => t.pnl > 0);
+  const losses = trades.filter(t => t.pnl <= 0);
+  const winRate = wins.length / trades.length;
+  const avgPnl = Math.round(totalPnl / trades.length);
+  const maxWin = wins.length ? Math.round(Math.max(...wins.map(t => t.pnl))) : 0;
+  const maxLoss = losses.length ? Math.round(Math.max(...losses.map(t => Math.abs(t.pnl)))) : 0;
+
+  // Grade: S/A/B/C/D based on multiple factors
+  let score = 0;
+  if (winRate > 0.6) score += 2;
+  else if (winRate > 0.4) score += 1;
+  if (totalPnl > 0) score += 2;
+  if (trades.length >= 3) score += 1;
+  if (trades.length >= 5) score += 1;
+  const avgWin = wins.length ? wins.reduce((s, t) => s + t.pnl, 0) / wins.length : 0;
+  const avgLoss = losses.length ? Math.abs(losses.reduce((s, t) => s + t.pnl, 0) / losses.length) : 0;
+  if (avgWin > avgLoss * 2) score += 1;
+
+  const grades = ['D', 'D', 'C', 'C', 'B', 'B', 'A', 'A', 'S'];
+  const grade = grades[Math.min(score, grades.length - 1)];
+
+  document.getElementById('scoreGrade').textContent = grade;
+  document.getElementById('scoreGrade').className = 'score-grade ' + grade;
+  document.getElementById('sTotalPnl').textContent = (totalPnl > 0 ? '+' : '') + totalPnl.toLocaleString();
+  document.getElementById('sTotalPnl').className = 'val ' + (totalPnl >= 0 ? 'pos' : 'neg');
+  document.getElementById('sWinRate').textContent = (winRate * 100).toFixed(0) + '%';
+  document.getElementById('sTrades').textContent = trades.length;
+  document.getElementById('sAvgPnl').textContent = (avgPnl > 0 ? '+' : '') + avgPnl.toLocaleString();
+  document.getElementById('sAvgPnl').className = 'val ' + (avgPnl >= 0 ? 'pos' : 'neg');
+  document.getElementById('sMaxWin').textContent = '+' + maxWin.toLocaleString();
+  document.getElementById('sMaxLoss').textContent = '-' + maxLoss.toLocaleString();
+  document.getElementById('scoreBar').classList.add('show');
+}
+
+// ── UI Updates ──
+
+function updateUI() {
+  const hasPos = !!position;
+  const isPlaying = state === 'playing';
+
+  document.getElementById('btnLong').disabled = hasPos || !isPlaying;
+  document.getElementById('btnShort').disabled = hasPos || !isPlaying;
+  document.getElementById('btnClose').disabled = !hasPos;
+  document.getElementById('btnNext').disabled = !isPlaying;
+
+  // Position info
+  if (hasPos) {
+    const px = segment[visibleIdx].c;
+    const mult = SYM_CFG[segmentSymbol].mult;
+    const diff = position.dir === 'long' ? px - position.entryPx : position.entryPx - px;
+    const pnl = diff * position.qty * mult;
+    const pnlPct = (diff / position.entryPx * 100);
+    const hold = visibleIdx - position.entryIdx;
+
+    document.getElementById('noPos').style.display = 'none';
+    document.getElementById('posDetail').style.display = 'flex';
+    document.getElementById('posDirTag').textContent = position.dir === 'long' ? '多' : '空';
+    document.getElementById('posDirTag').className = 'tag ' + position.dir;
+    document.getElementById('posQty').textContent = position.qty;
+    document.getElementById('posEntryPx').textContent = position.entryPx.toFixed(0);
+    document.getElementById('posPnl').textContent = (pnl >= 0 ? '+' : '') + Math.round(pnl).toLocaleString();
+    document.getElementById('posPnl').className = 'pnl ' + (pnl >= 0 ? 'pos' : 'neg');
+    document.getElementById('posPnlPct').textContent = (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%';
+    document.getElementById('posPnlPct').className = 'detail ' + (pnlPct >= 0 ? 'pos' : 'neg');
+    document.getElementById('posHold').textContent = hold + '根';
+  } else {
+    document.getElementById('noPos').style.display = 'block';
+    if (state === 'done') {
+      document.getElementById('noPos').textContent = '训练结束';
+    } else {
+      document.getElementById('noPos').textContent = '空仓 — 选择方向开仓';
+    }
+    document.getElementById('posDetail').style.display = 'none';
+  }
+
+  // Progress
+  if (state === 'playing') {
+    const cur = Math.min(visibleIdx - LOOKBACK + 1, segment.length - LOOKBACK);
+    const total = segment.length - LOOKBACK;
+    document.getElementById('progress').textContent = 'K线 ' + cur + '/' + total;
+  } else if (state === 'done') {
+    document.getElementById('progress').textContent = '已完成';
+  } else {
+    document.getElementById('progress').textContent = '—';
+  }
+
+  // Trade table
+  renderTradeTable();
+}
+
+function renderTradeTable() {
+  const tbody = document.getElementById('tradeBody');
+  if (trades.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">暂无交易</td></tr>';
+    document.getElementById('recordSummary').textContent = '';
+    return;
+  }
+
+  let html = '';
+  for (let i = trades.length - 1; i >= 0; i--) {
+    const t = trades[i];
+    const num = i + 1;
+    html += '<tr>' +
+      '<td>' + num + '</td>' +
+      '<td>' + t.entryDate + '</td>' +
+      '<td class="center"><span class="tag ' + t.dir + '">' + (t.dir === 'long' ? '多' : '空') + '</span></td>' +
+      '<td class="num">' + t.entryPx.toFixed(0) + '</td>' +
+      '<td>' + t.exitDate + '</td>' +
+      '<td class="num">' + t.exitPx.toFixed(0) + '</td>' +
+      '<td class="num">' + t.hold + '根</td>' +
+      '<td class="num ' + (t.pnl >= 0 ? 'pos' : 'neg') + '">' + (t.pnl >= 0 ? '+' : '') + Math.round(t.pnl).toLocaleString() + '</td>' +
+      '</tr>';
+  }
+  tbody.innerHTML = html;
+
+  const totalPnl = trades.reduce((s, t) => s + t.pnl, 0);
+  const wins = trades.filter(t => t.pnl > 0).length;
+  document.getElementById('recordSummary').textContent = totalTradesInSegment + '笔 | 胜' + wins + '负' + (totalTradesInSegment - wins);
+}
+
+// ── Chart ──
+
+function drawChart() {
+  const canvas = document.getElementById('chart');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const W = rect.width - 24;
+  const H = 380;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const n = segment.length;
+  const revealed = visibleIdx;
+  const pad = { top: 24, bottom: 36, left: 60, right: 60 };
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top - pad.bottom;
+
+  // Price range (consider only revealed candles)
+  let minP = Infinity, maxP = -Infinity;
+  for (let i = 0; i <= revealed; i++) {
+    const r = segment[i];
+    minP = Math.min(minP, r.l, r.mp);
+    maxP = Math.max(maxP, r.h, r.mp);
+  }
+  // Add padding for unrevealed area (rough estimate)
+  if (revealed < n - 1) {
+    const lastPx = segment[revealed].c;
+    minP = Math.min(minP, lastPx * 0.97);
+    maxP = Math.max(maxP, lastPx * 1.03);
+  }
+  const range = maxP - minP || 1;
+  const padP = range * 0.06;
+  minP -= padP; maxP += padP;
+  const scaleY = ch / (maxP - minP);
+  const toY = v => pad.top + ch - (v - minP) * scaleY;
+  const toX = i => pad.left + (i / (n - 1)) * cw;
+
+  ctx.fillStyle = '#0f1923';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid
+  ctx.strokeStyle = '#1a2a3a';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 8; i++) {
+    const y = pad.top + (ch / 8) * i;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+  }
+
+  // Price labels
+  ctx.fillStyle = '#576574';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 8; i++) {
+    const y = pad.top + (ch / 8) * i;
+    ctx.fillText((maxP - (range / 8) * i).toFixed(0), pad.left - 6, y + 4);
+  }
+
+  // === Unrevealed area (dim) ===
+  if (revealed < n - 1) {
+    const ux = toX(revealed);
+    ctx.fillStyle = '#0a141e';
+    ctx.fillRect(ux + 2, pad.top, W - pad.right - ux - 2, ch);
+    ctx.fillStyle = '#152230';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('未揭示 (' + (n - revealed - 1) + ' 根)', pad.left + cw / 2, pad.top + ch / 2);
+
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = '#2d3436';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(ux, pad.top); ctx.lineTo(ux, pad.top + ch); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // === MP Line (revealed only) ===
+  ctx.strokeStyle = '#e8c84a';
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.7;
+  ctx.beginPath();
+  let mpStarted = false;
+  for (let i = 0; i <= revealed; i++) {
+    const r = segment[i];
+    if (r.mp == null) continue;
+    const x = toX(i), y = toY(r.mp);
+    if (!mpStarted) { ctx.moveTo(x, y); mpStarted = true; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // MP label
+  if (revealed >= 0 && segment[revealed].mp != null) {
+    ctx.fillStyle = '#e8c84a';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('MP', toX(revealed) + 4, toY(segment[revealed].mp) - 2);
+  }
+
+  // === Candlesticks ===
+  for (let i = 0; i <= revealed; i++) {
+    const r = segment[i];
+    const x = toX(i);
+    const prevClose = i > 0 ? segment[i - 1].c : r.c;
+    const isUp = r.c >= prevClose;
+    const barW = Math.max(1, cw / n * 0.6);
+    const halfW = barW / 2;
+
+    // Shadow
+    ctx.strokeStyle = isUp ? '#5cd85a' : '#ff6b6b';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, toY(r.h)); ctx.lineTo(x, toY(r.l)); ctx.stroke();
+
+    // Body
+    ctx.fillStyle = isUp ? '#5cd85a' : '#ff6b6b';
+    const bodyTop = isUp ? toY(r.c) : toY(prevClose);
+    const bodyH = Math.max(1, Math.abs(toY(r.c) - toY(prevClose)));
+    ctx.fillRect(x - halfW, bodyTop, barW, bodyH);
+  }
+
+  // === Entry/Exit markers ===
+  // Trades in history (closed)
+  for (const t of trades) {
+    const eIdx = segment.findIndex(r => r.d === t.entryDate);
+    const xIdx = segment.findIndex(r => r.d === t.exitDate);
+    if (eIdx >= 0 && eIdx <= revealed) {
+      const xe = toX(eIdx), ye = toY(t.entryPx);
+      ctx.save();
+      ctx.fillStyle = t.dir === 'long' ? '#5cd85a' : '#ff6b6b';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(t.dir === 'long' ? '▲' : '▼', xe, ye + (t.dir === 'long' ? -8 : 5));
+      ctx.restore();
+    }
+    if (xIdx >= 0 && xIdx <= revealed) {
+      const xx = toX(xIdx), yx = toY(t.exitPx);
+      ctx.save();
+      ctx.strokeStyle = '#ff9f43';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(xx, yx, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(xx - 4, yx - 4); ctx.lineTo(xx + 4, yx + 4);
+      ctx.moveTo(xx + 4, yx - 4); ctx.lineTo(xx - 4, yx + 4);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Current position marker
+  if (position) {
+    const px = position.entryPx;
+    const idx = position.entryIdx;
+    const x = toX(idx), y = toY(px);
+    ctx.save();
+    ctx.fillStyle = position.dir === 'long' ? '#5cd85a' : '#ff6b6b';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(position.dir === 'long' ? '▲' : '▼', x, y + (position.dir === 'long' ? -10 : 6));
+    ctx.restore();
+  }
+
+  // === Date labels ===
+  ctx.fillStyle = '#576574';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+  const labelStep = Math.max(1, Math.floor((revealed + 1) / 8));
+  for (let i = 0; i <= revealed; i += labelStep) {
+    ctx.fillText(segment[i].d.slice(5), toX(i), H - 10);
+  }
+
+  // === Legend ===
+  ctx.save();
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  const lx = pad.left + 8, ly = pad.top + 4;
+  ctx.fillStyle = '#1a2a3a';
+  ctx.fillRect(lx - 4, ly - 2, 200, 22);
+  ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(lx, ly+8); ctx.lineTo(lx+16, ly+8); ctx.stroke();
+  ctx.fillStyle = '#c8d6e5'; ctx.fillText('MP', lx+20, ly+12);
+  ctx.fillStyle = '#576574';
+  ctx.fillText(SYM_CFG[segmentSymbol] ? SYM_CFG[segmentSymbol].name + ' (' + segmentSymbol + ')' : segmentSymbol, lx+56, ly+12);
+  ctx.restore();
+
+  // Symbol+segment range
+  ctx.fillStyle = '#576574';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(segment[0].d + ' ~ ' + segment[revealed].d, W - pad.right, H - 10);
+}
+
+// ── Init ──
+
+window.onload = async function() {
+  await loadAllData();
+  document.getElementById('status').textContent = '数据就绪，点击开始训练';
+};
+
+window.onresize = function() {
+  if (state === 'playing' || state === 'done') drawChart();
+};
+</script>
+</body>
+</html>

@@ -88,7 +88,11 @@ tr:hover td { background: #1a2a3a; }
 </head>
 <body>
 <div class="container" id="app">
-  <h1>MP趋势跟踪策略回测 <small>趋势+震荡双模式</small></h1>
+  <div class="nav" style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+  <span style="color:#54a0ff;font-weight:600;font-size:18px;">MP趋势跟踪策略回测</span>
+  <a href="train.html" style="color:#576574;text-decoration:none;padding:4px 12px;border:1px solid #2d3436;border-radius:4px;font-size:13px;transition:all .2s;" onmouseover="this.style.color='#54a0ff';this.style.borderColor='#54a0ff'" onmouseout="this.style.color='#576574';this.style.borderColor='#2d3436'">模拟训练 →</a>
+  <small style="font-size:13px;color:#576574;font-weight:normal;">趋势+震荡双模式</small>
+</div>
 
   <div class="refresh-bar" id="refreshBar">
     <span id="dataStatus">加载数据中...</span>
