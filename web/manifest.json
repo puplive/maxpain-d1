@@ -1,0 +1,16 @@
+{
+  "name": "MP趋势跟踪策略回测",
+  "short_name": "MP回测",
+  "description": "Max Pain 趋势跟踪策略回测系统",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1923",
+  "theme_color": "#0f1923",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

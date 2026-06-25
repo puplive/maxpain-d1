@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f1923">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>MP趋势跟踪策略回测</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { font: 14px/1.6 -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0f1923; color: #c8d6e5; padding: 20px; }
+.container { max-width: 1100px; margin: 0 auto; }
+h1 { font-size: 22px; color: #54a0ff; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+h1 small { font-size: 13px; color: #576574; font-weight: normal; }
+.controls { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+.controls select { padding: 8px 16px; border: 1px solid #2d3436; border-radius: 6px; background: #1a2a3a; color: #c8d6e5; font-size: 14px; cursor: pointer; }
+.controls select:focus { outline: none; border-color: #54a0ff; }
+.btn { padding: 8px 24px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; background: #54a0ff; color: #fff; font-weight: 600; transition: background .2s; touch-action: manipulation; }
+.btn:hover { background: #2e86de; }
+.btn:disabled { background: #576574; cursor: not-allowed; }
+.status { color: #8395a7; font-size: 13px; }
+
+.params { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; padding: 12px 16px; background: #1a2a3a; border-radius: 8px; font-size: 12px; align-items: center; }
+.param-group { display: flex; align-items: center; gap: 4px; }
+.param-group label { color: #8395a7; white-space: nowrap; }
+.param-group input { width: 60px; padding: 4px 6px; border: 1px solid #2d3436; border-radius: 4px; background: #0f1923; color: #c8d6e5; font-size: 12px; text-align: right; }
+.param-group input:focus { outline: none; border-color: #54a0ff; }
+.param-group input.wide { width: 80px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 24px; }
+.stat-card { background: #1a2a3a; border: 1px solid #2d3436; border-radius: 8px; padding: 12px; text-align: center; }
+.stat-card .value { font-size: 18px; font-weight: 700; color: #54a0ff; }
+.stat-card .value.green { color: #5cd85a; }
+.stat-card .value.red { color: #ff6b6b; }
+.stat-card .label { font-size: 11px; color: #576574; margin-top: 4px; }
+
+.section { margin-bottom: 24px; }
+.section h2 { font-size: 15px; color: #8395a7; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #2d3436; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 8px 10px; background: #1a2a3a; color: #8395a7; font-weight: 600; border-bottom: 1px solid #2d3436; white-space: nowrap; }
+td { padding: 8px 10px; border-bottom: 1px solid #1a2a3a; }
+tr:hover td { background: #1a2a3a; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pos { color: #5cd85a; }
+.neg { color: #ff6b6b; }
+.center { text-align: center; }
+.error { padding: 20px; background: #2d1a1a; border: 1px solid #ff6b6b; border-radius: 8px; color: #ff6b6b; text-align: center; margin-bottom: 20px; }
+.recent { font-size: 12px; }
+.recent td { padding: 5px 8px; }
+.loading { text-align: center; padding: 60px 0; color: #576574; }
+.chart-wrap { background: #1a2a3a; border: 1px solid #2d3436; border-radius: 8px; padding: 12px; margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 12px; }
+.chart-wrap h2 { font-size: 15px; color: #8395a7; margin-bottom: 10px; flex: 0 0 100%; }
+.chart-main { flex: 1; min-width: 0; }
+#chart { width: 100%; height: 380px; display: block; }
+#subChart { width: 100%; height: 110px; display: block; margin-top: 2px; }
+.chart-info { flex: 0 0 180px; font-size: 12px; color: #c8d6e5; }
+.chart-info .row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #1a2a3a; }
+.chart-info .label { color: #576574; }
+.chart-info .val { font-weight: 600; font-variant-numeric: tabular-nums; }
+.chart-info .highlight { background: #2d3436; margin: 0 -8px; padding: 4px 8px; border-radius: 4px; }
+.chart-info .sig { margin-top: 8px; padding: 6px 8px; border-radius: 4px; font-size: 11px; }
+.refresh-bar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: #1a2a3a; border-radius: 8px; margin-bottom: 20px; font-size: 12px; color: #8395a7; }
+
+@media (max-width: 600px) {
+  body { padding: 10px; }
+  h1 { font-size: 17px; gap: 6px; }
+  .controls { gap: 6px; }
+  .controls select { padding: 6px 10px; font-size: 12px; flex: 1; min-width: 0; }
+  .btn { padding: 6px 14px; font-size: 12px; }
+  .grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .stat-card { padding: 8px; }
+  .stat-card .value { font-size: 15px; }
+  .stat-card .label { font-size: 10px; }
+  .chart-wrap { flex-direction: column; }
+  .chart-info { flex: none; width: 100%; order: -1; }
+  #chart { height: 260px; }
+  #subChart { height: 80px; }
+  .params { padding: 8px 10px; gap: 6px; }
+  .param-group input { width: 48px; }
+  .param-group input.wide { width: 64px; }
+  .section h2 { font-size: 13px; }
+  table { font-size: 11px; }
+  th, td { padding: 5px 6px; }
+}
+</style>
+</head>
+<body>
+<div class="container" id="app">
+  <h1>MP趋势跟踪策略回测 <small>趋势+震荡双模式</small></h1>
+
+  <div class="refresh-bar" id="refreshBar">
+    <span id="dataStatus">加载数据中...</span>
+  </div>
+
+  <div class="controls">
+    <select id="symbol" onchange="switchSymbol()">
+      <option value="TA">PTA (TA)</option>
+      <option value="MA">甲醇 (MA)</option>
+      <option value="SA">纯碱 (SA)</option>
+    </select>
+    <button class="btn" id="runBtn" onclick="runBacktest()">运行回测</button>
+    <button class="btn" onclick="resetParams()" style="background:#2d3436;">重置参数</button>
+    <button class="btn" onclick="runMonteCarlo()" style="background:#e8c84a;color:#0f1923;">蒙特卡洛</button>
+    <select id="optParam" style="padding:6px 10px;border:1px solid #2d3436;border-radius:6px;background:#1a2a3a;color:#c8d6e5;font-size:12px;">
+      <option value="lookback">Lookback</option>
+      <option value="minPct">Min%</option>
+      <option value="beTh">保本%</option>
+      <option value="lockPct">锁定%</option>
+      <option value="maxPos">仓位%</option>
+      <option value="skipCount">跳过次</option>
+    </select>
+    <button class="btn" onclick="optimizeParam()" style="background:#8854d0;color:#fff;">优化</button>
+    <span class="status" id="status">就绪</span>
+  </div>
+
+  <div class="params" id="paramBar">
+    <div class="param-group"><label>Lookback:</label><input type="number" id="p_lookback" value="21" min="5" max="60"></div>
+    <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" value="1.0" min="0.1" max="10" step="0.1" class="wide"></div>
+    <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" value="30" min="5" max="100" class="wide"></div>
+    <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" value="15" min="5" max="50" class="wide"></div>
+<div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="1.0" min="0" max="10" step="0.1" class="wide"></div>
+      <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="75" min="0" max="100" step="5" class="wide"></div>
+      <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="2" min="0" max="10" step="1" class="wide"></div>
+
+    <div class="param-group"><label>本金:</label><input type="number" id="p_capital" value="100000" min="10000" step="10000" class="wide"></div>
+    <div class="param-group"><label>封顶(万):</label><input type="number" id="p_cap_limit" value="0" min="0" step="10" class="wide"></div>
+    <div class="param-group"><label>开始:</label><input type="date" id="p_start" style="width:120px;padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font:12px sans-serif;"></div>
+    <div class="param-group"><label>结束:</label><input type="date" id="p_end" style="width:120px;padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font:12px sans-serif;"></div>
+    <div class="param-group" style="border-left:1px solid #2d3436;padding-left:12px;">
+      <label><input type="checkbox" id="p_manual" onchange="toggleManual()"> 手动</label>
+    </div>
+    <div id="manualInputs" style="display:none;gap:8px;align-items:center; flex-wrap: wrap">
+      <div class="param-group"><label>开盘:</label><input type="number" id="p_manual_op" class="wide" step="1" placeholder="默认=收盘"></div>
+      <div class="param-group"><label>收盘:</label><input type="number" id="p_manual_px" class="wide" step="1"></div>
+      <div class="param-group"><label>最高:</label><input type="number" id="p_manual_hi" class="wide" step="1"></div>
+      <div class="param-group"><label>最低:</label><input type="number" id="p_manual_lo" class="wide" step="1"></div>
+      <div class="param-group"><label>OI偏度:</label><input type="number" id="p_manual_skew" value="" step="0.01" min="-1" max="1" class="wide" placeholder="默认沿用"></div>
+    </div>
+  </div>
+
+  <div id="result"><div class="loading">就绪，点击"运行回测"</div></div>
+</div>
+
+<script>
+const API_BASE = 'https://api.starrysay.com';
+const SYM_CFG = {
+  TA: { name: 'PTA精对苯二甲酸', mult: 5 },
+  MA: { name: '甲醇',            mult: 10 },
+  SA: { name: '纯碱',            mult: 20 },
+};
+let ALL_DATA = {};
+let defaultParams = {};
+
+async function loadData(symbol) {
+  const status = document.getElementById('dataStatus');
+  status.textContent = '加载 ' + symbol + ' 数据...';
+  try {
+    const resp = await fetch(API_BASE + '/api/data?symbol=' + symbol);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const json = await resp.json();
+    const data = json.data || [];
+    if (data.length === 0) {
+      status.textContent = symbol + ' 数据为空';
+      return [];
+    }
+    status.textContent = symbol + ' ' + data[0].d + ' ~ ' + data[data.length - 1].d + ' (' + data.length + '条)';
+    return data;
+  } catch (e) {
+    status.textContent = '加载失败: ' + e.message;
+    console.error(e);
+    return null;
+  }
+}
+
+async function loadAllData() {
+  const status = document.getElementById('dataStatus');
+  status.textContent = '加载数据中...';
+  const symbols = ['TA', 'MA', 'SA'];
+  let loaded = 0;
+  for (const sym of symbols) {
+    const data = await loadData(sym);
+    if (data) {
+      ALL_DATA[sym] = data;
+      loaded++;
+    }
+  }
+  if (loaded === 0) {
+    status.textContent = '所有品种数据加载失败';
+    return false;
+  }
+  const firstSym = document.getElementById('symbol').value;
+  const firstData = ALL_DATA[firstSym];
+  if (firstData) {
+    document.getElementById('p_start').value = firstData[0].d;
+    document.getElementById('p_end').value = firstData[firstData.length - 1].d;
+  }
+  status.textContent = '数据就绪 (' + loaded + '/' + symbols.length + ' 品种)';
+  return true;
+}
+
+async function switchSymbol() {
+  const sym = document.getElementById('symbol').value;
+  if (!ALL_DATA[sym]) {
+    document.getElementById('dataStatus').textContent = '加载 ' + sym + ' ...';
+    const data = await loadData(sym);
+    if (data) ALL_DATA[sym] = data;
+  }
+  const d = ALL_DATA[sym];
+  if (d) {
+    document.getElementById('p_start').value = d[0].d;
+    document.getElementById('p_end').value = d[d.length - 1].d;
+  }
+  runBacktest();
+}
+
+function mpTrending(arr, lookback, minPct) {
+  if (!arr || arr.length < lookback + 1) return { dir: null, r2: 0 };
+  const a = arr.slice(-lookback - 1);
+  const n = a.length;
+  let sx = 0, sy = 0, sxy = 0, sx2 = 0;
+  for (let i = 0; i < n; i++) {
+    sx += i; sy += a[i]; sxy += i * a[i]; sx2 += i * i;
+  }
+  const slope = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
+  const projected = slope * (n - 1);
+  const threshold = Math.abs(a[0] * minPct);
+  const yMean = sy / n;
+  const inter = (sy - slope * sx) / n;
+  let ssRes = 0, ssTot = 0;
+  for (let i = 0; i < n; i++) { const d = a[i] - inter - slope * i; ssRes += d * d; const d2 = a[i] - yMean; ssTot += d2 * d2; }
+  const r2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
+  let dir = null;
+  if (projected > threshold) dir = 'up';
+  else if (projected < -threshold) dir = 'down';
+  return { dir, r2 };
+}
+
+function linearProjected(arr, lookback) {
+  if (!arr || arr.length < lookback + 1) return null;
+  const a = arr.slice(-lookback - 1);
+  const n = a.length;
+  let sx = 0, sy = 0, sxy = 0, sx2 = 0;
+  for (let i = 0; i < n; i++) {
+    sx += i; sy += a[i]; sxy += i * a[i]; sx2 += i * i;
+  }
+  const slope = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
+  return slope * (n - 1);
+}
+function calcATR(data, period) {
+  const atr = new Float64Array(data.length);
+  atr.fill(NaN);
+  if (data.length < period + 1) return atr;
+  let sum = 0;
+  for (let i = 1; i <= period; i++) {
+    const p = data[i - 1], c = data[i];
+    sum += Math.max(c.h - c.l, Math.abs(c.h - p.c), Math.abs(c.l - p.c));
+  }
+  atr[period] = sum / period;
+  for (let i = period + 1; i < data.length; i++) {
+    const p = data[i - 1], c = data[i];
+    const tr = Math.max(c.h - c.l, Math.abs(c.h - p.c), Math.abs(c.l - p.c));
+    atr[i] = (atr[i - 1] * (period - 1) + tr) / period;
+  }
+  return atr;
+}
+function _runCore(data, fullData, firstIdx, params, mult) {
+  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, lockPct: LOCK_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
+  const preStart = Math.max(0, firstIdx - LBK);
+  let eq = CAP, peakEq = CAP, maxDd = 0, pos = null;
+  const mpHist = [], priceHist = [], trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
+  let skipLong = 0, skipShort = 0, skipCount = SKIP;
+  let prevCo = null, prevPo = null;
+  let prevClose = firstIdx > 0 ? fullData[firstIdx - 1].c : data[0].c;
+  let prevMp = firstIdx > 0 ? fullData[firstIdx - 1].mp : data[0].mp;
+  let prevBec = null, prevBep = null, prevIvs = null;
+  for (let i = preStart; i < firstIdx; i++) { mpHist.push(fullData[i].mp); priceHist.push(fullData[i].c); }
+
+  for (let _di = 0; _di < data.length; _di++) {
+    const row = data[_di];
+    const _fullIdx = firstIdx + _di;
+    const { d, o: op, c: px, h: hi, l: lo, mp, co, po, bec, bep, vr, ivs } = row;
+    const oiSkew = row._oiSkew !== undefined ? row._oiSkew
+      : (prevCo !== null ? (prevCo - prevPo) / (prevCo + prevPo + 1e-10) : (co - po) / (co + po + 1e-10));
+    let reason = '';
+    if (pos) {
+      let exitPx = null;
+
+      if (!exitPx) {
+        const { dir: currDir } = mpTrending(mpHist, LBK, MIN_PCT);
+        if (currDir !== pos.entryTrend && currDir !== null) { exitPx = px; reason = '方向反转'; }
+      }
+
+      if (!exitPx) {
+        const _mpProj = linearProjected(mpHist, LBK);
+        const _mpSlope = _mpProj !== null ? Math.abs(_mpProj) / Math.abs(prevMp || mp) : 0;
+        const _trailPct = Math.max(MIN_PCT, BE_TH) * (1 + _mpSlope / 0.05);
+        if (pos.direction === 'long') {
+          let stop = prevClose * (1 - _trailPct);
+          if (pos.beActive) { const pp = pos.peakPx - pos.entryPx; stop = Math.max(stop, pos.entryPx + pp * LOCK_PCT); }
+          if (lo < stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop > pos.entryPx ? '追踪止盈' : '止损'); }
+        } else {
+          let stop = prevClose * (1 + _trailPct);
+          if (pos.beActive) { const pp = pos.entryPx - pos.peakPx; stop = Math.min(stop, pos.entryPx - pp * LOCK_PCT); }
+          if (hi > stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop < pos.entryPx ? '追踪止盈' : '止损'); }
+        }
+      }
+      if (exitPx !== null) {
+        const pnl = (exitPx - pos.entryPx) * pos.qty * mult * (pos.direction === 'long' ? 1 : -1);
+        trades.push({ entry: pos.entryDate, exit: d, entryPx: pos.entryPx, exitPx, dir: pos.direction, qty: pos.qty, pnl: pnl - 10 * pos.qty * 2, reason, entryReason: pos.entryReason, hold: (new Date(d) - new Date(pos.entryDate)) / 864e5 });
+        eq += pnl - 10 * pos.qty * 2;
+        if (pnl - 10 * pos.qty * 2 > 0) {
+          if (pos.direction === 'long') skipShort = skipCount; else skipLong = skipCount;
+        }
+        pos = null;
+      }
+    }
+
+    if (!pos && (reason === '' || reason === '方向反转')) {
+      const { dir: mpDir } = mpTrending(mpHist, LBK, MIN_PCT);
+      let td = null;
+      if (mpDir === 'up') td = 'long';
+      else if (mpDir === 'down') td = 'short';
+      if (td) {
+        if ((td === 'long' && skipLong > 0) || (td === 'short' && skipShort > 0)) {
+          if (td === 'long') skipLong--; else skipShort--;
+          td = null;
+        }
+      }
+      if (td) {
+        let pass = false;
+        if (td === 'long') pass = prevClose > prevMp;
+        else pass = prevClose < prevMp;
+        if (pass) {
+          const dn = op * mult * MR;
+          if (dn > 0) {
+            let alloc = eq * MAX_POS;
+            if (CAP_LIMIT > 0) alloc = Math.min(alloc, CAP_LIMIT);
+            const qty = Math.floor(alloc / dn);
+            if (qty >= 1) {
+              pos = { direction: td, entryPx: op, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: op, beActive: false, entryTrend: mpDir };
+            }
+          }
+        }
+      }
+    }
+
+    peakEq = Math.max(peakEq, eq);
+    maxDd = Math.max(maxDd, (peakEq - eq) / peakEq * 100);
+    if (pos) {
+      if (pos.direction === 'long' && px > pos.peakPx) {
+        pos.peakPx = px;
+        if (!pos.beActive && pos.peakPx >= pos.entryPx * (1 + BE_TH)) pos.beActive = true;
+      } else if (pos.direction === 'short' && px < pos.peakPx) {
+        pos.peakPx = px;
+        if (!pos.beActive && pos.peakPx <= pos.entryPx * (1 - BE_TH)) pos.beActive = true;
+      }
+    }
+    if (pos) {
+      const _breakLevel = pos.direction === 'long' ? prevBep : prevBec;
+      const _mpProj = linearProjected(mpHist, LBK);
+      const _mpSlope = _mpProj !== null ? Math.abs(_mpProj) / Math.abs(prevMp || mp) : 0;
+      const _trailPct = Math.max(MIN_PCT, BE_TH) * (1 + _mpSlope / 0.05);
+      let _s = pos.direction === 'long' ? prevClose * (1 - _trailPct) : prevClose * (1 + _trailPct);
+      if (pos.beActive) {
+        const _pp = pos.direction === 'long' ? pos.peakPx - pos.entryPx : pos.entryPx - pos.peakPx;
+        _s = pos.direction === 'long' ? Math.max(_s, pos.entryPx + _pp * LOCK_PCT) : Math.min(_s, pos.entryPx - _pp * LOCK_PCT);
+      }
+      stopCurve.push({ d, stop: _s, breakLevel: _breakLevel });
+    } else {
+      stopCurve.push({ d, stop: null, breakLevel: null });
+    }
+    mpHist.push(mp); priceHist.push(px);
+    prevCo = co; prevPo = po;
+    prevClose = px;
+    prevMp = mp;
+    prevBec = bec; prevBep = bep; prevIvs = ivs;
+    eqCurve.push({ d, eq });
+  }
+  return { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP };
+}
+
+function runBacktest() {
+  const sym = document.getElementById('symbol').value;
+  const result = document.getElementById('result');
+  const status = document.getElementById('status');
+  const btn = document.getElementById('runBtn');
+
+  const cfg = SYM_CFG[sym];
+  let fullData = ALL_DATA[sym];
+  if (!fullData) { status.textContent = '数据未加载'; return; }
+
+  if (document.getElementById('p_manual').checked) {
+    const lastRow = fullData[fullData.length - 1];
+    const mpx = parseFloat(document.getElementById('p_manual_px').value);
+    const mhi = parseFloat(document.getElementById('p_manual_hi').value);
+    const mlo = parseFloat(document.getElementById('p_manual_lo').value);
+    const mskew = document.getElementById('p_manual_skew').value;
+    const mop = parseFloat(document.getElementById('p_manual_op').value);
+    if (mpx && mhi && mlo) {
+      const rec = {
+        d: new Date().toISOString().slice(0, 10),
+        o: mop || mpx, c: mpx, h: mhi, l: mlo,
+        mp: lastRow.mp,
+        co: lastRow.co,
+        po: lastRow.po,
+        _manual: true,
+      };
+      if (mskew !== '') rec._oiSkew = parseFloat(mskew);
+      fullData = fullData.concat([rec]);
+    }
+  }
+
+  const startDate = document.getElementById('p_start').value;
+  const endDate = document.getElementById('p_end').value;
+  let data = fullData;
+  if (startDate) data = data.filter(r => r.d >= startDate);
+  if (endDate) data = data.filter(r => r.d <= endDate);
+  if (data.length < 2) {
+    result.innerHTML = '<div class="error">所选区间无数据或数据不足</div>';
+    status.textContent = '区间无数据'; btn.disabled = false; return;
+  }
+
+  btn.disabled = true;
+  status.textContent = '回测中...';
+  result.innerHTML = '<div class="loading">计算中...</div>';
+
+  const params = {
+    lookback: parseInt(document.getElementById('p_lookback').value) || 21,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 1) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 30) / 100,
+    margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
+    beTh: (parseFloat(document.getElementById('p_be_th').value) || 1.0) / 100,
+    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
+    capital: parseFloat(document.getElementById('p_capital').value) || 100000,
+    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
+    skipCount: parseInt(document.getElementById('p_skip').value) || 2,
+  };
+  params.mult = cfg.mult;
+  const MULT = cfg.mult;
+
+  const firstIdx = fullData.findIndex(r => r.d === data[0].d);
+  const core = _runCore(data, fullData, firstIdx, params, MULT);
+  const { trades, eq, eqCurve, stopCurve, peakEq, maxDd } = core;
+
+  if (trades.length === 0) {
+    result.innerHTML = '<div class="error">无交易产生</div>';
+    status.textContent = '无交易'; btn.disabled = false; return;
+  }
+
+  const wins = trades.filter(t => t.pnl > 0);
+  const losses = trades.filter(t => t.pnl <= 0);
+  const lossSum = losses.reduce((s, t) => s + Math.abs(t.pnl), 0);
+  const winSum = wins.reduce((s, t) => s + t.pnl, 0);
+  const pf = lossSum > 0 ? winSum / lossSum : Infinity;
+
+  const s = {
+    endEq: Math.round(eq),
+    totalReturn: round1((eq / CAP - 1) * 100),
+    maxDd: round1(maxDd),
+    trades: trades.length,
+    winRate: round1(wins.length / trades.length * 100),
+    profitFactor: pf === Infinity ? '∞' : round2(pf),
+    avgHold: round1(trades.reduce((s, t) => s + t.hold, 0) / trades.length),
+    avgPnl: Math.round(trades.reduce((s, t) => s + t.pnl, 0) / trades.length),
+  };
+
+  const byYr = {};
+  trades.forEach(t => {
+    const y = t.exit.slice(0, 4);
+    if (!byYr[y]) byYr[y] = { ts: [], lc: 0, sc: 0 };
+    byYr[y].ts.push(t);
+    if (t.dir === 'long') byYr[y].lc++; else byYr[y].sc++;
+  });
+  let yrCumPnl = 0;
+  const yrHtml = Object.keys(byYr).sort().map(y => {
+    const g = byYr[y], pnl = g.ts.reduce((s, t) => s + t.pnl, 0);
+    const startEq = CAP + yrCumPnl;
+    yrCumPnl += pnl;
+    const annRet = startEq > 0 ? pnl / startEq * 100 : 0;
+    return '<tr><td>' + y + '</td><td class="num">' + g.ts.length + '</td><td class="center">' + g.lc + '/' + g.sc + '</td><td class="num ' + cls(pnl) + '">' + fmt(pnl) + '</td><td class="num ' + cls(annRet) + '">' + round1(annRet) + '%</td><td class="num ' + cls(pnl/g.ts.length) + '">' + fmt(Math.round(pnl/g.ts.length)) + '</td><td class="num">' + round1(g.ts.filter(t=>t.pnl>0).length/g.ts.length*100) + '%</td></tr>';
+  }).join('');
+
+  const byRs = {};
+  trades.forEach(t => { if (!byRs[t.reason]) byRs[t.reason] = []; byRs[t.reason].push(t); });
+  const rsHtml = Object.keys(byRs).sort().map(r => {
+    const g = byRs[r], pnl = g.reduce((s, t) => s + t.pnl, 0);
+    return '<tr><td>' + r + '</td><td class="num">' + g.length + '</td><td class="num">' + round1(g.length/trades.length*100) + '%</td><td class="num ' + cls(pnl) + '">' + fmt(pnl) + '</td><td class="num">' + round1(g.filter(t=>t.pnl>0).length/g.length*100) + '%</td><td class="num">' + round1(g.reduce((s,t)=>s+t.hold,0)/g.length) + '天</td></tr>';
+  }).join('');
+
+  const bkt = [['1天',[1]],['2-3天',[2,3]],['4-7天',[4,5,6,7]],['8-14天',[8,9,10,11,12,13,14]],['15天+',Array.from({length:986},(_,i)=>i+15)]];
+  const holdHtml = bkt.map(([lb, days]) => {
+    const g = trades.filter(t => days.includes(Math.round(t.hold)));
+    if (!g.length) return '';
+    const w = g.filter(t=>t.pnl>0), l = g.filter(t=>t.pnl<=0);
+    const wp = w.reduce((s,t)=>s+t.pnl,0), lp = l.reduce((s,t)=>s+Math.abs(t.pnl),0);
+    return '<tr><td>' + lb + '</td><td class="num">' + g.length + '</td><td class="num ' + cls(g.reduce((s,t)=>s+t.pnl,0)) + '">' + fmt(g.reduce((s,t)=>s+t.pnl,0)) + '</td><td class="num">' + round1(w.length/g.length*100) + '%</td><td class="num">' + (lp>0?round2(wp/lp):'∞') + '</td></tr>';
+  }).filter(s=>s).join('');
+
+  const dirHtml = ['long','short'].map(d => {
+    const g = trades.filter(t=>t.dir===d);
+    if (!g.length) return '';
+    const w = g.filter(t=>t.pnl>0), l = g.filter(t=>t.pnl<=0);
+    const wp = w.reduce((s,t)=>s+t.pnl,0), lp = l.reduce((s,t)=>s+Math.abs(t.pnl),0);
+    const pnl = g.reduce((s,t)=>s+t.pnl,0);
+    return '<tr><td>' + (d==='long'?'做多':'做空') + '</td><td class="num">' + g.length + '</td><td class="num ' + cls(pnl) + '">' + fmt(pnl) + '</td><td class="num ' + cls(pnl/g.length) + '">' + fmt(Math.round(pnl/g.length)) + '</td><td class="num">' + round1(w.length/g.length*100) + '%</td><td class="num">' + (lp>0?round2(wp/lp):'∞') + '</td></tr>';
+  }).filter(s=>s).join('');
+
+  let pv = CAP, pd = data[0].d, mdd = 0, ds = '', de = '';
+  eqCurve.forEach(({d, eq}) => {
+    if (eq > pv) { pv = eq; pd = d; }
+    const dd = (pv - eq) / pv * 100;
+    if (dd > mdd) { mdd = dd; ds = pd; de = d; }
+  });
+
+  const recent = trades.slice().reverse();
+
+  result.innerHTML = '\
+    <div class="grid">\
+      <div class="stat-card"><div class="value green">' + fmt(s.endEq) + '</div><div class="label">最终权益</div></div>\
+      <div class="stat-card"><div class="value ' + cls(s.totalReturn) + '">' + pct(s.totalReturn) + '</div><div class="label">总收益</div></div>\
+      <div class="stat-card"><div class="value">' + s.maxDd + '%</div><div class="label">最大回撤</div></div>\
+      <div class="stat-card"><div class="value">' + s.trades + '</div><div class="label">交易笔数</div></div>\
+      <div class="stat-card"><div class="value">' + s.winRate + '%</div><div class="label">胜率</div></div>\
+      <div class="stat-card"><div class="value">' + s.profitFactor + '</div><div class="label">盈亏比</div></div>\
+      <div class="stat-card"><div class="value">' + s.avgHold + '天</div><div class="label">平均持仓</div></div>\
+      <div class="stat-card"><div class="value">' + fmt(s.avgPnl) + '</div><div class="label">均PnL</div></div>\
+    </div>\
+    <div class="chart-wrap"><h2>K线 & 信号</h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+    <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th></tr>' + yrHtml + '</table></div>\
+    <div class="section"><h2>按退出原因</h2><table><tr><th>原因</th><th class="num">笔数</th><th class="num">占比</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">均持仓</th></tr>' + rsHtml + '</table></div>\
+    <div class="section"><h2>按持仓天数</h2><table><tr><th>持仓</th><th class="num">笔数</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + holdHtml + '</table></div>\
+    <div class="section"><h2>按方向</h2><table><tr><th>方向</th><th class="num">笔数</th><th class="num">总PnL</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + dirHtml + '</table></div>\
+    <div class="section"><h2>最大回撤区间</h2><table><tr><th>回撤</th><th>开始</th><th>结束</th><th class="num">峰值权益</th><th class="num">谷底权益</th></tr>\
+      <tr><td class="neg">-' + round1(mdd) + '%</td><td>' + ds + '</td><td>' + de + '</td><td class="num">' + fmt(Math.round(pv)) + '</td><td class="num">' + fmt(Math.round(eqCurve[eqCurve.length-1].eq)) + '</td></tr></table></div>\
+    <div class="section"><h2>全部交易</h2><table class="recent"><tr><th>入场</th><th>出场</th><th>方向</th><th class="num">手数</th><th class="num">开仓价</th><th class="num">平仓价</th><th class="num">PnL</th><th>原因</th><th class="num">持仓</th></tr>\
+      ' + recent.map(t => '<tr><td>' + t.entry + '</td><td>' + t.exit + '</td><td>' + dirText(t.dir) + '</td><td class="num">' + t.qty + '</td><td class="num">' + t.entryPx.toFixed(0) + '</td><td class="num">' + t.exitPx.toFixed(0) + '</td><td class="num ' + cls(t.pnl) + '">' + fmt(Math.round(t.pnl)) + '</td><td>' + t.reason + '</td><td class="num">' + Math.round(t.hold) + '天</td></tr>').join('') + '</table></div>';
+
+  setTimeout(function() { try { drawChart(fullData, trades, params, stopCurve); } catch(e) { console.error(e); } }, 50);
+
+  window._lastTrades = trades; window._lastParams = params; window._lastCAP = CAP;
+  var capInfo = CAP_LIMIT > 0 ? ' | 封顶' + fmt(CAP_LIMIT) : '';
+  status.textContent = '完成 | 数据: ' + data[0].d + ' ~ ' + data[data.length-1].d + ' | ' + trades.length + '笔交易' + capInfo;
+  btn.disabled = false;
+}
+
+function dirText(d) { return d === 'long' ? '多' : '空'; }
+function fmt(n) { if (n===undefined||n===null) return '-'; return n.toLocaleString('zh-CN'); }
+function pct(v) { if (v===undefined||v===null) return '-'; return (v>0?'+':'')+round1(v)+'%'; }
+function cls(v) { return v>0?'pos':v<0?'neg':''; }
+function round1(v) { return Math.round(v*10)/10; }
+function round2(v) { return Math.round(v*100)/100; }
+
+function setParamValues(p) {
+  document.getElementById('p_lookback').value = p.lookback;
+  document.getElementById('p_min_pct').value = round1(p.minPct*100);
+  document.getElementById('p_max_pos').value = Math.round(p.maxPos*100);
+  document.getElementById('p_margin').value = Math.round(p.margin*100);
+  if (p.beTh !== undefined) document.getElementById('p_be_th').value = round1(p.beTh*100);
+  document.getElementById('p_capital').value = Math.round(p.capital);
+  if (p.capLimit !== undefined) document.getElementById('p_cap_limit').value = Math.round(p.capLimit / 10000);
+  if (p.lockPct !== undefined) document.getElementById('p_lock_pct').value = Math.round(p.lockPct * 100);
+  if (p.skipCount !== undefined) document.getElementById('p_skip').value = p.skipCount;
+}
+
+function toggleManual() {
+  const show = document.getElementById('p_manual').checked;
+  document.getElementById('manualInputs').style.display = show ? 'flex' : 'none';
+}
+
+function runMonteCarlo() {
+  const sym = document.getElementById('symbol').value;
+  const cfg = SYM_CFG[sym];
+  const fullData = ALL_DATA[sym];
+  if (!fullData) { alert('数据未加载'); return; }
+  const startDate = document.getElementById('p_start').value;
+  const endDate = document.getElementById('p_end').value;
+  let data = fullData;
+  if (startDate) data = data.filter(r => r.d >= startDate);
+  if (endDate) data = data.filter(r => r.d <= endDate);
+  if (data.length < 2) { alert('数据不足'); return; }
+  const firstIdx = fullData.findIndex(r => r.d === data[0].d);
+  const params = {
+    lookback: parseInt(document.getElementById('p_lookback').value) || 21,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 1) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 30) / 100,
+    margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
+    beTh: (parseFloat(document.getElementById('p_be_th').value) || 1.0) / 100,
+    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
+    capital: parseFloat(document.getElementById('p_capital').value) || 100000,
+    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
+    skipCount: parseInt(document.getElementById('p_skip').value) || 2,
+  };
+  params.mult = cfg.mult;
+  const core = _runCore(data, fullData, firstIdx, params, cfg.mult);
+  const trades = core.trades;
+  if (!trades || trades.length < 10) { alert('交易笔数不足（至少10笔）'); return; }
+  const result = document.getElementById('result');
+  const status = document.getElementById('status');
+  status.textContent = '蒙特卡洛模拟中...';
+
+  setTimeout(function() {
+    const N = 10000;
+    const pnls = trades.map(t => t.pnl);
+    const totalActual = pnls.reduce((s, v) => s + v, 0);
+    const outcomes = new Float64Array(N);
+
+    for (let iter = 0; iter < N; iter++) {
+      let sum = 0;
+      for (let i = 0; i < pnls.length; i++) {
+        sum += pnls[Math.random() * pnls.length | 0];
+      }
+      outcomes[iter] = sum;
+    }
+
+    outcomes.sort();
+    let rank = 0;
+    while (rank < N && outcomes[rank] < totalActual) rank++;
+    const pctile = (rank / N * 100);
+
+    const minV = outcomes[0], maxV = outcomes[N-1];
+    const bins = 40;
+    const bucket = new Int32Array(bins);
+    const scale = (maxV - minV) || 1;
+    const barMax = N * 0.2;
+    for (let v of outcomes) {
+      const b = Math.min(bins-1, Math.floor((v - minV) / scale * bins));
+      bucket[b]++;
+    }
+
+    const actualBin = Math.min(bins-1, Math.floor((totalActual - minV) / scale * bins));
+    const binW = scale / bins;
+    const cap = params.capital;
+
+    let html = '<div class="section"><h2>蒙特卡洛模拟（' + N.toLocaleString() + '次）</h2>\
+      <div style="font-size:13px;margin-bottom:12px;color:#8395a7;">\
+        实际总PnL: <span class="pos">' + fmt(Math.round(totalActual)) + '</span>\
+        | 排名: ' + pctile.toFixed(1) + '百分位\
+        | 中位数: ' + fmt(Math.round(outcomes[N/2])) + '\
+        | 均值: ' + fmt(Math.round(outcomes.reduce((s,v)=>s+v,0)/N)) + '\
+      </div>\
+      <div style="font-size:13px;margin-bottom:12px;color:#8395a7;">\
+        实际最终权益: <span class="' + (totalActual>0?'pos':'neg') + '">' + fmt(Math.round(cap+totalActual)) + '</span>\
+        | P95: ' + fmt(Math.round(outcomes[N*0.95|0])) + '\
+        | P05: ' + fmt(Math.round(outcomes[N*0.05|0])) + '\
+      </div>\
+      <div style="font-size:12px;line-height:18px;font-variant-numeric:tabular-nums;">';
+
+    let firstBin = 0, lastBin = bins-1;
+    while (firstBin < bins && bucket[firstBin] === 0) firstBin++;
+    while (lastBin >= 0 && bucket[lastBin] === 0) lastBin--;
+    const visBins = Math.max(lastBin - firstBin + 1, 1);
+    for (let b = firstBin; b <= lastBin; b++) {
+      const pctH = Math.max(1, bucket[b] / barMax * 50);
+      const isActual = b === actualBin;
+      const barColor = isActual ? '#e8c84a' : '#54a0ff';
+      const hl = isActual ? ' ◀ 实际' : '';
+      const range = fmt(Math.round(minV + b*binW)) + '~' + fmt(Math.round(minV + (b+1)*binW));
+      html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:1px;">\
+        <span style="width:120px;text-align:right;color:#576574;flex-shrink:0;">' + range + '</span>\
+        <div style="height:14px;width:' + pctH + '%;background:' + barColor + ';border-radius:2px;' + (isActual?'border:1px solid #e8c84a;':'') + '"></div>\
+        <span style="color:#8395a7;">' + bucket[b] + '</span>' + hl + '\
+      </div>';
+    }
+
+    html += '</div></div>';
+    result.innerHTML = html;
+    status.textContent = 'MC完成 | ' + N.toLocaleString() + '次 | 实际在' + pctile.toFixed(1) + '百分位';
+  }, 50);
+}
+
+const OPT_PARAMS = {
+  lookback:   { label: 'Lookback',    range: [5, 60, 1] },
+  minPct:     { label: 'Min%',        range: [0.2, 5, 0.2], unit: '%' },
+  maxPos:     { label: '仓位%',       range: [5, 60, 2], unit: '%' },
+  beTh:       { label: '保本%',       range: [0, 5, 0.2], unit: '%' },
+  lockPct:    { label: '锁定%',       range: [10, 70, 5], unit: '%' },
+  skipCount:  { label: '跳过次',      range: [0, 5, 1] },
+};
+
+function optimizeParam() {
+  const sym = document.getElementById('symbol').value;
+  const result = document.getElementById('result');
+  const status = document.getElementById('status');
+  const cfg = SYM_CFG[sym];
+  const fullData = ALL_DATA[sym];
+  if (!fullData) { status.textContent = '数据未加载'; return; }
+
+  const paramKey = document.getElementById('optParam').value;
+  const meta = OPT_PARAMS[paramKey];
+  const startDate = document.getElementById('p_start').value;
+  const endDate = document.getElementById('p_end').value;
+  let data = fullData;
+  if (startDate) data = data.filter(r => r.d >= startDate);
+  if (endDate) data = data.filter(r => r.d <= endDate);
+  if (data.length < 2) { status.textContent = '数据不足'; return; }
+  const firstIdx = fullData.findIndex(r => r.d === data[0].d);
+
+  const p = {
+    lookback: parseInt(document.getElementById('p_lookback').value) || 21,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 1) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 30) / 100,
+    margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
+    beTh: (parseFloat(document.getElementById('p_be_th').value) || 1.0) / 100,
+    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
+    capital: parseFloat(document.getElementById('p_capital').value) || 100000,
+    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
+    skipCount: parseInt(document.getElementById('p_skip').value) || 2,
+    mult: cfg.mult,
+  };
+
+  const [min, max, step] = meta.range;
+  status.textContent = '扫描 ' + meta.label + ' (' + min + '~' + max + ' step=' + step + ')...';
+  result.innerHTML = '<div class="loading">扫描中...</div>';
+
+  setTimeout(function() {
+    const values = [];
+    for (let v = min; v <= max + 1e-10; v = Math.round((v + step) * 100) / 100) {
+      const pp = Object.assign({}, p);
+      if (paramKey === 'minPct') pp.minPct = v / 100;
+      else if (paramKey === 'maxPos') pp.maxPos = v / 100;
+      else if (paramKey === 'lookback') pp.lookback = v;
+      else if (paramKey === 'beTh') pp.beTh = v / 100;
+      else if (paramKey === 'lockPct') pp.lockPct = v / 100;
+      else if (paramKey === 'skipCount') pp.skipCount = v;
+
+      const core = _runCore(data, fullData, firstIdx, pp, cfg.mult);
+      if (core.trades.length === 0) continue;
+      const wins = core.trades.filter(t => t.pnl > 0);
+      const losses = core.trades.filter(t => t.pnl <= 0);
+      const lossSum = losses.reduce((s, t) => s + Math.abs(t.pnl), 0);
+      const winSum = wins.reduce((s, t) => s + t.pnl, 0);
+      values.push({
+        v, endEq: Math.round(core.eq),
+        ret: round1((core.eq / p.capital - 1) * 100),
+        trades: core.trades.length,
+        wr: round1(wins.length / core.trades.length * 100),
+        pf: lossSum > 0 ? round2(winSum / lossSum) : '∞',
+        dd: round1(core.maxDd),
+        avgPnl: Math.round(core.trades.reduce((s, t) => s + t.pnl, 0) / core.trades.length),
+      });
+    }
+
+    if (values.length === 0) {
+      result.innerHTML = '<div class="error">所有参数值均无交易</div>';
+      status.textContent = '无交易'; return;
+    }
+
+    values.sort((a, b) => b.endEq - a.endEq);
+    const best = values[0];
+    const suffix = meta.unit || '';
+    const rows = values.map(function(v) {
+      return '<tr' + (v === best ? ' style="background:#2d3436;font-weight:700;"' : '') + '>\
+        <td class="num">' + v.v + suffix + '</td>\
+        <td class="num ' + cls(v.endEq - p.capital) + '">' + fmt(v.endEq) + '</td>\
+        <td class="num ' + cls(v.ret) + '">' + pct(v.ret) + '</td>\
+        <td class="num">' + v.trades + '</td>\
+        <td class="num">' + v.wr + '%</td>\
+        <td class="num">' + v.pf + '</td>\
+        <td class="num">' + v.dd + '%</td>\
+        <td class="num ' + cls(v.avgPnl) + '">' + fmt(v.avgPnl) + '</td>\
+      </tr>';
+    }).join('');
+
+    result.innerHTML = '<div class="section"><h2>' + meta.label + ' 优化结果（按最终权益排序）</h2>\
+      <p style="font-size:12px;color:#576574;margin-bottom:8px;">当前其他参数: lookback=' + p.lookback + ' | min%=' + (p.minPct*100).toFixed(1) + '% | 保本=' + (p.beTh*100).toFixed(1) + '% | 锁定=' + (p.lockPct*100).toFixed(0) + '%</p>\
+      <table><tr>\
+        <th class="num">' + meta.label + '</th><th class="num">最终权益</th><th class="num">收益</th><th class="num">笔数</th><th class="num">胜率</th><th class="num">盈亏比</th><th class="num">回撤</th><th class="num">均PnL</th>\
+      </tr>' + rows + '</table></div>';
+    status.textContent = '优化完成 | ' + values.length + '个值 | 最优 ' + meta.label + '=' + best.v + suffix + ' → ' + fmt(best.endEq);
+    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct' };
+    const el = document.getElementById(idMap[paramKey]);
+    if (meta.unit) el.value = best.v.toFixed(1);
+    else el.value = best.v;
+  }, 50);
+}
+
+function resetParams() {
+  if (Object.keys(defaultParams).length > 0) setParamValues(defaultParams);
+  const sym = document.getElementById('symbol').value;
+  const data = ALL_DATA[sym];
+  if (data) {
+    document.getElementById('p_start').value = data[0].d;
+    document.getElementById('p_end').value = data[data.length - 1].d;
+  }
+  document.getElementById('p_manual').checked = false;
+  toggleManual();
+  document.getElementById('p_cap_limit').value = 0;
+}
+
+function drawChart(data, trades, params, stopCurve) {
+  const infoEl = document.getElementById('chartInfo');
+  const canvas = document.getElementById('chart');
+  if (!canvas) return;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const W = rect.width - 24;
+  const H = 380;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const n = data.length;
+
+  const subCanvas = document.getElementById('subChart');
+  var _subDiff, _subSkewD, _subMinD, _subMaxD, _subMinS, _subMaxS;
+  var _subVr, _subMinV, _subMaxV;
+  const subVis = { diff: true, skew: true, vr: true };
+  if (subCanvas) {
+    subCanvas.width = W * dpr;
+    subCanvas.height = 110 * dpr;
+    subCanvas.style.width = W + 'px';
+    subCanvas.style.height = '110px';
+    const sctx = subCanvas.getContext('2d');
+    sctx.scale(dpr, dpr);
+
+    _subDiff = new Float64Array(n);
+    _subSkewD = new Float64Array(n);
+    _subVr = new Float64Array(n);
+    var _prevSk = null;
+    _subMinD = Infinity; _subMaxD = -Infinity;
+    _subMinS = Infinity; _subMaxS = -Infinity;
+    _subMinV = Infinity; _subMaxV = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const r = data[i];
+      const d = r.c - r.mp;
+      const sk = (r.co - r.po) / (r.co + r.po + 1e-10);
+      const sd = _prevSk !== null ? sk - _prevSk : 0;
+      const v = r.vr != null ? r.vr : 1;
+      _subDiff[i] = d;
+      _subSkewD[i] = sd;
+      _subVr[i] = v;
+      if (d < _subMinD) _subMinD = d;
+      if (d > _subMaxD) _subMaxD = d;
+      if (sd < _subMinS) _subMinS = sd;
+      if (sd > _subMaxS) _subMaxS = sd;
+      if (v < _subMinV) _subMinV = v;
+      if (v > _subMaxV) _subMaxV = v;
+      _prevSk = sk;
+    }
+    const dr = _subMaxD - _subMinD || 1;
+    _subMinD -= dr * 0.1; _subMaxD += dr * 0.1;
+    const sr = _subMaxS - _subMinS || 1;
+    _subMinS -= sr * 0.1; _subMaxS += sr * 0.1;
+    const vr = _subMaxV - _subMinV || 1;
+    _subMinV -= vr * 0.1; _subMaxV += vr * 0.1;
+  }
+
+  const pad = { top: 20, bottom: 36, left: 60, right: 20 };
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top - pad.bottom;
+
+  const tradeByDate = {};
+  for (const t of trades) {
+    if (!tradeByDate[t.entry]) tradeByDate[t.entry] = [];
+    tradeByDate[t.entry].push({ type: 'entry', dir: t.dir, qty: t.qty, pnl: t.pnl, price: t.entryPx, reason: t.entryReason });
+    if (!tradeByDate[t.exit]) tradeByDate[t.exit] = [];
+    tradeByDate[t.exit].push({ type: 'exit', dir: t.dir, qty: t.qty, pnl: t.pnl, price: t.exitPx, reason: t.reason });
+  }
+
+  const initBarW = Math.max(2, cw / n);
+  const state = {
+    start: Math.max(0, n - Math.ceil(cw / initBarW)),
+    barW: initBarW,
+    dragging: false,
+    dragStartX: 0,
+    dragStartIdx: 0,
+    hoverIdx: -1,
+  };
+
+  function getVisibleCount() { return Math.ceil(cw / state.barW); }
+
+  function updateInfo(idx) {
+    if (idx < 0 || idx >= n) { infoEl.innerHTML = '<div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div>'; return; }
+    const row = data[idx];
+    const oiSkew = ((row.co - row.po) / (row.co + row.po + 1e-10) * 100).toFixed(1);
+    const absSkew = Math.abs(parseFloat(oiSkew) / 100);
+    const oiDir = absSkew < 0.3 ? (parseFloat(oiSkew) > 0 ? '涨' : '跌') : (parseFloat(oiSkew) > 0 ? '跌⚠' : '涨⚠');
+    const vrDir = row.vr != null ? (row.vr > 1 ? '涨' : row.vr < 1 ? '跌' : '—') : '';
+    const subHist = data.slice(0, idx).map(r => r.mp);
+    const { dir: trendDir } = mpTrending(subHist, params.lookback, params.minPct);
+    const _proj = linearProjected(subHist, params.lookback);
+    const _slopePct = _proj !== null ? (_proj / (subHist[subHist.length - 1] || 1) * 100).toFixed(1) : null;
+    const trendText = (trendDir === 'up' ? '<span class="pos">↑ 上涨</span>' : trendDir === 'down' ? '<span class="neg">↓ 下跌</span>' : '<span style="color:#576574">— 震荡</span>')
+      + (_slopePct !== null ? ' <span style="color:#576574;font-size:11px">' + _slopePct + '%</span>' : '');
+    const _bepHist = data.slice(0, idx + 1).map(r => r.bep).filter(v => v != null);
+    const _becHist = data.slice(0, idx + 1).map(r => r.bec).filter(v => v != null);
+    const _closeHist = data.slice(0, idx + 1).map(r => r.c);
+    const _bepProj = _bepHist.length >= params.lookback + 1 ? linearProjected(_bepHist, params.lookback) : null;
+    const _becProj = _becHist.length >= params.lookback + 1 ? linearProjected(_becHist, params.lookback) : null;
+    const _closeProj = linearProjected(_closeHist, params.lookback);
+    const _bepSlope = _bepProj !== null ? (_bepProj / (_bepHist[_bepHist.length - 1] || 1) * 100).toFixed(1) : null;
+    const _becSlope = _becProj !== null ? (_becProj / (_becHist[_becHist.length - 1] || 1) * 100).toFixed(1) : null;
+    const _closeSlope = _closeProj !== null ? (_closeProj / (_closeHist[_closeHist.length - 1] || 1) * 100).toFixed(1) : null;
+    const spread = row.mp > 0 ? (row.c - row.mp) / row.mp : 0;
+    let sigHtml = '';
+    const dayTrades = tradeByDate[row.d];
+    if (dayTrades) {
+      for (const t of dayTrades) {
+        const c = t.type === 'entry' ? '#5cd85a' : '#ff6b6b';
+        sigHtml += '<div class="sig" style="background:' + c + '15;border:1px solid ' + c + '33;">' + (t.type === 'entry' ? '▶ 开仓' : '■ 平仓') + ' ' + dirText(t.dir) + ' ' + t.qty + '手 @' + t.price.toFixed(0) + ' (' + t.reason + ')' + (t.type==='exit'?'  PnL:'+Math.round(t.pnl):'') + '</div>';
+      }
+    }
+    let posHtml = '';
+    for (const t of trades) {
+      if (row.d >= t.entry && row.d < t.exit) {
+        const up = t.dir === 'long' ? row.c - t.entryPx : t.entryPx - row.c;
+        const pnl = up * t.qty * params.mult;
+        posHtml = '<div class="sig" style="background:#54a0ff15;border:1px solid #54a0ff33;margin-top:4px;"><b>持仓中</b> ' + dirText(t.dir) + ' ' + t.qty + '手 入场' + t.entryPx.toFixed(0) + ' 浮动' + (pnl>0?'+':'') + Math.round(pnl) + '</div>';
+        break;
+      }
+    }
+    infoEl.innerHTML = '\
+      <div class="row"><span class="label">日期</span><span class="val">' + row.d + '</span></div>\
+      <div class="row highlight"><span class="label">收盘</span><span class="val ' + cls(row.c - (idx>0?data[idx-1].c:row.c)) + '">' + row.c.toFixed(0) + ' ' + (idx>0?(row.c-data[idx-1].c>0?'+':'')+(row.c-data[idx-1].c).toFixed(0):'') + '</span></div>\
+      <div class="row"><span class="label">最高/最低</span><span class="val">' + row.h.toFixed(0) + ' / ' + row.l.toFixed(0) + '</span></div>\
+      <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">Max Pain</span><span class="val" style="color:#e8c84a">' + row.mp + ' ' + (idx>0?(row.mp-data[idx-1].mp>0?'+':'')+(row.mp-data[idx-1].mp)+'':'') + '</span></div>\
+      <div class="row"><span class="label">MP趋势</span><span class="val">' + trendText + '</span></div>\
+      <div class="row"><span class="label">收盘斜率</span><span class="val" style="color:#576574;font-size:11px">' + (_closeSlope !== null ? _closeSlope + '%' : '-') + '</span></div>\
+      <div class="row"><span class="label">BE斜率</span><span class="val" style="color:#576574;font-size:11px">' + (_becSlope !== null ? '看涨 ' + _becSlope + '%' : '') + ' ' + (_bepSlope !== null ? '看跌 ' + _bepSlope + '%' : '') + '</span></div>\
+      <div class="row"><span class="label">价-MP</span><span class="val ' + ((row.c-row.mp) > 0 ? 'pos' : 'neg') + '">' + ((row.c-row.mp) > 0 ? '+' : '') + (row.c-row.mp).toFixed(0) + ' <span style="font-size:11px;color:#576574">(' + ((row.c-row.mp)/row.mp*100).toFixed(1) + '%)</span></span></div>\
+      <div class="row"><span class="label">看涨/看跌BE</span><span class="val" style="font-size:11px"><span style="color:#2ecc71">' + (row.bec != null ? row.bec.toFixed(0) : '-') + '</span> / <span style="color:#e74c3c">' + (row.bep != null ? row.bep.toFixed(0) : '-') + '</span></span></div>\
+      <div class="row"><span class="label">COI/POI</span><span class="val" style="font-size:11px">' + Math.round(row.co).toLocaleString() + ' / ' + Math.round(row.po).toLocaleString() + '</span></div>\
+      <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">OI偏度</span><span class="val ' + (oiSkew>0?'pos':'neg') + '">' + oiSkew + '% <span style="font-size:11px;' + (absSkew < 0.3 ? (parseFloat(oiSkew)>0?'color:#5cd85a':'color:#ff6b6b') : 'color:#e8c84a') + '">' + oiDir + '</span></span></div>\
+      <div class="row"><span class="label">IV偏斜 / 量比</span><span class="val" style="font-size:11px"><span class="' + (row.ivs < 0 ? 'pos' : 'neg') + '">' + (row.ivs != null ? row.ivs.toFixed(1) : '-') + '</span> / ' + (row.vr != null ? row.vr.toFixed(2) : '-') + (vrDir ? '<span style="font-size:10px;' + (row.vr>1?'color:#5cd85a':'color:#ff6b6b') + '">' + vrDir + '</span>' : '') + '</span></div>\
+      ' + (stopCurve && stopCurve[idx] && (stopCurve[idx].stop !== null || stopCurve[idx].breakLevel != null) ? '<div class="row"><span class="label">止损/结构</span><span class="val" style="font-size:11px">' + (stopCurve[idx].stop !== null ? '<span style="color:#ff9f43">' + stopCurve[idx].stop.toFixed(0) + '</span>' : '-') + ' / ' + (stopCurve[idx].breakLevel != null ? '<span style="color:#a55eea">' + stopCurve[idx].breakLevel.toFixed(0) + '</span>' : '-') + '</span></div>' : '') + '\
+      ' + sigHtml + posHtml + '\
+    ';
+  }
+
+  const tradeMarkers = [];
+  for (const t of trades) {
+    const eIdx = data.findIndex(r => r.d === t.entry);
+    const xIdx = data.findIndex(r => r.d === t.exit);
+    if (eIdx >= 0) tradeMarkers.push({ idx: eIdx, type: 'entry', dir: t.dir, qty: t.qty });
+    if (xIdx >= 0) tradeMarkers.push({ idx: xIdx, type: 'exit', dir: t.dir, qty: t.qty, pnl: t.pnl });
+  }
+  tradeMarkers.sort((a, b) => a.idx - b.idx || (a.type === 'entry' ? -1 : 1));
+
+  function render() {
+    const start = Math.max(0, Math.round(state.start));
+    const vis = getVisibleCount();
+    const end = Math.min(n, start + vis + 1);
+    const offset = start * state.barW;
+
+    let minP = Infinity, maxP = -Infinity;
+    for (let i = start; i < end; i++) {
+      const row = data[i];
+      minP = Math.min(minP, row.l, row.mp, row.bec, row.bep);
+      maxP = Math.max(maxP, row.h, row.mp, row.bec, row.bep);
+    }
+    const range = maxP - minP || 1;
+    const padP = range * 0.05;
+    minP -= padP; maxP += padP;
+    const scaleY = ch / (maxP - minP);
+
+    function toY(v) { return pad.top + ch - (v - minP) * scaleY; }
+    function toX(i) { return pad.left + i * state.barW - offset; }
+
+    ctx.fillStyle = '#0f1923';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#1a2a3a';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 8; i++) {
+      const y = pad.top + (ch / 8) * i;
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+    }
+
+    ctx.fillStyle = '#576574';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= 8; i++) {
+      const y = pad.top + (ch / 8) * i;
+      ctx.fillText((maxP - (range / 8) * i).toFixed(0), pad.left - 6, y + 4);
+    }
+
+    if (state.hoverIdx >= start && state.hoverIdx < end) {
+      const row = data[state.hoverIdx];
+      const hx = toX(state.hoverIdx);
+      const hy = toY(row.c);
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = '#8395a7';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(hx, pad.top); ctx.lineTo(hx, pad.top + ch); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pad.left, hy); ctx.lineTo(W - pad.right, hy); ctx.stroke();
+      ctx.setLineDash([]);
+      const prcText = row.c.toFixed(0);
+      ctx.font = 'bold 11px sans-serif';
+      const prcW = ctx.measureText(prcText).width;
+      ctx.fillStyle = '#1a2a3a';
+      ctx.fillRect(W - pad.right - prcW - 12, hy - 9, prcW + 14, 18);
+      ctx.fillStyle = '#e8c84a';
+      ctx.textAlign = 'right';
+      ctx.fillText(prcText, W - pad.right - 5, hy + 5);
+      const dateText = row.d;
+      ctx.font = '11px sans-serif';
+      const dateW = ctx.measureText(dateText).width;
+      ctx.fillStyle = '#1a2a3a';
+      ctx.fillRect(hx - dateW / 2 - 7, pad.top + ch + 2, dateW + 14, 18);
+      ctx.fillStyle = '#c8d6e5';
+      ctx.textAlign = 'center';
+      ctx.fillText(dateText, hx, pad.top + ch + 15);
+      ctx.restore();
+    }
+
+    ctx.strokeStyle = '#e8c84a';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    let mpStarted = false;
+    for (let i = start; i < end && i < n; i++) {
+      const x = toX(i), y = toY(data[i].mp);
+      if (!mpStarted) { ctx.moveTo(x, y); mpStarted = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = '#2ecc71';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.6;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    let becStarted = false;
+    for (let i = start; i < end && i < n; i++) {
+      const x = toX(i), y = toY(data[i].bec);
+      if (data[i].bec == null) { becStarted = false; continue; }
+      if (!becStarted) { ctx.moveTo(x, y); becStarted = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = '#e74c3c';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.6;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    let bepStarted = false;
+    for (let i = start; i < end && i < n; i++) {
+      const x = toX(i), y = toY(data[i].bep);
+      if (data[i].bep == null) { bepStarted = false; continue; }
+      if (!bepStarted) { ctx.moveTo(x, y); bepStarted = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+
+    ctx.save();
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'left';
+    const legX = pad.left + 8, legY2 = pad.top + 4;
+    ctx.fillStyle = '#1a2a3a';
+    ctx.fillRect(legX - 4, legY2 - 2, 340, 42);
+    let lx = legX;
+    ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(lx, legY2+7); ctx.lineTo(lx+16, legY2+7); ctx.stroke();
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('MP', lx+20, legY2+11); lx += 54;
+    ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, legY2+7); ctx.lineTo(lx+16, legY2+7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('看涨BE', lx+20, legY2+11); lx += 80;
+    ctx.setLineDash([4,3]); ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, legY2+7); ctx.lineTo(lx+16, legY2+7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('看跌BE', lx+20, legY2+11);
+    ctx.restore();
+
+    if (stopCurve && stopCurve.length === n) {
+      ctx.save();
+      ctx.strokeStyle = '#ff9f43';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.globalAlpha = 0.8;
+      ctx.beginPath();
+      let scStarted = false;
+      for (let i = start; i < end && i < n; i++) {
+        if (stopCurve[i].stop === null) { scStarted = false; continue; }
+        const x = toX(i), y = toY(stopCurve[i].stop);
+        if (!scStarted) { ctx.moveTo(x, y); scStarted = true; } else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    let tmIdx = 0;
+    while (tmIdx < tradeMarkers.length && tradeMarkers[tmIdx].idx < start) tmIdx++;
+    for (let i = start; i < end && i < n; i++) {
+      const row = data[i];
+      const x = toX(i);
+      const prevClose = i > 0 ? data[i-1].c : row.c;
+      const upColor = row.c >= prevClose;
+      const color = upColor ? '#5cd85a' : '#ff6b6b';
+
+      if (i === state.hoverIdx) {
+        ctx.fillStyle = '#ffffff08';
+        ctx.fillRect(x - state.barW / 2, pad.top, state.barW, ch);
+      }
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, state.barW * 0.2);
+      ctx.beginPath();
+      ctx.moveTo(x, toY(row.h)); ctx.lineTo(x, toY(row.l)); ctx.stroke();
+
+      ctx.fillStyle = color;
+      const bw = Math.max(1, state.barW * 0.5);
+      const bh = Math.max(1, Math.abs(toY(row.c) - toY(prevClose)) || 1);
+      const by = upColor ? toY(row.c) : toY(prevClose);
+      ctx.fillRect(x - bw / 2, by, bw, bh);
+
+      if (row._manual) {
+        ctx.save();
+        ctx.strokeStyle = '#54a0ff';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeRect(x - bw / 2, by, bw, bh);
+        ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(x, toY(row.h)); ctx.lineTo(x, toY(row.l)); ctx.stroke();
+        ctx.restore();
+      }
+
+      while (tmIdx < tradeMarkers.length && tradeMarkers[tmIdx].idx === i) {
+        const m = tradeMarkers[tmIdx];
+        const color = m.dir === 'long' ? '#5cd85a' : '#ff6b6b';
+        const yBase = m.type === 'entry' ? toY(row.h) - 4 : toY(row.l) + 4;
+        const yOff = m.type === 'entry' ? -10 : 10;
+        ctx.fillStyle = color;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x, yBase + yOff);
+        ctx.lineTo(x - 6, yBase + (m.type === 'entry' ? -2 : 2));
+        ctx.lineTo(x + 6, yBase + (m.type === 'entry' ? -2 : 2));
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        tmIdx++;
+      }
+    }
+
+    const lastVis = Math.min(end - 1, n - 1);
+    ctx.fillStyle = '#e8c84a';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('MP', toX(lastVis) + 4, toY(data[lastVis].mp) - 2);
+    if (stopCurve && stopCurve.length === n && stopCurve[lastVis].stop !== null) {
+      ctx.fillStyle = '#ff9f43';
+      ctx.fillText('止损', toX(lastVis) + 4, toY(stopCurve[lastVis].stop) + 4);
+    }
+    if (stopCurve && stopCurve.length === n && stopCurve[lastVis].breakLevel != null) {
+      ctx.strokeStyle = '#a55eea'; ctx.lineWidth = 2; ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      const bx = toX(lastVis) + 2, by = toY(stopCurve[lastVis].breakLevel);
+      ctx.moveTo(bx, by); ctx.lineTo(bx + 20, by);
+      ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#a55eea';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('结构', bx + 22, by + 4);
+    }
+
+    ctx.fillStyle = '#576574';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    const labelStep = Math.max(1, Math.floor((end - start) / 8));
+    for (let i = start; i < end; i += labelStep) {
+      ctx.fillText(data[i].d.slice(0, 7), toX(i), H - 10);
+    }
+
+    const sbY = H - 4, sbH = 3;
+    ctx.fillStyle = '#1a2a3a';
+    ctx.fillRect(pad.left, sbY, cw, sbH);
+    if (state.barW * n > cw) {
+      const thumbW = Math.max(20, cw * cw / (state.barW * n));
+      const thumbX = pad.left + (state.start / n) * cw;
+      ctx.fillStyle = '#576574';
+      ctx.fillRect(thumbX, sbY, thumbW, sbH);
+    }
+
+    if (subCanvas) {
+      const sctx = subCanvas.getContext('2d');
+      const spad = { top: 12, bottom: 14, left: 60, right: 72 };
+      const sch = 110 - spad.top - spad.bottom;
+      const s2y = (v, mn, mx) => spad.top + sch - (v - mn) / (mx - mn) * sch;
+
+      sctx.fillStyle = '#09131c';
+      sctx.fillRect(0, 0, W, 110);
+
+      sctx.strokeStyle = '#1a2a3a';
+      sctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = spad.top + (sch / 4) * i;
+        sctx.beginPath(); sctx.moveTo(pad.left, y); sctx.lineTo(W - spad.right, y); sctx.stroke();
+      }
+
+      const zy = s2y(0, _subMinD, _subMaxD);
+      if (zy >= spad.top && zy <= spad.top + sch) {
+        sctx.save();
+        sctx.setLineDash([3, 3]);
+        sctx.strokeStyle = '#2d3436';
+        sctx.lineWidth = 1;
+        sctx.beginPath(); sctx.moveTo(pad.left, zy); sctx.lineTo(W - spad.right, zy); sctx.stroke();
+        sctx.setLineDash([]);
+        sctx.restore();
+      }
+
+      sctx.fillStyle = '#576574';
+      sctx.font = '10px sans-serif';
+      sctx.textAlign = 'right';
+      for (let i = 0; i <= 4; i++) {
+        const v = _subMinD + (_subMaxD - _subMinD) / 4 * i;
+        const y = spad.top + (sch / 4) * (4 - i);
+        sctx.fillText(v.toFixed(0), pad.left - 4, y + 3);
+      }
+
+      sctx.textAlign = 'left';
+      for (let i = 0; i <= 4; i++) {
+        const v = _subMinS + (_subMaxS - _subMinS) / 4 * i;
+        const y = spad.top + (sch / 4) * (4 - i);
+        sctx.fillStyle = '#e8c84a';
+        sctx.fillText((v * 100).toFixed(1) + '%', W - spad.right + 4, y + 3);
+      }
+
+      sctx.textAlign = 'left';
+      for (let i = 0; i <= 4; i++) {
+        const v = _subMinV + (_subMaxV - _subMinV) / 4 * i;
+        const y = spad.top + (sch / 4) * (4 - i);
+        sctx.fillStyle = '#5cd85a';
+        sctx.fillText(v.toFixed(2), W - 4, y + 3);
+      }
+
+      if (subVis.diff) {
+        sctx.strokeStyle = '#54a0ff';
+        sctx.lineWidth = 1.5;
+        sctx.beginPath();
+        let started = false;
+        for (let i = start; i < end && i < n; i++) {
+          const x = toX(i);
+          const y = s2y(_subDiff[i], _subMinD, _subMaxD);
+          if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
+        }
+        sctx.stroke();
+      }
+
+      if (subVis.skew) {
+        sctx.strokeStyle = '#e8c84a';
+        sctx.lineWidth = 1.5;
+        sctx.beginPath();
+        started = false;
+        for (let i = start; i < end && i < n; i++) {
+          const x = toX(i);
+          const y = s2y(_subSkewD[i], _subMinS, _subMaxS);
+          if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
+        }
+        sctx.stroke();
+      }
+
+      if (subVis.vr) {
+        sctx.strokeStyle = '#5cd85a';
+        sctx.lineWidth = 1.5;
+        sctx.beginPath();
+        started = false;
+        for (let i = start; i < end && i < n; i++) {
+          const x = toX(i);
+          const y = s2y(_subVr[i], _subMinV, _subMaxV);
+          if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
+        }
+        sctx.stroke();
+      }
+
+      sctx.font = '10px sans-serif';
+      const legY = spad.top + 3;
+      function drawLegItem(x, color, label, key) {
+        const on = subVis[key];
+        sctx.fillStyle = on ? color : '#2d3436';
+        sctx.fillRect(x, legY + 4, 10, 10);
+        sctx.strokeStyle = '#576574';
+        sctx.lineWidth = 1;
+        sctx.strokeRect(x, legY + 4, 10, 10);
+        if (on) {
+          sctx.fillStyle = '#fff';
+          sctx.font = 'bold 9px sans-serif';
+          sctx.textAlign = 'center';
+          sctx.fillText('✓', x + 5, legY + 12);
+          sctx.font = '10px sans-serif';
+        }
+        sctx.textAlign = 'left';
+        sctx.fillStyle = on ? '#c8d6e5' : '#576574';
+        sctx.fillText(label, x + 14, legY + 13);
+      }
+      drawLegItem(pad.left + 4, '#54a0ff', '收盘-MP', 'diff');
+      drawLegItem(pad.left + 84, '#e8c84a', 'OI偏度差', 'skew');
+      drawLegItem(pad.left + 164, '#5cd85a', '成交量比', 'vr');
+
+      if (state.hoverIdx >= start && state.hoverIdx < end) {
+        const hx = toX(state.hoverIdx);
+        sctx.save();
+        sctx.setLineDash([4, 4]);
+        sctx.strokeStyle = '#8395a7';
+        sctx.lineWidth = 1;
+        sctx.beginPath(); sctx.moveTo(hx, spad.top); sctx.lineTo(hx, spad.top + sch); sctx.stroke();
+        sctx.setLineDash([]);
+
+        const hi = state.hoverIdx;
+        const dv = _subDiff[hi];
+        const sv = _subSkewD[hi] * 100;
+        const vv = _subVr[hi];
+        sctx.font = '10px sans-serif';
+        sctx.textAlign = 'left';
+        let hoverY = spad.top + 14;
+        if (subVis.diff) {
+          sctx.fillStyle = '#54a0ff';
+          sctx.fillText((dv > 0 ? '+' : '') + dv.toFixed(0), hx + 4, hoverY);
+          hoverY += 12;
+        }
+        if (subVis.skew) {
+          sctx.fillStyle = '#e8c84a';
+          sctx.fillText((sv > 0 ? '+' : '') + sv.toFixed(1) + '%', hx + 4, hoverY);
+          hoverY += 12;
+        }
+        if (subVis.vr) {
+          sctx.fillStyle = '#5cd85a';
+          sctx.fillText('VR:' + vv.toFixed(2), hx + 4, hoverY);
+        }
+        sctx.restore();
+      }
+    }
+  }
+
+  function getDataX(clientX) {
+    const br = canvas.getBoundingClientRect();
+    return clientX - br.left;
+  }
+
+  function getBarIdx(clientX) {
+    const mx = getDataX(clientX);
+    return Math.round(state.start + (mx - pad.left) / state.barW);
+  }
+
+  canvas.onmousedown = (e) => {
+    state.dragging = true;
+    state.dragStartX = getDataX(e.clientX);
+    state.dragStartIdx = state.start;
+    canvas.style.cursor = 'grabbing';
+  };
+
+  canvas.onmousemove = (e) => {
+    const idx = getBarIdx(e.clientX);
+    if (state.dragging) {
+      const dx = getDataX(e.clientX) - state.dragStartX;
+      state.start = Math.max(0, Math.min(n - getVisibleCount(), state.dragStartIdx - dx / state.barW));
+      if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
+    } else {
+      if (idx !== state.hoverIdx) {
+        state.hoverIdx = idx;
+        updateInfo(idx);
+        render();
+      }
+      canvas.style.cursor = 'crosshair';
+    }
+  };
+
+  window.addEventListener('mouseup', function() {
+    if (state.dragging) { state.dragging = false; }
+  });
+
+  canvas.onmouseleave = function() {
+    state.hoverIdx = -1;
+    updateInfo(-1);
+    render();
+  };
+
+  canvas.onwheel = (e) => {
+    e.preventDefault();
+    const mx = getDataX(e.clientX);
+    const idxUnderMouse = state.start + mx / state.barW;
+    const zoom = e.deltaY > 0 ? 0.85 : 1.18;
+    const newBarW = Math.max(2, Math.min(40, state.barW * zoom));
+    state.start = idxUnderMouse - mx / newBarW;
+    state.barW = newBarW;
+    render();
+  };
+
+  // 触屏支持
+  canvas.addEventListener('touchstart', function(e) {
+    const touch = e.touches[0];
+    state.dragStartX = getDataX(touch.clientX);
+    state.dragStartIdx = state.start;
+    state.dragging = true;
+  }, { passive: true });
+
+  canvas.addEventListener('touchmove', function(e) {
+    const touch = e.touches[0];
+    const dx = getDataX(touch.clientX) - state.dragStartX;
+    state.start = Math.max(0, Math.min(n - getVisibleCount(), state.dragStartIdx - dx / state.barW));
+    if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
+    const idx = getBarIdx(touch.clientX);
+    if (idx !== state.hoverIdx) {
+      state.hoverIdx = idx;
+      updateInfo(idx);
+    }
+  }, { passive: true });
+
+  canvas.addEventListener('touchend', function() {
+    state.dragging = false;
+  }, { passive: true });
+
+  if (subCanvas) {
+    subCanvas.addEventListener('touchmove', function(e) {
+      const touch = e.touches[0];
+      const br = subCanvas.getBoundingClientRect();
+      const sx = touch.clientX - br.left;
+      const idx = Math.round(state.start + (sx - pad.left) / state.barW);
+      if (idx !== state.hoverIdx) {
+        state.hoverIdx = idx;
+        updateInfo(idx);
+        render();
+      }
+    }, { passive: true });
+  }
+
+  render();
+}
+
+window.onload = async function() {
+  const ok = await loadAllData();
+  if (ok) {
+    const sym = document.getElementById('symbol').value;
+    const data = ALL_DATA[sym];
+    if (data) {
+      document.getElementById('p_start').value = data[0].d;
+      document.getElementById('p_end').value = data[data.length - 1].d;
+    }
+    runBacktest();
+  }
+};
+</script>
+</body>
+</html>
