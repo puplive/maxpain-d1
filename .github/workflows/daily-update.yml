@@ -32,7 +32,7 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Fetch data (incremental)
-        run: python scripts/fetch_data.py --output data.json --recent 1
+        run: python scripts/fetch_data.py --output data.json --recent 5
         if: github.event_name == 'schedule' || inputs.mode == 'incremental'
 
       - name: Fetch data (full history)
