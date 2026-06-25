@@ -47,8 +47,15 @@ body { font: 14px/1.6 -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-seri
 .score-grade.D { color: #ff6b6b; }
 
 /* Chart */
-.chart-wrap { background: #1a2a3a; border: 1px solid #2d3436; border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+.chart-wrap { background: #1a2a3a; border: 1px solid #2d3436; border-radius: 8px; padding: 12px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 12px; }
+.chart-main { flex: 1; min-width: 0; }
 #chart { width: 100%; height: 380px; display: block; }
+.chart-info { flex: 0 0 180px; font-size: 12px; color: #c8d6e5; }
+.chart-info .row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #1a2a3a; }
+.chart-info .label { color: #576574; }
+.chart-info .val { font-weight: 600; font-variant-numeric: tabular-nums; }
+.chart-info .highlight { background: #2d3436; margin: 0 -8px; padding: 4px 8px; border-radius: 4px; }
+.chart-info .sig { margin-top: 8px; padding: 6px 8px; border-radius: 4px; font-size: 11px; }
 .hint { text-align: center; padding: 80px 20px; color: #576574; font-size: 14px; }
 
 /* Action panel */
@@ -138,7 +145,12 @@ tr:hover td { background: #1a2a3a; }
   </div>
 
   <div class="chart-wrap">
-    <canvas id="chart"></canvas>
+    <div class="chart-main">
+      <canvas id="chart"></canvas>
+    </div>
+    <div class="chart-info" id="chartInfo">
+      <div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div>
+    </div>
     <div class="hint" id="chartHint">点击「开始训练」随机选取数据段<br>逐根K线揭示，模拟实盘决策</div>
   </div>
 
@@ -195,6 +207,7 @@ let trades = [];
 let state = 'idle'; // idle | playing | done
 let autoTimer = null;
 let totalTradesInSegment = 0;
+let hoverIdx = -1; // chart hovered candle index
 
 async function loadData(symbol) {
   const status = document.getElementById('status');
@@ -523,7 +536,7 @@ function drawChart() {
   const canvas = document.getElementById('chart');
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.parentElement.getBoundingClientRect();
-  const W = rect.width - 24;
+  const W = rect.width;
   const H = 380;
   canvas.width = W * dpr;
   canvas.height = H * dpr;
@@ -750,6 +763,96 @@ function drawChart() {
   ctx.font = '10px sans-serif';
   ctx.textAlign = 'right';
   ctx.fillText(segment[0].d + ' ~ ' + segment[revealed].d, W - pad.right, H - 10);
+
+  // === Hover crosshair ===
+  if (hoverIdx >= 0 && hoverIdx <= revealed) {
+    const hx = toX(hoverIdx);
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = '#8395a7';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(hx, pad.top); ctx.lineTo(hx, pad.top + ch); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // === Mouse/Touch events ===
+  function getDataX(clientX) {
+    const br = canvas.getBoundingClientRect();
+    return clientX - br.left;
+  }
+
+  function getBarIdx(clientX) {
+    const mx = getDataX(clientX);
+    return Math.round((mx - pad.left) / cw * (n - 1));
+  }
+
+  canvas.onmousemove = function(e) {
+    if (state !== 'playing' && state !== 'done') return;
+    const idx = getBarIdx(e.clientX);
+    if (idx !== hoverIdx) {
+      hoverIdx = Math.max(0, Math.min(idx, revealed));
+      updateInfo(hoverIdx);
+      drawChart();
+    }
+    canvas.style.cursor = 'crosshair';
+  };
+
+  canvas.onmouseleave = function() {
+    hoverIdx = -1;
+    updateInfo(-1);
+    drawChart();
+  };
+
+  canvas.addEventListener('touchstart', function(e) {
+    const touch = e.touches[0];
+    const br = canvas.getBoundingClientRect();
+    const idx = Math.round((touch.clientX - br.left - pad.left) / cw * (n - 1));
+    hoverIdx = Math.max(0, Math.min(idx, revealed));
+    updateInfo(hoverIdx);
+    drawChart();
+  }, { passive: true });
+
+  canvas.addEventListener('touchmove', function(e) {
+    const touch = e.touches[0];
+    const br = canvas.getBoundingClientRect();
+    const idx = Math.round((touch.clientX - br.left - pad.left) / cw * (n - 1));
+    hoverIdx = Math.max(0, Math.min(idx, revealed));
+    updateInfo(hoverIdx);
+    drawChart();
+  }, { passive: true });
+
+  function updateInfo(idx) {
+    const infoEl = document.getElementById('chartInfo');
+    if (idx < 0 || idx >= n || idx > revealed) {
+      infoEl.innerHTML = '<div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div>';
+      return;
+    }
+    const r = segment[idx];
+    const mult = SYM_CFG[segmentSymbol] ? SYM_CFG[segmentSymbol].mult : 1;
+    const oiSkew = (r.co != null && r.po != null) ? ((r.co - r.po) / (r.co + r.po + 1e-10) * 100).toFixed(1) : '-';
+    const prevData = idx > 0 ? segment[idx - 1] : null;
+    let sigHtml = '';
+    for (const t of trades) {
+      if (r.d === t.entryDate && idx <= revealed) {
+        sigHtml += '<div class="sig" style="background:#5cd85a15;border:1px solid #5cd85a33;">▶ 开' + (t.dir === 'long' ? '多' : '空') + ' @' + t.entryPx.toFixed(0) + '</div>';
+      }
+      if (r.d === t.exitDate && idx <= revealed) {
+        sigHtml += '<div class="sig" style="background:#ff6b6b15;border:1px solid #ff6b6b33;">■ 平' + (t.dir === 'long' ? '多' : '空') + ' @' + t.exitPx.toFixed(0) + ' PnL:' + Math.round(t.pnl) + '</div>';
+      }
+    }
+    infoEl.innerHTML = '\
+      <div class="row"><span class="label">日期</span><span class="val">' + r.d + '</span></div>\
+      <div class="row highlight"><span class="label">收盘</span><span class="val ' + (prevData && r.c !== prevData.c ? (r.c > prevData.c ? 'pos' : 'neg') : '') + '">' + (r.c != null ? r.c.toFixed(0) : '-') + (prevData ? ' ' + (r.c > prevData.c ? '+' : '') + (r.c - prevData.c).toFixed(0) : '') + '</span></div>\
+      <div class="row"><span class="label">最高/最低</span><span class="val">' + (r.h != null ? r.h.toFixed(0) : '-') + ' / ' + (r.l != null ? r.l.toFixed(0) : '-') + '</span></div>\
+      <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">Max Pain</span><span class="val" style="color:#e8c84a">' + (r.mp != null ? r.mp : '-') + '</span></div>\
+      <div class="row"><span class="label">看涨BE / 看跌BE</span><span class="val" style="font-size:11px"><span style="color:#2ecc71">' + (r.bec != null ? r.bec.toFixed(0) : '-') + '</span> / <span style="color:#e74c3c">' + (r.bep != null ? r.bep.toFixed(0) : '-') + '</span></span></div>\
+      <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">OI偏度</span><span class="val ' + (parseFloat(oiSkew) > 0 ? 'pos' : parseFloat(oiSkew) < 0 ? 'neg' : '') + '">' + oiSkew + '%</span></div>\
+      <div class="row"><span class="label">量比 / IV偏斜</span><span class="val" style="font-size:11px">' + (r.vr != null ? r.vr.toFixed(2) : '-') + ' / ' + (r.ivs != null ? r.ivs.toFixed(1) : '-') + '</span></div>\
+      ' + sigHtml + '\
+    ';
+  }
+
 }
 
 // ── Init ──
