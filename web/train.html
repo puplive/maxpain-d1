@@ -542,8 +542,8 @@ function drawChart() {
   let minP = Infinity, maxP = -Infinity;
   for (let i = 0; i <= revealed; i++) {
     const r = segment[i];
-    minP = Math.min(minP, r.l, r.mp);
-    maxP = Math.max(maxP, r.h, r.mp);
+    minP = Math.min(minP, r.l, r.mp, r.bec, r.bep);
+    maxP = Math.max(maxP, r.h, r.mp, r.bec, r.bep);
   }
   // Add padding for unrevealed area (rough estimate)
   if (revealed < n - 1) {
@@ -617,6 +617,39 @@ function drawChart() {
     ctx.textAlign = 'left';
     ctx.fillText('MP', toX(revealed) + 4, toY(segment[revealed].mp) - 2);
   }
+
+  // === BE Lines (revealed only) ===
+  ctx.strokeStyle = '#2ecc71';
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.6;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath();
+  let becStarted = false;
+  for (let i = 0; i <= revealed; i++) {
+    const r = segment[i];
+    if (r.bec == null) { becStarted = false; continue; }
+    const x = toX(i), y = toY(r.bec);
+    if (!becStarted) { ctx.moveTo(x, y); becStarted = true; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  ctx.strokeStyle = '#e74c3c';
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.6;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath();
+  let bepStarted = false;
+  for (let i = 0; i <= revealed; i++) {
+    const r = segment[i];
+    if (r.bep == null) { bepStarted = false; continue; }
+    const x = toX(i), y = toY(r.bep);
+    if (!bepStarted) { ctx.moveTo(x, y); bepStarted = true; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
 
   // === Candlesticks ===
   for (let i = 0; i <= revealed; i++) {
@@ -697,12 +730,19 @@ function drawChart() {
   ctx.textAlign = 'left';
   const lx = pad.left + 8, ly = pad.top + 4;
   ctx.fillStyle = '#1a2a3a';
-  ctx.fillRect(lx - 4, ly - 2, 200, 22);
+  ctx.fillRect(lx - 4, ly - 2, 300, 22);
+  let legX = lx;
   ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(lx, ly+8); ctx.lineTo(lx+16, ly+8); ctx.stroke();
-  ctx.fillStyle = '#c8d6e5'; ctx.fillText('MP', lx+20, ly+12);
+  ctx.beginPath(); ctx.moveTo(legX, ly+8); ctx.lineTo(legX+16, ly+8); ctx.stroke();
+  ctx.fillStyle = '#c8d6e5'; ctx.fillText('MP', legX+20, ly+12); legX += 48;
+  ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(legX, ly+8); ctx.lineTo(legX+16, ly+8); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#c8d6e5'; ctx.fillText('看涨BE', legX+20, ly+12); legX += 74;
+  ctx.setLineDash([4,3]); ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(legX, ly+8); ctx.lineTo(legX+16, ly+8); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#c8d6e5'; ctx.fillText('看跌BE', legX+20, ly+12); legX += 74;
   ctx.fillStyle = '#576574';
-  ctx.fillText(SYM_CFG[segmentSymbol] ? SYM_CFG[segmentSymbol].name + ' (' + segmentSymbol + ')' : segmentSymbol, lx+56, ly+12);
+  ctx.fillText(SYM_CFG[segmentSymbol] ? SYM_CFG[segmentSymbol].name + ' (' + segmentSymbol + ')' : segmentSymbol, legX + 10, ly+12);
   ctx.restore();
 
   // Symbol+segment range
