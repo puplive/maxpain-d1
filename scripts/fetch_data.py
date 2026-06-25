@@ -128,7 +128,7 @@ def _fetch_one_option(sym: str, oname: str, trade_date: str, day: str) -> tuple[
         if o.empty:
             return sym, pd.DataFrame()
         o.columns = o.columns.str.strip()
-        for c in o.select_dtypes(include='object'):
+        for c in o.select_dtypes(include='str'):
             o[c] = o[c].str.strip()
         parsed = o['合约代码'].apply(parse_opt_code)
         o['strike'] = parsed.apply(lambda x: x[0] if x else None)
