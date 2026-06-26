@@ -155,10 +155,16 @@ def calc_be(opt_df: pd.DataFrame, px: float, is_call: bool) -> float | None:
             intrinsic = (np.maximum(mid - filtered['strike'].values, 0) * filtered['oi'].values).sum()
         else:
             intrinsic = (np.maximum(filtered['strike'].values - mid, 0) * filtered['oi'].values).sum()
-        if intrinsic < total_cost:
-            high = mid if not is_call else low
+        if is_call:
+            if intrinsic < total_cost:
+                low = mid    # 看涨：现价太低，需提高
+            else:
+                high = mid   # 看涨：现价太高，需降低
         else:
-            low = mid if not is_call else high
+            if intrinsic < total_cost:
+                high = mid   # 看跌：现价太高，需降低
+            else:
+                low = mid    # 看跌：现价太低，需提高
         if high - low < 0.01:
             break
     return round((low + high) / 2, 2)
