@@ -605,7 +605,7 @@ def main():
     else:
         syms = list(DEFAULT_SYMBOLS)
 
-    # 非交易日跳过（recent 模式，避免周末假日空跑）
+    # 自动任务：非交易日跳过
     if args.recent and not args.symbol:
         trade_days = _load_trade_days()
         today_str = datetime.now().strftime('%Y-%m-%d')
