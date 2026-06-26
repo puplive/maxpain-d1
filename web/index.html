@@ -53,8 +53,9 @@ tr:hover td { background: #1a2a3a; }
 .chart-wrap { background: #1a2a3a; border: 1px solid #2d3436; border-radius: 8px; padding: 12px; margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 12px; }
 .chart-wrap h2 { font-size: 15px; color: #8395a7; margin-bottom: 10px; flex: 0 0 100%; }
 .chart-main { flex: 1; min-width: 0; }
-#chart { width: 100%; height: 380px; display: block; }
-#subChart { width: 100%; height: 110px; display: block; margin-top: 2px; }
+#chart { width: 100%; height: 380px; display: block; touch-action: none; }
+#subChart { width: 100%; height: 110px; display: block; margin-top: 2px; touch-action: none; }
+.chart-main { touch-action: none; }
 .chart-info { flex: 0 0 180px; font-size: 12px; color: #c8d6e5; }
 .chart-info .row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #1a2a3a; }
 .chart-info .label { color: #576574; }
@@ -74,7 +75,7 @@ tr:hover td { background: #1a2a3a; }
   .stat-card .value { font-size: 15px; }
   .stat-card .label { font-size: 10px; }
   .chart-wrap { flex-direction: column; }
-  .chart-info { flex: none; width: 100%; order: -1; font-size: 11px; max-height: 110px; overflow-y: auto; }
+  .chart-info { flex: none; width: 100%; font-size: 11px; max-height: 110px; overflow-y: auto; }
   .chart-info .row { padding: 2px 0; }
   #chart { height: 260px; }
   #subChart { height: 80px; }
@@ -882,7 +883,11 @@ function drawChart(data, trades, params, stopCurve) {
     dragStartX: 0,
     dragStartIdx: 0,
     hoverIdx: -1,
+    pinchDist: 0,
   };
+
+  // 阻止浏览器页面缩放干扰图表操作
+  canvas.style.touchAction = 'none';
 
   function getVisibleCount() { return Math.ceil(cw / state.barW); }
 
@@ -1395,32 +1400,59 @@ function drawChart(data, trades, params, stopCurve) {
     render();
   };
 
-  // 触屏支持
+  // 触屏支持：单指拖动 + 双指缩放，阻止页面缩放
   canvas.addEventListener('touchstart', function(e) {
-    const touch = e.touches[0];
-    state.dragStartX = getDataX(touch.clientX);
-    state.dragStartIdx = state.start;
-    state.dragging = true;
-  }, { passive: true });
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      state.dragStartX = getDataX(touch.clientX);
+      state.dragStartIdx = state.start;
+      state.dragging = true;
+    } else if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      state.pinchDist = Math.sqrt(dx * dx + dy * dy);
+    }
+  }, { passive: false });
 
   canvas.addEventListener('touchmove', function(e) {
-    const touch = e.touches[0];
-    const dx = getDataX(touch.clientX) - state.dragStartX;
-    state.start = Math.max(0, Math.min(n - getVisibleCount(), state.dragStartIdx - dx / state.barW));
-    if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
-    const idx = getBarIdx(touch.clientX);
-    if (idx !== state.hoverIdx) {
-      state.hoverIdx = idx;
-      updateInfo(idx);
+    e.preventDefault();
+    if (e.touches.length === 1 && state.dragging) {
+      const touch = e.touches[0];
+      const dx = getDataX(touch.clientX) - state.dragStartX;
+      state.start = Math.max(0, Math.min(n - getVisibleCount(), state.dragStartIdx - dx / state.barW));
+      if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
+      const idx = getBarIdx(touch.clientX);
+      if (idx !== state.hoverIdx) {
+        state.hoverIdx = idx;
+        updateInfo(idx);
+      }
+    } else if (e.touches.length === 2 && state.pinchDist > 0) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const scale = dist / state.pinchDist;
+      const br = canvas.getBoundingClientRect();
+      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - br.left;
+      const idxUnderMouse = state.start + mx / state.barW;
+      const newBarW = Math.max(2, Math.min(40, state.barW * scale));
+      state.start = Math.max(0, idxUnderMouse - mx / newBarW);
+      state.barW = newBarW;
+      state.pinchDist = dist;
+      if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
     }
-  }, { passive: true });
+  }, { passive: false });
 
-  canvas.addEventListener('touchend', function() {
-    state.dragging = false;
-  }, { passive: true });
+  canvas.addEventListener('touchend', function(e) {
+    e.preventDefault();
+    if (e.touches.length < 2) state.pinchDist = 0;
+    if (e.touches.length === 0) state.dragging = false;
+  }, { passive: false });
 
   if (subCanvas) {
+    subCanvas.addEventListener('touchstart', function(e) { e.preventDefault(); }, { passive: false });
     subCanvas.addEventListener('touchmove', function(e) {
+      e.preventDefault();
       const touch = e.touches[0];
       const br = subCanvas.getBoundingClientRect();
       const sx = touch.clientX - br.left;
@@ -1430,7 +1462,7 @@ function drawChart(data, trades, params, stopCurve) {
         updateInfo(idx);
         render();
       }
-    }, { passive: true });
+    }, { passive: false });
   }
 
   render();
