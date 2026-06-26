@@ -1215,31 +1215,32 @@ function drawChart(data, trades, params, stopCurve) {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // 开/平都用空心三角 + 白色文字，与K线绿红区分
+        // 多→尖朝上▲，空→尖朝下▼，平仓方向与开仓相反
+        const isLong = m.dir === 'long';
+        const up = isEntry ? isLong : !isLong; // 平仓反向
         ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1;
         ctx.lineJoin = 'round';
         ctx.beginPath();
-        if (isEntry) {
-          // ▲ 向上，尖端顶在横线上
-          ctx.moveTo(x, priceY);
+        if (up) {
+          ctx.moveTo(x, priceY - 1); // 尖端顶在横线上
           ctx.lineTo(x - tipSz, priceY + tipSz * 1.6);
           ctx.lineTo(x + tipSz, priceY + tipSz * 1.6);
         } else {
-          // ▼ 向下，尖端顶在横线上
-          ctx.moveTo(x, priceY);
+          ctx.moveTo(x, priceY + 1); // 尖端顶在横线上
           ctx.lineTo(x - tipSz, priceY - tipSz * 1.6);
           ctx.lineTo(x + tipSz, priceY - tipSz * 1.6);
         }
         ctx.closePath();
         ctx.stroke();
 
-        // 文字标签，白色与K线区分
+        // 文字标签
         ctx.fillStyle = 'rgba(255,255,255,0.8)';
         ctx.font = `bold ${Math.max(9, Math.min(12, state.barW * 0.7))}px sans-serif`;
         ctx.textAlign = 'center';
-        const labelOff = tipSz * 1.6 + 12;
-        ctx.fillText(isEntry ? '开' : '平', x, priceY + (isEntry ? labelOff : -labelOff + 6));
+        const labelOff = tipSz * 1.6 + 11;
+        const label = isEntry ? (isLong ? '多' : '空') : '平';
+        ctx.fillText(label, x, priceY + (up ? labelOff : -labelOff + 6));
         ctx.restore();
         tmIdx++;
       }
