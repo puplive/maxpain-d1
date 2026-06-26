@@ -26,16 +26,19 @@ SYMBOLS = ['TA', 'MA', 'SA']
 OPT_NAMES = {'TA': 'PTA期权', 'MA': '甲醇期权', 'SA': '纯碱期权'}
 
 _UPLOAD_INTERVAL = 100  # 每处理多少天中途上传一次
-_TIMEOUT = 120  # 单次 API 调用超时（秒）
+_TIMEOUT = 30  # 单次 API 调用超时（秒），有重试兜底
+_MAX_RETRY = 3  # 超时日期最大重试次数
 _timeout_executor = ThreadPoolExecutor(max_workers=1)
+
+_TIME_OUT = object()
 
 
 def _call_with_timeout(fn, timeout=_TIMEOUT):
-    """调用 fn()，超时返回 None"""
+    """调用 fn()，超时返回 _TIME_OUT"""
     try:
         return _timeout_executor.submit(fn).result(timeout=timeout)
     except:
-        return None
+        return _TIME_OUT
 
 
 def _upload_batch(symbol: str, records: list[dict], worker_url: str, api_key: str, gh_token: str = ''):
@@ -62,25 +65,6 @@ def _upload_batch(symbol: str, records: list[dict], worker_url: str, api_key: st
 
 
 
-def make_calendar() -> list[str]:
-    """生成交易日列表（2020-01-01 ~ 至今，过滤周末）"""
-    try:
-        df = ak.tool_trade_date_hist_sina()
-        df['trade_date'] = pd.to_datetime(df['trade_date']).dt.strftime('%Y-%m-%d')
-        today = datetime.now().strftime('%Y-%m-%d')
-        cal = [d for d in sorted(df['trade_date']) if '2020-01-01' <= d <= today]
-        print(f'交易日历: {len(cal)} 天', flush=True)
-        return cal
-    except Exception as e:
-        print(f'⚠ 交易日历失败: {e}，使用日历天过滤周末', flush=True)
-        cal = []
-        d = datetime(2020, 1, 1)
-        end = datetime.now()
-        while d <= end:
-            if d.weekday() < 5:
-                cal.append(d.strftime('%Y-%m-%d'))
-            d += timedelta(days=1)
-        return cal
 
 
 def parse_opt_code(code: str) -> tuple[float, str] | None:
@@ -134,8 +118,6 @@ def _fetch_one_option(sym: str, oname: str, trade_date: str, day: str) -> tuple[
         o['volume'] = pd.to_numeric(o['成交量(手)'], errors='coerce').fillna(0)
         o['iv'] = pd.to_numeric(o['隐含波动率'], errors='coerce')
         o['delta'] = pd.to_numeric(o['DELTA'], errors='coerce')
-        # 剔除无成交合约（close=0 且 volume=0），避免 stale OI 干扰
-        o = o[(o['close'] > 0) | (o['volume'] > 0)]
         o = _filter_nearby_month(o)
         return sym, o
     except Exception:
@@ -184,120 +166,158 @@ def calc_be(opt_df: pd.DataFrame, px: float, is_call: bool) -> float | None:
     return round((low + high) / 2, 2)
 
 
-def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
+def _process_date(d: str, ds: str, symbols: list[str], opt_names: dict[str, str]) -> tuple[str, dict]:
+    """处理单个日期：期货 + 期权 + 计算，返回 (status, {sym: entry})"""
+    # 期货
+    try:
+        fut = _call_with_timeout(lambda: ak.get_czce_daily(date=ds))
+        if fut is _TIME_OUT:
+            return ('timeout', {})
+        if fut is None or fut.empty:
+            return ('empty', {})
+        fut['date'] = d
+        for c in ['open', 'high', 'low', 'close']:
+            fut[c] = pd.to_numeric(fut[c], errors='coerce')
+        fut['volume'] = pd.to_numeric(fut['volume'], errors='coerce').fillna(0)
+    except Exception:
+        return ('empty', {})
+
+    # 期权
+    opts: dict[str, pd.DataFrame] = {}
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        fs = {ex.submit(_fetch_one_option, sym, oname, ds, d): sym for sym, oname in opt_names.items()}
+        try:
+            for f in as_completed(fs, timeout=_TIMEOUT):
+                sym, df = f.result()
+                opts[sym] = df
+        except TimeoutError:
+            return ('timeout', {})
+
+    # 计算
+    entries = {}
+    for sym in symbols:
+        opt = opts.get(sym)
+        if opt is None or opt.empty:
+            continue
+        day_fut = fut[fut['symbol'].astype(str).str.startswith(sym)]
+        if day_fut.empty:
+            continue
+        fr = day_fut.loc[day_fut['volume'].idxmax()]
+        px = float(fr['close'])
+        if px <= 0:
+            continue
+        rng = 0.20
+        do_mp = opt[opt['strike'].between(px * (1-rng), px * (1+rng))]
+        mp = calc_max_pain(do_mp if len(do_mp) > 0 else opt)
+        co = float(opt[opt['strike'] > px]['oi'].sum())
+        po = float(opt[opt['strike'] < px]['oi'].sum())
+        do_be = opt[opt['strike'].between(px * (1-rng), px * (1+rng))]
+        bec = calc_be(do_be, px, True) if len(do_be) > 0 else None
+        bep = calc_be(do_be, px, False) if len(do_be) > 0 else None
+        cv = float(opt[opt['type'] == 'C']['volume'].sum())
+        pv = float(opt[opt['type'] == 'P']['volume'].sum())
+        vr = round(cv / pv, 2) if pv > 0 else None
+        civ = opt[(opt['type'] == 'C') & (opt['delta'].between(0.20, 0.30))]['iv'].mean()
+        piv = opt[(opt['type'] == 'P') & (opt['delta'].between(-0.30, -0.20))]['iv'].mean()
+        ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
+        entries[sym] = {
+            'd': d, 'o': round(float(fr['open']), 2), 'c': round(px, 2),
+            'h': round(float(fr['high']), 2), 'l': round(float(fr['low']), 2),
+            'mp': mp, 'co': co, 'po': po,
+            'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs,
+        }
+
+    return ('ok' if entries else 'empty', entries)
+
+
+def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] | None = None,
         worker_url: str | None = None, api_key: str | None = None,
         gh_token: str = '') -> dict:
-    """逐日获取并处理数据"""
+    """逐日获取并处理数据（从最新一天往前，连续30天无数据自动停）"""
     symbols = symbols or SYMBOLS
-    cal = make_calendar()
-    if recent > 0:
-        cal = cal[-recent:]
-    elif max_dates > 0:
-        cal = cal[:max_dates]
-
-    # 倒序遍历：最新数据优先处理，用户能更快看到近期数据
-    cal = list(reversed(cal))
-
+    opt_names = {sym: name for sym, name in OPT_NAMES.items() if sym in symbols}
     result = {s: [] for s in symbols}
-    total = len(cal)
-    success = 0
     t0 = time.time()
-
-    print(f'📡 逐日处理 {total} 天（倒序，最新优先）...', flush=True)
-
     MAX_EMPTY = 30
     empty_days = {s: 0 for s in symbols}
-    opt_names = {sym: name for sym, name in OPT_NAMES.items() if sym in symbols}
+    success = 0
+    today = datetime.now()
 
-    for i, d in enumerate(cal):
-        ds = d.replace('-', '')
-        # ── 期货 ──
-        try:
-            fut = _call_with_timeout(lambda: ak.get_czce_daily(date=ds))
-            if fut is None:
-                continue
-            if fut.empty:
-                continue
-            fut['date'] = d
-            for c in ['open', 'high', 'low', 'close']:
-                fut[c] = pd.to_numeric(fut[c], errors='coerce')
-            fut['volume'] = pd.to_numeric(fut['volume'], errors='coerce').fillna(0)
-        except Exception:
-            continue
+    # year 模式：从该年最后一天往前，超出该年即停
+    if year:
+        year_end = datetime(year, 12, 31)
+        ref_date = min(today, year_end)
+        year_start = datetime(year, 1, 1)
+    else:
+        ref_date = today
 
-        # ── 期权（三个品种并行拉取，超时跳过） ──
-        opts = {}
-        opt_items = list(opt_names.items())
-        with ThreadPoolExecutor(max_workers=3) as ex:
-            fs = {ex.submit(_fetch_one_option, sym, oname, ds, d): sym for sym, oname in opt_items}
-            try:
-                for f in as_completed(fs, timeout=_TIMEOUT):
-                    sym, df = f.result()
-                    opts[sym] = df
-            except TimeoutError:
-                # 超时的品种留空
-                for f, sym in fs.items():
-                    if sym not in opts:
-                        opts[sym] = pd.DataFrame()
-                print(f'  ⚠ {d} 期权部分超时', flush=True)
+    limit = recent or max_dates or 0
+    day_offset = 0
+    processed = 0
+    timed_out: set[str] = set()
 
-        success += 1
+    BATCH_SIZE = 30 if limit == 0 else 1
+    while True:
+        # 收集一批日期
+        batch = []
+        while len(batch) < BATCH_SIZE:
+            d = (ref_date - timedelta(days=day_offset)).strftime('%Y-%m-%d')
+            ds = d.replace('-', '')
+            day_offset += 1
+            if limit > 0 and processed >= limit:
+                break
+            if year and d < str(year):
+                break
+            batch.append((d, ds))
 
-        # ── 逐品种处理 ──
-        for sym in symbols:
-            opt = opts.get(sym)
-            if opt is None or opt.empty:
-                continue
-
-            day_fut = fut[fut['symbol'].astype(str).str.startswith(sym)]
-            if day_fut.empty:
-                continue
-            fr = day_fut.loc[day_fut['volume'].idxmax()]
-            px = float(fr['close'])
-            if px <= 0:
-                continue
-
-            rng = 0.20
-            do_mp = opt[opt['strike'].between(px * (1-rng), px * (1+rng))]
-            mp = calc_max_pain(do_mp if len(do_mp) > 0 else opt)
-
-            co = float(opt[opt['strike'] > px]['oi'].sum())
-            po = float(opt[opt['strike'] < px]['oi'].sum())
-
-            do_be = opt[opt['strike'].between(px * (1-rng), px * (1+rng))]
-            bec = calc_be(do_be, px, True) if len(do_be) > 0 else None
-            bep = calc_be(do_be, px, False) if len(do_be) > 0 else None
-
-            cv = float(opt[opt['type'] == 'C']['volume'].sum())
-            pv = float(opt[opt['type'] == 'P']['volume'].sum())
-            vr = round(cv / pv, 2) if pv > 0 else None
-
-            civ = opt[(opt['type'] == 'C') & (opt['delta'].between(0.20, 0.30))]['iv'].mean()
-            piv = opt[(opt['type'] == 'P') & (opt['delta'].between(-0.30, -0.20))]['iv'].mean()
-            ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
-
-            result[sym].append({
-                'd': d, 'o': round(float(fr['open']), 2), 'c': round(px, 2),
-                'h': round(float(fr['high']), 2), 'l': round(float(fr['low']), 2),
-                'mp': mp, 'co': co, 'po': po,
-                'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs,
-            })
-
-        # ── 空日计数 + 提前终止 ──
-        got_data = {s for s in symbols if result[s] and result[s][-1]['d'] == d}
-        for sym in symbols:
-            empty_days[sym] = 0 if sym in got_data else empty_days[sym] + 1
-        if all(empty_days[s] >= MAX_EMPTY for s in symbols):
-            print(f'  所有品种连续 {MAX_EMPTY} 天无数据，提前终止', flush=True)
-            cal = cal[:i+1]
+        if not batch:
             break
 
-        if (i + 1) % 50 == 0:
+        # 批量并行处理
+        batch_results: dict[str, tuple[str, dict]] = {}
+        with ThreadPoolExecutor(max_workers=len(batch)) as ex:
+            fs_map = {}
+            for d, ds in batch:
+                f = ex.submit(_process_date, d, ds, symbols, opt_names)
+                fs_map[f] = d
+            for f in as_completed(fs_map):
+                d = fs_map[f]
+                batch_results[d] = f.result()
+
+        # 从新到旧处理空日计数
+        stop = False
+        for d in sorted(batch_results.keys(), reverse=True):
+            status, entries = batch_results[d]
+            if status == 'timeout':
+                timed_out.add(d)
+                continue
+            if status == 'empty':
+                if limit == 0:
+                    for sym in symbols:
+                        empty_days[sym] += 1
+                    if all(empty_days[s] >= MAX_EMPTY for s in symbols):
+                        print(f'  连续 {MAX_EMPTY} 天无数据，提前终止', flush=True)
+                        stop = True
+                        break
+                continue
+            # status == 'ok'
+            got_any = False
+            for sym, entry in entries.items():
+                result[sym].append(entry)
+                got_any = True
+            processed += 1
+            success += 1
+            if limit == 0:
+                for sym in symbols:
+                    empty_days[sym] = 0 if got_any else empty_days[sym] + 1
+
+        if stop:
+            break
+
+        if success % 50 == 0:
             elapsed = time.time() - t0
-            print(f'  进度: {i+1}/{total} ({success}成功, {elapsed:.0f}s)', flush=True)
-            # 每处理 _UPLOAD_INTERVAL 天中途上传一次
-            if worker_url and api_key and (i + 1) % _UPLOAD_INTERVAL == 0:
-                print(f'  中途上传数据...', flush=True)
+            print(f'  进度: {day_offset}天尝试, {success}成功, {elapsed:.0f}s', flush=True)
+            if worker_url and api_key:
                 for sym in symbols:
                     if result[sym]:
                         _upload_batch(sym, result[sym], worker_url, api_key, gh_token)
@@ -306,8 +326,53 @@ def run(max_dates: int = 0, recent: int = 0, symbols: list[str] | None = None,
     for s in (symbols or SYMBOLS):
         result[s].sort(key=lambda r: r['d'])
 
+    # ── 重试超时日期 ──
+    retry_round = 0
+    while timed_out and retry_round < _MAX_RETRY:
+        retry_round += 1
+        print(f'\n{"="*40}')
+        print(f'第 {retry_round} 轮重试 ({len(timed_out)} 天)')
+        print(f'{"="*40}')
+        still_timed_out: set[str] = set()
+        for d in sorted(timed_out):
+            ds = d.replace('-', '')
+            status, entries = _process_date(d, ds, symbols, opt_names)
+            if status == 'timeout':
+                still_timed_out.add(d)
+                print(f'  ⚠ {d} 重试超时', flush=True)
+                continue
+            if status == 'empty':
+                still_timed_out.add(d)
+                continue
+            got_any = False
+            for sym, entry in entries.items():
+                result[sym].append(entry)
+                got_any = True
+            if not got_any:
+                still_timed_out.add(d)
+            elif worker_url and api_key:
+                for sym in symbols:
+                    new_entries = [e for e in result[sym] if e['d'] == d]
+                    if new_entries:
+                        _upload_batch(sym, new_entries, worker_url, api_key, gh_token)
+
+        timed_out = still_timed_out
+
+    # 去重：保留每个日期最后一条（重试覆盖旧数据）
+    for s in (symbols or SYMBOLS):
+        seen = {}
+        for entry in result[s]:
+            seen[entry['d']] = entry
+        result[s] = list(seen.values())
+        result[s].sort(key=lambda r: r['d'])
+
     elapsed = time.time() - t0
     print(f'✅ 完成: {success} 天 ({elapsed:.0f}s)')
+    if timed_out:
+        failed = sorted(timed_out)
+        print(f'⚠ 以下 {len(failed)} 天重试 {_MAX_RETRY} 次后仍超时: {", ".join(failed[:20])}{"..." if len(failed) > 20 else ""}', flush=True)
+    else:
+        print(f'所有超时日期已重试完成', flush=True)
     for s in (symbols or SYMBOLS):
         print(f'  {s}: {len(result[s])} 条')
     return result
@@ -318,6 +383,7 @@ def main():
     parser.add_argument('--output', '-o', default='data.json')
     parser.add_argument('--max-dates', type=int, default=0, help='测试用限制处理日期数')
     parser.add_argument('--recent', type=int, default=0, help='仅处理最近 N 个交易日')
+    parser.add_argument('--year', type=int, default=0, help='指定年份，如 2026，只处理该年数据')
     parser.add_argument('--symbol', help='品种，用逗号分隔 (如 TA,MA)；不传则逐个处理')
     parser.add_argument('--worker-url', default=os.getenv('WORKER_URL', ''),
                         help='Worker API 地址，设置后每 100 天中途上传一次')
@@ -332,7 +398,7 @@ def main():
 
     if args.symbol:
         syms = [s.strip() for s in args.symbol.split(',')]
-        data = run(max_dates=args.max_dates, recent=args.recent, symbols=syms,
+        data = run(max_dates=args.max_dates, recent=args.recent, year=args.year, symbols=syms,
                    worker_url=args.worker_url if upload else None,
                    api_key=args.api_key if upload else None,
                    gh_token=args.gh_token)
@@ -346,7 +412,7 @@ def main():
             print(f'\n{"="*40}')
             print(f'处理品种: {sym}')
             print(f'{"="*40}')
-            data = run(max_dates=args.max_dates, recent=args.recent, symbols=[sym],
+            data = run(max_dates=args.max_dates, recent=args.recent, year=args.year, symbols=[sym],
                        worker_url=args.worker_url if upload else None,
                        api_key=args.api_key if upload else None,
                        gh_token=args.gh_token)

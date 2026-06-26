@@ -26,7 +26,12 @@ on:
         description: '品种 (full模式时生效，空=全部)'
         required: false
         default: ''
-        type: string         # 手动触发
+        type: string
+      year:
+        description: '年份 (full模式，如2026)'
+        required: false
+        default: '0'
+        type: string
 
 jobs:
   update:
@@ -47,7 +52,7 @@ jobs:
         if: github.event_name == 'schedule' || inputs.mode == 'incremental'
 
       - name: Fetch data (full history)
-        run: python scripts/fetch_data.py --output data.json${{ inputs.symbol && format(' --symbol {0}', inputs.symbol) || '' }}
+        run: python scripts/fetch_data.py --output data.json --year ${{ inputs.year }}${{ inputs.symbol && format(' --symbol {0}', inputs.symbol) || '' }}
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'full'
         env:
           WORKER_URL: ${{ secrets.WORKER_URL }}
