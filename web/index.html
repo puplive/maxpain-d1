@@ -67,15 +67,16 @@ tr:hover td { background: #1a2a3a; }
 @media (max-width: 600px) {
   body { padding: 10px; }
   h1 { font-size: 17px; gap: 6px; }
-  .controls { gap: 6px; }
-  .controls select { padding: 6px 10px; font-size: 12px; flex: 1; min-width: 0; }
+  .controls { gap: 6px; flex-wrap: wrap; }
+  .controls select { padding: 6px 8px; font-size: 12px; }
+  .controls .btn { padding: 6px 10px; font-size: 12px; }
   .btn { padding: 6px 14px; font-size: 12px; }
   .grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
   .stat-card { padding: 8px; }
   .stat-card .value { font-size: 15px; }
   .stat-card .label { font-size: 10px; }
   .chart-wrap { flex-direction: column; }
-  .chart-info { flex: none; width: 100%; font-size: 11px; max-height: 110px; overflow-y: auto; }
+  .chart-info { flex: none; width: 100%; font-size: 11px; }
   .chart-info .row { padding: 2px 0; }
   #chart { height: 260px; }
   #subChart { height: 80px; }
@@ -1010,8 +1011,8 @@ function drawChart(data, trades, params, stopCurve) {
   for (const t of trades) {
     const eIdx = data.findIndex(r => r.d === t.entry);
     const xIdx = data.findIndex(r => r.d === t.exit);
-    if (eIdx >= 0) tradeMarkers.push({ idx: eIdx, type: 'entry', dir: t.dir, qty: t.qty });
-    if (xIdx >= 0) tradeMarkers.push({ idx: xIdx, type: 'exit', dir: t.dir, qty: t.qty, pnl: t.pnl });
+    if (eIdx >= 0) tradeMarkers.push({ idx: eIdx, type: 'entry', dir: t.dir, qty: t.qty, price: t.entryPx });
+    if (xIdx >= 0) tradeMarkers.push({ idx: xIdx, type: 'exit', dir: t.dir, qty: t.qty, pnl: t.pnl, price: t.exitPx });
   }
   tradeMarkers.sort((a, b) => a.idx - b.idx || (a.type === 'entry' ? -1 : 1));
 
@@ -1198,18 +1199,44 @@ function drawChart(data, trades, params, stopCurve) {
       while (tmIdx < tradeMarkers.length && tradeMarkers[tmIdx].idx === i) {
         const m = tradeMarkers[tmIdx];
         const color = m.dir === 'long' ? '#5cd85a' : '#ff6b6b';
-        const yBase = m.type === 'entry' ? toY(row.h) - 4 : toY(row.l) + 4;
-        const yOff = m.type === 'entry' ? -10 : 10;
-        ctx.fillStyle = color;
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1.5;
+        const isEntry = m.type === 'entry';
+        const priceY = toY(m.price);
+
+        const hw = Math.max(10, Math.min(32, state.barW * 0.9));
+        const tipSz = Math.max(3, Math.min(7, state.barW * 0.4));
+
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.3;
+        ctx.setLineDash([3, 2]);
         ctx.beginPath();
-        ctx.moveTo(x, yBase + yOff);
-        ctx.lineTo(x - 6, yBase + (m.type === 'entry' ? -2 : 2));
-        ctx.lineTo(x + 6, yBase + (m.type === 'entry' ? -2 : 2));
+        ctx.moveTo(x - hw, priceY); ctx.lineTo(x + hw, priceY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 尖头指向价位，顶住横线
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        if (isEntry) {
+          // ▲ 向上，尖端顶在横线上
+          ctx.moveTo(x, priceY);
+          ctx.lineTo(x - tipSz, priceY + tipSz * 1.6);
+          ctx.lineTo(x + tipSz, priceY + tipSz * 1.6);
+        } else {
+          // ▼ 向下，尖端顶在横线上
+          ctx.moveTo(x, priceY);
+          ctx.lineTo(x - tipSz, priceY - tipSz * 1.6);
+          ctx.lineTo(x + tipSz, priceY - tipSz * 1.6);
+        }
         ctx.closePath();
         ctx.fill();
-        ctx.stroke();
+
+        ctx.fillStyle = color;
+        ctx.font = `bold ${Math.max(9, Math.min(12, state.barW * 0.7))}px sans-serif`;
+        ctx.textAlign = 'center';
+        const labelOff = tipSz * 1.6 + 11;
+        ctx.fillText(isEntry ? '开' : '平', x, priceY + (isEntry ? labelOff : -labelOff + 5));
+        ctx.restore();
         tmIdx++;
       }
     }
@@ -1424,7 +1451,7 @@ function drawChart(data, trades, params, stopCurve) {
     const idx = getBarIdx(e.clientX);
     if (state.dragging) {
       const dx = getDataX(e.clientX) - state.dragStartX;
-      state.start = Math.max(0, Math.min(n - getVisibleCount(), state.dragStartIdx - dx / state.barW));
+      state.start = Math.max(0, Math.min(n - getVisibleCount() + 10, state.dragStartIdx - dx / state.barW));
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
     } else {
       if (idx !== state.hoverIdx) {
@@ -1452,7 +1479,7 @@ function drawChart(data, trades, params, stopCurve) {
     const idxUnderMouse = state.start + mx / state.barW;
     const zoom = e.deltaY > 0 ? 0.85 : 1.18;
     const newBarW = Math.max(2, Math.min(40, state.barW * zoom));
-    state.start = idxUnderMouse - mx / newBarW;
+    state.start = Math.max(0, Math.min(n - Math.ceil(cw / newBarW) + 10, idxUnderMouse - mx / newBarW));
     state.barW = newBarW;
     render();
   };
@@ -1477,7 +1504,7 @@ function drawChart(data, trades, params, stopCurve) {
     if (e.touches.length === 1 && state.dragging) {
       const touch = e.touches[0];
       const dx = getDataX(touch.clientX) - state.dragStartX;
-      state.start = Math.max(0, Math.min(n - getVisibleCount(), state.dragStartIdx - dx / state.barW));
+      state.start = Math.max(0, Math.min(n - getVisibleCount() + 10, state.dragStartIdx - dx / state.barW));
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
       const idx = getBarIdx(touch.clientX);
       if (idx !== state.hoverIdx) {
@@ -1493,7 +1520,7 @@ function drawChart(data, trades, params, stopCurve) {
       const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - br.left;
       const idxUnderMouse = state.start + mx / state.barW;
       const newBarW = Math.max(2, Math.min(40, state.barW * scale));
-      state.start = Math.max(0, idxUnderMouse - mx / newBarW);
+      state.start = Math.max(0, Math.min(n - Math.ceil(cw / newBarW) + 10, idxUnderMouse - mx / newBarW));
       state.barW = newBarW;
       state.pinchDist = dist;
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }

@@ -107,7 +107,7 @@ tr:hover td { background: #1a2a3a; }
   #chart { height: 260px; }
   .chart-wrap { flex-direction: column; touch-action: none; }
   .chart-main { touch-action: none; }
-  .chart-info { flex: none; width: 100%; font-size: 11px; max-height: 110px; overflow-y: auto; }
+  .chart-info { flex: none; width: 100%; font-size: 11px; }
   #subChart { touch-action: none; }
   .pos-info .row { gap: 8px; }
   .actions { justify-content: center; }
@@ -651,7 +651,7 @@ function drawChart() {
 
   const n = segment.length;
   const revealed = visibleIdx;
-  const pad = { top: 24, bottom: 36, left: 60, right: 60 };
+  const pad = { top: 20, bottom: 30, left: 24, right: 24 };
   const cw = W - pad.left - pad.right;
   const ch = H - pad.top - pad.bottom;
 
