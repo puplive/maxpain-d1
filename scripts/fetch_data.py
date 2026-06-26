@@ -88,7 +88,7 @@ SYMBOL_CFG: dict[str, dict] = {
 DEFAULT_SYMBOLS = [
     'TA', 'MA', 'SA', 'SR', 'CF', 'RM', 'OI',    # CZCE
     'C', 'M', 'I', 'PG', 'L', 'V', 'PP', 'P', 'Y',  # DCE
-    'CU', 'AL', 'ZN', 'RB', 'AU', 'AG', 'RU',      # SHFE
+    'CU', 'AL', 'ZN', 'RB', 'HC', 'AU', 'AG', 'RU',      # SHFE
     'SC',                                            # INE
 ]
 
