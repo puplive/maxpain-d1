@@ -58,9 +58,9 @@ export default {
 
     // ── GET /api/data?symbol=TA ──
     if (request.method === 'GET' && path === '/api/data') {
-      const symbol = (url.searchParams.get('symbol') || 'TA').toUpperCase();
-      if (!['TA', 'MA', 'SA'].includes(symbol)) {
-        return new Response(JSON.stringify({ error: '无效品种' }), {
+      const symbol = (url.searchParams.get('symbol') || '').toUpperCase();
+      if (!symbol) {
+        return new Response(JSON.stringify({ error: '缺少 symbol 参数' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -117,6 +117,17 @@ export default {
 
       await env.DB.batch(batch);
       return new Response(JSON.stringify({ ok: true, count: data.length }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ── GET /api/symbols ──
+    if (request.method === 'GET' && path === '/api/symbols') {
+      const { results } = await env.DB.prepare(
+        'SELECT DISTINCT symbol FROM daily_data ORDER BY symbol'
+      ).all<{ symbol: string }>();
+      const symbols = (results || []).map(r => r.symbol);
+      return new Response(JSON.stringify({ symbols }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

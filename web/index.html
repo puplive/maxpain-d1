@@ -100,11 +100,7 @@ tr:hover td { background: #1a2a3a; }
   </div>
 
   <div class="controls">
-    <select id="symbol" onchange="switchSymbol()">
-      <option value="TA">PTA (TA)</option>
-      <option value="MA">甲醇 (MA)</option>
-      <option value="SA">纯碱 (SA)</option>
-    </select>
+    <select id="symbol" onchange="switchSymbol()"></select>
     <button class="btn" id="runBtn" onclick="runBacktest()">运行回测</button>
     <button class="btn" onclick="resetParams()" style="background:#2d3436;">重置参数</button>
     <button class="btn" onclick="runMonteCarlo()" style="background:#e8c84a;color:#0f1923;">蒙特卡洛</button>
@@ -181,8 +177,20 @@ async function loadData(symbol) {
 
 async function loadAllData() {
   const status = document.getElementById('dataStatus');
+  const sel = document.getElementById('symbol');
   status.textContent = '加载数据中...';
-  const symbols = ['TA', 'MA', 'SA'];
+
+  const symbols = Object.keys(SYM_CFG);
+
+  // 动态填充品种选择器
+  sel.innerHTML = '';
+  for (const sym of symbols) {
+    const opt = document.createElement('option');
+    opt.value = sym;
+    opt.textContent = SYM_CFG[sym].name + ' (' + sym + ')';
+    sel.appendChild(opt);
+  }
+
   let loaded = 0;
   for (const sym of symbols) {
     const data = await loadData(sym);
@@ -392,7 +400,7 @@ function runBacktest() {
   const status = document.getElementById('status');
   const btn = document.getElementById('runBtn');
 
-  const cfg = SYM_CFG[sym];
+  const cfg = SYM_CFG[sym] || { name: sym, mult: 10 };
   let fullData = ALL_DATA[sym];
   if (!fullData) { status.textContent = '数据未加载'; return; }
 
@@ -576,7 +584,7 @@ function toggleManual() {
 
 function runMonteCarlo() {
   const sym = document.getElementById('symbol').value;
-  const cfg = SYM_CFG[sym];
+  const cfg = SYM_CFG[sym] || { name: sym, mult: 10 };
   const fullData = ALL_DATA[sym];
   if (!fullData) { alert('数据未加载'); return; }
   const startDate = document.getElementById('p_start').value;
@@ -688,7 +696,7 @@ function optimizeParam() {
   const sym = document.getElementById('symbol').value;
   const result = document.getElementById('result');
   const status = document.getElementById('status');
-  const cfg = SYM_CFG[sym];
+  const cfg = SYM_CFG[sym] || { name: sym, mult: 10 };
   const fullData = ALL_DATA[sym];
   if (!fullData) { status.textContent = '数据未加载'; return; }
 

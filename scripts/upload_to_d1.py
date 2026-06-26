@@ -30,7 +30,7 @@ def upload(symbol: str, records: list[dict], worker_url: str, api_key: str, gh_t
 def main():
     parser = argparse.ArgumentParser(description='上传数据到 Cloudflare D1')
     parser.add_argument('--input', '-i', default='data.json', help='输入 JSON 文件')
-    parser.add_argument('--symbol', '-s', choices=['TA', 'MA', 'SA'],
+    parser.add_argument('--symbol', '-s',
                         help='品种，默认全部')
     parser.add_argument('--worker-url', default=os.getenv('WORKER_URL', ''),
                         help='Worker API 地址')

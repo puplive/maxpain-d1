@@ -22,8 +22,12 @@ except ImportError:
     print("请先安装: pip install akshare")
     sys.exit(1)
 
-SYMBOLS = ['TA', 'MA', 'SA']
-OPT_NAMES = {'TA': 'PTA期权', 'MA': '甲醇期权', 'SA': '纯碱期权'}
+# 品种配置: 代码 → AKShare 期权名称（新增品种时在此添加）
+SYMBOL_CFG: dict[str, str] = {
+    'TA': 'PTA期权',
+    'MA': '甲醇期权',
+    'SA': '纯碱期权',
+}
 
 _UPLOAD_INTERVAL = 100  # 每处理多少天中途上传一次
 _TIMEOUT = 30  # 单次 API 调用超时（秒），有重试兜底
@@ -74,29 +78,24 @@ def parse_opt_code(code: str) -> tuple[float, str] | None:
     return None
 
 
-def _contract_year_month(code: str) -> tuple[int, int] | None:
-    """从合约代码提取 (年, 月)  例: TA502C4250 → (2025, 2)"""
-    m = re.match(r'[A-Z]{2}(\d)(\d{2})', code.strip())
-    if m:
-        y = 2020 + int(m.group(1))
-        return y, int(m.group(2))
-    return None
+
+_TRADE_DAYS: set[str] | None = None
 
 
-def _filter_nearby_month(opt_df: pd.DataFrame) -> pd.DataFrame:
-    """取最临近合约月（可用数据中合约月最小的）"""
-    if opt_df.empty:
-        return opt_df
-    months = {}
-    for code in opt_df['合约代码']:
-        ym = _contract_year_month(str(code))
-        if ym:
-            months[code] = ym
-    if not months:
-        return opt_df
-    min_ym = min(months.values())
-    filter_codes = [c for c, ym in months.items() if ym == min_ym]
-    return opt_df[opt_df['合约代码'].isin(filter_codes)]
+def _load_trade_days() -> set[str] | None:
+    """加载 A 股交易日历，缓存到全局变量"""
+    global _TRADE_DAYS
+    if _TRADE_DAYS is not None:
+        return _TRADE_DAYS
+    try:
+        df = ak.tool_trade_date_hist_sina()
+        _TRADE_DAYS = set(pd.to_datetime(df['trade_date']).dt.strftime('%Y-%m-%d').tolist())
+        print(f'  交易日历: {len(_TRADE_DAYS)} 天', flush=True)
+        return _TRADE_DAYS
+    except Exception as e:
+        print(f'  ⚠ 加载交易日历失败: {e}，将逐个尝试', flush=True)
+        return None
+
 
 
 def _fetch_one_option(sym: str, oname: str, trade_date: str, day: str) -> tuple[str, pd.DataFrame]:
@@ -118,7 +117,6 @@ def _fetch_one_option(sym: str, oname: str, trade_date: str, day: str) -> tuple[
         o['volume'] = pd.to_numeric(o['成交量(手)'], errors='coerce').fillna(0)
         o['iv'] = pd.to_numeric(o['隐含波动率'], errors='coerce')
         o['delta'] = pd.to_numeric(o['DELTA'], errors='coerce')
-        o = _filter_nearby_month(o)
         return sym, o
     except Exception:
         return sym, pd.DataFrame()
@@ -209,8 +207,8 @@ def _process_date(d: str, ds: str, symbols: list[str], opt_names: dict[str, str]
         rng = 0.20
         do_mp = opt[opt['strike'].between(px * (1-rng), px * (1+rng))]
         mp = calc_max_pain(do_mp if len(do_mp) > 0 else opt)
-        co = float(opt[opt['strike'] > px]['oi'].sum())
-        po = float(opt[opt['strike'] < px]['oi'].sum())
+        co = float(opt[(opt['strike'] > px) & (opt['type'] == 'C')]['oi'].sum())
+        po = float(opt[(opt['strike'] < px) & (opt['type'] == 'P')]['oi'].sum())
         do_be = opt[opt['strike'].between(px * (1-rng), px * (1+rng))]
         bec = calc_be(do_be, px, True) if len(do_be) > 0 else None
         bep = calc_be(do_be, px, False) if len(do_be) > 0 else None
@@ -234,8 +232,8 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
         worker_url: str | None = None, api_key: str | None = None,
         gh_token: str = '') -> dict:
     """逐日获取并处理数据（从最新一天往前，连续30天无数据自动停）"""
-    symbols = symbols or SYMBOLS
-    opt_names = {sym: name for sym, name in OPT_NAMES.items() if sym in symbols}
+    symbols = symbols or list(SYMBOL_CFG.keys())
+    opt_names = {sym: SYMBOL_CFG[sym] for sym in symbols if sym in SYMBOL_CFG}
     result = {s: [] for s in symbols}
     t0 = time.time()
     MAX_EMPTY = 30
@@ -256,6 +254,8 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
     processed = 0
     timed_out: set[str] = set()
 
+    trade_days = _load_trade_days()
+
     BATCH_SIZE = 30 if limit == 0 else 1
     while True:
         # 收集一批日期
@@ -268,6 +268,9 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
                 break
             if year and d < str(year):
                 break
+            # 交易日历过滤：非交易日跳过，不计入空日
+            if trade_days is not None and d not in trade_days:
+                continue
             batch.append((d, ds))
 
         if not batch:
@@ -323,7 +326,7 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
                         _upload_batch(sym, result[sym], worker_url, api_key, gh_token)
 
     # 恢复为按日期正序
-    for s in (symbols or SYMBOLS):
+    for s in symbols:
         result[s].sort(key=lambda r: r['d'])
 
     # ── 重试超时日期 ──
@@ -342,7 +345,7 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
                 print(f'  ⚠ {d} 重试超时', flush=True)
                 continue
             if status == 'empty':
-                still_timed_out.add(d)
+                # 空数据说明 API 正常但无数据，不重试
                 continue
             got_any = False
             for sym, entry in entries.items():
@@ -359,7 +362,7 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
         timed_out = still_timed_out
 
     # 去重：保留每个日期最后一条（重试覆盖旧数据）
-    for s in (symbols or SYMBOLS):
+    for s in symbols:
         seen = {}
         for entry in result[s]:
             seen[entry['d']] = entry
@@ -373,9 +376,22 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
         print(f'⚠ 以下 {len(failed)} 天重试 {_MAX_RETRY} 次后仍超时: {", ".join(failed[:20])}{"..." if len(failed) > 20 else ""}', flush=True)
     else:
         print(f'所有超时日期已重试完成', flush=True)
-    for s in (symbols or SYMBOLS):
+    for s in symbols:
         print(f'  {s}: {len(result[s])} 条')
     return result
+
+
+def _normalize_symbols(raw: str) -> list[str]:
+    """解析用户输入的品种参数，返回大写代码列表（支持大小写、逗号分隔）"""
+    syms = []
+    for s in raw.split(','):
+        s = s.strip().upper()
+        if s in SYMBOL_CFG:
+            syms.append(s)
+        else:
+            print(f'⚠ 未知品种: {s}，可用: {", ".join(SYMBOL_CFG.keys())}')
+            sys.exit(1)
+    return syms
 
 
 def main():
@@ -384,7 +400,8 @@ def main():
     parser.add_argument('--max-dates', type=int, default=0, help='测试用限制处理日期数')
     parser.add_argument('--recent', type=int, default=0, help='仅处理最近 N 个交易日')
     parser.add_argument('--year', type=int, default=0, help='指定年份，如 2026，只处理该年数据')
-    parser.add_argument('--symbol', help='品种，用逗号分隔 (如 TA,MA)；不传则逐个处理')
+    parser.add_argument('--symbol', required=True,
+                        help='品种，用逗号分隔 (如 pta,ma,sa)')
     parser.add_argument('--worker-url', default=os.getenv('WORKER_URL', ''),
                         help='Worker API 地址，设置后每 100 天中途上传一次')
     parser.add_argument('--api-key', default=os.getenv('D1_API_KEY', ''),
@@ -394,31 +411,20 @@ def main():
     args = parser.parse_args()
 
     upload = args.worker_url and args.api_key
+    syms = _normalize_symbols(args.symbol)
     all_data = {}
 
-    if args.symbol:
-        syms = [s.strip() for s in args.symbol.split(',')]
-        data = run(max_dates=args.max_dates, recent=args.recent, year=args.year, symbols=syms,
+    for sym in syms:
+        print(f'\n{"="*40}')
+        print(f'处理品种: {sym}')
+        print(f'{"="*40}')
+        data = run(max_dates=args.max_dates, recent=args.recent, year=args.year, symbols=[sym],
                    worker_url=args.worker_url if upload else None,
                    api_key=args.api_key if upload else None,
                    gh_token=args.gh_token)
-        all_data.update(data)
-        if upload:
-            for sym in syms:
-                if data.get(sym):
-                    _upload_batch(sym, data[sym], args.worker_url, args.api_key, args.gh_token)
-    else:
-        for sym in SYMBOLS:
-            print(f'\n{"="*40}')
-            print(f'处理品种: {sym}')
-            print(f'{"="*40}')
-            data = run(max_dates=args.max_dates, recent=args.recent, year=args.year, symbols=[sym],
-                       worker_url=args.worker_url if upload else None,
-                       api_key=args.api_key if upload else None,
-                       gh_token=args.gh_token)
-            all_data[sym] = data.get(sym, [])
-            if upload and all_data[sym]:
-                _upload_batch(sym, all_data[sym], args.worker_url, args.api_key, args.gh_token)
+        all_data[sym] = data.get(sym, [])
+        if upload and all_data[sym]:
+            _upload_batch(sym, all_data[sym], args.worker_url, args.api_key, args.gh_token)
 
     out = Path(args.output)
     out.write_text(json.dumps(all_data, ensure_ascii=False))

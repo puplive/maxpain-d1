@@ -125,9 +125,6 @@ tr:hover td { background: #1a2a3a; }
 
   <div class="controls">
     <select id="symbol">
-      <option value="TA">PTA (TA)</option>
-      <option value="MA">甲醇 (MA)</option>
-      <option value="SA">纯碱 (SA)</option>
       <option value="random">🎲 随机品种</option>
     </select>
     <button class="btn btn-primary" id="startBtn" onclick="startTraining()">开始训练</button>
@@ -225,9 +222,23 @@ async function loadData(symbol) {
 
 async function loadAllData() {
   const status = document.getElementById('status');
+  const sel = document.getElementById('symbol');
   status.textContent = '加载数据中...';
-  const syms = ['TA', 'MA', 'SA'];
-  for (const sym of syms) {
+
+  const symbols = Object.keys(SYM_CFG);
+
+  // 动态填充品种选择器（保持 "随机品种" 在第一位）
+  const randomOpt = sel.querySelector('option[value="random"]');
+  sel.innerHTML = '';
+  sel.appendChild(randomOpt);
+  for (const sym of symbols) {
+    const opt = document.createElement('option');
+    opt.value = sym;
+    opt.textContent = (SYM_CFG[sym] ? SYM_CFG[sym].name : sym) + ' (' + sym + ')';
+    sel.appendChild(opt);
+  }
+
+  for (const sym of symbols) {
     const d = await loadData(sym);
     if (d) ALL_DATA[sym] = d;
   }
@@ -340,7 +351,7 @@ function openShort() {
 function closePosition() {
   if (!position) return;
   const row = segment[visibleIdx];
-  const mult = SYM_CFG[segmentSymbol].mult;
+  const mult = (SYM_CFG[segmentSymbol] || { mult: 10 }).mult;
   const diff = position.dir === 'long' ? row.c - position.entryPx : position.entryPx - row.c;
   const pnl = diff * position.qty * mult;
   const fee = FEE_PER_LOT * 2 * position.qty;
@@ -383,7 +394,7 @@ function toggleAuto() {
 function updateFloatingPnl() {
   if (!position) return;
   const row = segment[visibleIdx];
-  const mult = SYM_CFG[segmentSymbol].mult;
+  const mult = (SYM_CFG[segmentSymbol] || { mult: 10 }).mult;
   const diff = position.dir === 'long' ? row.c - position.entryPx : position.entryPx - row.c;
   position.floatingPnl = diff * position.qty * mult;
 }
@@ -458,7 +469,7 @@ function updateUI() {
   // Position info
   if (hasPos) {
     const px = segment[visibleIdx].c;
-    const mult = SYM_CFG[segmentSymbol].mult;
+    const mult = (SYM_CFG[segmentSymbol] || { mult: 10 }).mult;
     const diff = position.dir === 'long' ? px - position.entryPx : position.entryPx - px;
     const pnl = diff * position.qty * mult;
     const pnlPct = (diff / position.entryPx * 100);
