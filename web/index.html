@@ -74,7 +74,8 @@ tr:hover td { background: #1a2a3a; }
   .stat-card .value { font-size: 15px; }
   .stat-card .label { font-size: 10px; }
   .chart-wrap { flex-direction: column; }
-  .chart-info { flex: none; width: 100%; order: -1; }
+  .chart-info { flex: none; width: 100%; order: -1; font-size: 11px; max-height: 110px; overflow-y: auto; }
+  .chart-info .row { padding: 2px 0; }
   #chart { height: 260px; }
   #subChart { height: 80px; }
   .params { padding: 8px 10px; gap: 6px; }
@@ -446,7 +447,7 @@ function runBacktest() {
 
   const firstIdx = fullData.findIndex(r => r.d === data[0].d);
   const core = _runCore(data, fullData, firstIdx, params, MULT);
-  const { trades, eq, eqCurve, stopCurve, peakEq, maxDd } = core;
+  const { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP } = core;
 
   if (trades.length === 0) {
     result.innerHTML = '<div class="error">无交易产生</div>';
@@ -544,7 +545,7 @@ function runBacktest() {
   setTimeout(function() { try { drawChart(fullData, trades, params, stopCurve); } catch(e) { console.error(e); } }, 50);
 
   window._lastTrades = trades; window._lastParams = params; window._lastCAP = CAP;
-  var capInfo = CAP_LIMIT > 0 ? ' | 封顶' + fmt(CAP_LIMIT) : '';
+  var capInfo = params.capLimit > 0 ? ' | 封顶' + fmt(params.capLimit) : '';
   status.textContent = '完成 | 数据: ' + data[0].d + ' ~ ' + data[data.length-1].d + ' | ' + trades.length + '笔交易' + capInfo;
   btn.disabled = false;
 }

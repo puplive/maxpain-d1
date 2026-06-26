@@ -99,34 +99,19 @@ def _contract_year_month(code: str) -> tuple[int, int] | None:
     return None
 
 
-def _filter_nearby_month(opt_df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
-    """过滤到近月合约"""
+def _filter_nearby_month(opt_df: pd.DataFrame) -> pd.DataFrame:
+    """取最临近合约月（可用数据中合约月最小的）"""
     if opt_df.empty:
         return opt_df
-    td = datetime.strptime(trade_date, '%Y-%m-%d')
     months = {}
     for code in opt_df['合约代码']:
         ym = _contract_year_month(str(code))
         if ym:
-            y, m = ym
-            dt = datetime(y, m, 1)
-            months[code] = dt
+            months[code] = ym
     if not months:
         return opt_df
-    # 找离 trade_date 最近的未来月份
-    nearest_code = None
-    nearest_dt = None
-    for code, dt in months.items():
-        if dt < datetime(td.year, td.month, 1):
-            continue  # 已到期
-        if nearest_dt is None or dt < nearest_dt:
-            nearest_dt = dt
-            nearest_code = code
-    if nearest_code is None:
-        return opt_df
-    # 得到该月份的所有合约
-    ym = months[nearest_code]
-    filter_codes = [c for c, dt in months.items() if dt == ym]
+    min_ym = min(months.values())
+    filter_codes = [c for c, ym in months.items() if ym == min_ym]
     return opt_df[opt_df['合约代码'].isin(filter_codes)]
 
 
@@ -149,7 +134,9 @@ def _fetch_one_option(sym: str, oname: str, trade_date: str, day: str) -> tuple[
         o['volume'] = pd.to_numeric(o['成交量(手)'], errors='coerce').fillna(0)
         o['iv'] = pd.to_numeric(o['隐含波动率'], errors='coerce')
         o['delta'] = pd.to_numeric(o['DELTA'], errors='coerce')
-        o = _filter_nearby_month(o, day)
+        # 剔除无成交合约（close=0 且 volume=0），避免 stale OI 干扰
+        o = o[(o['close'] > 0) | (o['volume'] > 0)]
+        o = _filter_nearby_month(o)
         return sym, o
     except Exception:
         return sym, pd.DataFrame()
@@ -159,17 +146,17 @@ def calc_max_pain(opt_df: pd.DataFrame) -> int:
     if opt_df.empty:
         return 0
     strikes = sorted(opt_df['strike'].unique())
-    best_s, best_loss = 0, -1
+    best_s, best_val = 0, float('inf')
     for s in strikes:
-        loss = 0.0
-        calls = opt_df[(opt_df['strike'] > s) & (opt_df['type'] == 'C')]
-        puts = opt_df[(opt_df['strike'] < s) & (opt_df['type'] == 'P')]
+        val = 0.0
+        calls = opt_df[(opt_df['strike'] < s) & (opt_df['type'] == 'C')]
+        puts = opt_df[(opt_df['strike'] > s) & (opt_df['type'] == 'P')]
         if not calls.empty:
-            loss += ((calls['strike'] - s) * calls['oi']).sum()
+            val += ((s - calls['strike']) * calls['oi']).sum()
         if not puts.empty:
-            loss += ((s - puts['strike']) * puts['oi']).sum()
-        if loss > best_loss:
-            best_loss, best_s = loss, s
+            val += ((puts['strike'] - s) * puts['oi']).sum()
+        if val < best_val:
+            best_val, best_s = val, s
     return int(best_s)
 
 
