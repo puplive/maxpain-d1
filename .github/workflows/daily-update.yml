@@ -1,7 +1,17 @@
 name: Daily Data Update
 on:
   schedule:
-    - cron: '30 8 * * 1-5'  # 16:30 CST（收盘后）
+    - cron: '0 8 * * 1-5'   # 16:00 CST
+    - cron: '30 8 * * 1-5'  # 16:30
+    - cron: '0 9 * * 1-5'   # 17:00
+    - cron: '30 9 * * 1-5'  # 17:30
+    - cron: '0 10 * * 1-5'  # 18:00
+    - cron: '30 10 * * 1-5' # 18:30
+    - cron: '0 11 * * 1-5'  # 19:00
+    - cron: '30 11 * * 1-5' # 19:30
+    - cron: '0 12 * * 1-5'  # 20:00
+    - cron: '30 12 * * 1-5' # 20:30
+    - cron: '0 13 * * 1-5'  # 21:00
   workflow_dispatch:
     inputs:
       mode:
@@ -13,7 +23,7 @@ on:
           - full
           - incremental
       symbol:
-        description: '品种，用逗号分隔 (如 TA,MA,SA,SR,CF,RM,OI,C,M,I,PG,L,V,PP,P,Y,CU,AL,ZN,RB,AU,AG,RU,SC  )，空=全部'
+        description: '品种，用逗号分隔，空=全部'
         required: false
         default: ''
         type: string
@@ -38,7 +48,7 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Fetch data (incremental)
-        run: python scripts/fetch_data.py --output data.json --recent 5 --symbol "TA,MA,SA,SR,CF,RM,OI,C,M,I,PG,L,V,PP,P,Y,CU,AL,ZN,RB,AU,AG,RU,SC"
+        run: python scripts/fetch_data.py --output data.json --recent 5
         if: github.event_name == 'schedule' || inputs.mode == 'incremental'
         env:
           WORKER_URL: ${{ secrets.WORKER_URL }}

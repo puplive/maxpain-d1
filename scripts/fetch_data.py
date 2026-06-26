@@ -605,6 +605,14 @@ def main():
     else:
         syms = list(DEFAULT_SYMBOLS)
 
+    # 非交易日跳过（recent 模式，避免周末假日空跑）
+    if args.recent and not args.symbol:
+        trade_days = _load_trade_days()
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        if trade_days is not None and today_str not in trade_days:
+            print(f'{today_str} 非交易日，跳过')
+            return
+
     print(f'处理品种: {", ".join(syms)} ({len(syms)} 个)')
     all_data = run(max_dates=args.max_dates, recent=args.recent, year=args.year, symbols=syms,
                    worker_url=args.worker_url if upload else None,
