@@ -22,11 +22,126 @@ except ImportError:
     print("请先安装: pip install akshare")
     sys.exit(1)
 
-# 品种配置: 代码 → AKShare 期权名称（新增品种时在此添加）
-SYMBOL_CFG: dict[str, str] = {
-    'TA': 'PTA期权',
-    'MA': '甲醇期权',
-    'SA': '纯碱期权',
+# 品种配置: 代码 → {名称, 交易所, 合约乘数}
+# 交易所决定使用哪个 AKShare 函数拉取期货和期权数据
+# 所有品种配置: 代码 → {名称, 交易所, 合约乘数}
+# active=True 的品种是默认启用的产业成熟品种
+# active=False 的品种仍然支持通过 --symbol 手动指定
+SYMBOL_CFG: dict[str, dict] = {
+    # ===== CZCE (郑商所) =====
+    'TA': {'name': 'PTA期权',              'exchange': 'czce', 'mult': 5},
+    'MA': {'name': '甲醇期权',             'exchange': 'czce', 'mult': 10},
+    'SA': {'name': '纯碱期权',             'exchange': 'czce', 'mult': 20},
+    'SR': {'name': '白糖期权',             'exchange': 'czce', 'mult': 10},
+    'CF': {'name': '棉花期权',             'exchange': 'czce', 'mult': 5},
+    'RM': {'name': '菜粕期权',             'exchange': 'czce', 'mult': 10},
+    'OI': {'name': '菜油期权',             'exchange': 'czce', 'mult': 10},
+    'PK': {'name': '花生期权',             'exchange': 'czce', 'mult': 5},
+    'PF': {'name': '短纤期权',             'exchange': 'czce', 'mult': 5},
+    'SM': {'name': '锰硅期权',             'exchange': 'czce', 'mult': 5},
+    'SF': {'name': '硅铁期权',             'exchange': 'czce', 'mult': 5},
+    'UR': {'name': '尿素期权',             'exchange': 'czce', 'mult': 20},
+    'AP': {'name': '苹果期权',             'exchange': 'czce', 'mult': 10},
+    'CJ': {'name': '红枣期权',             'exchange': 'czce', 'mult': 5},
+    'FG': {'name': '玻璃期权',             'exchange': 'czce', 'mult': 20},
+    'PX': {'name': '对二甲苯期权',          'exchange': 'czce', 'mult': 5},
+    'SH': {'name': '烧碱期权',             'exchange': 'czce', 'mult': 10},
+    # ===== DCE (大商所) =====
+    'C':  {'name': '玉米期权',             'exchange': 'dce', 'mult': 10},
+    'M':  {'name': '豆粕期权',             'exchange': 'dce', 'mult': 10},
+    'I':  {'name': '铁矿石期权',           'exchange': 'dce', 'mult': 100},
+    'PG': {'name': '液化石油气期权',        'exchange': 'dce', 'mult': 20},
+    'L':  {'name': '聚乙烯期权',           'exchange': 'dce', 'mult': 5},
+    'V':  {'name': '聚氯乙烯期权',         'exchange': 'dce', 'mult': 5},
+    'PP': {'name': '聚丙烯期权',           'exchange': 'dce', 'mult': 5},
+    'P':  {'name': '棕榈油期权',           'exchange': 'dce', 'mult': 10},
+    'A':  {'name': '豆一期权',             'exchange': 'dce', 'mult': 10},
+    'B':  {'name': '豆二期权',             'exchange': 'dce', 'mult': 10},
+    'Y':  {'name': '豆油期权',             'exchange': 'dce', 'mult': 10},
+    'EG': {'name': '乙二醇期权',           'exchange': 'dce', 'mult': 10},
+    'EB': {'name': '苯乙烯期权',           'exchange': 'dce', 'mult': 5},
+    'JD': {'name': '鸡蛋期权',             'exchange': 'dce', 'mult': 5},
+    'CS': {'name': '玉米淀粉期权',         'exchange': 'dce', 'mult': 10},
+    'LH': {'name': '生猪期权',             'exchange': 'dce', 'mult': 16},
+    'LG': {'name': '原木期权',             'exchange': 'dce', 'mult': 90},
+    # ===== SHFE (上期所) =====
+    'CU': {'name': '铜期权',               'exchange': 'shfe', 'mult': 5},
+    'AL': {'name': '铝期权',               'exchange': 'shfe', 'mult': 5},
+    'ZN': {'name': '锌期权',               'exchange': 'shfe', 'mult': 5},
+    'PB': {'name': '铅期权',               'exchange': 'shfe', 'mult': 5},
+    'RB': {'name': '螺纹钢期权',           'exchange': 'shfe', 'mult': 10},
+    'NI': {'name': '镍期权',               'exchange': 'shfe', 'mult': 1},
+    'SN': {'name': '锡期权',               'exchange': 'shfe', 'mult': 1},
+    'AU': {'name': '黄金期权',             'exchange': 'shfe', 'mult': 1000},
+    'AG': {'name': '白银期权',             'exchange': 'shfe', 'mult': 15},
+    'RU': {'name': '橡胶期权',             'exchange': 'shfe', 'mult': 10},
+    'BR': {'name': '丁二烯橡胶期权',        'exchange': 'shfe', 'mult': 5},
+    'AO': {'name': '氧化铝期权',           'exchange': 'shfe', 'mult': 20},
+    # ===== INE (能源中心, 通过 SHFE 函数获取) =====
+    'SC': {'name': '原油期权',             'exchange': 'ine', 'mult': 1000},
+    'NR': {'name': '20号胶期权',           'exchange': 'ine', 'mult': 10},
+}
+
+# 默认活跃品种（产业成熟，期权流动性好）
+# 不传 --symbol 时默认处理这些
+DEFAULT_SYMBOLS = [
+    'TA', 'MA', 'SA', 'SR', 'CF', 'RM', 'OI',    # CZCE
+    'C', 'M', 'I', 'PG', 'L', 'V', 'PP', 'P', 'Y',  # DCE
+    'CU', 'AL', 'ZN', 'RB', 'AU', 'AG', 'RU',      # SHFE
+    'SC',                                            # INE
+]
+
+# AKShare 期权函数分发表
+EXCHANGE_OPTION_FUNC = {
+    'czce': ak.option_hist_czce,
+    'dce': ak.option_hist_dce,
+    'shfe': ak.option_hist_shfe,
+    'ine': ak.option_hist_shfe,
+}
+
+# AKShare 期货函数分发表
+EXCHANGE_FUTURES_FUNC = {
+    'czce': ak.get_czce_daily,
+    'dce': ak.get_dce_daily,
+    'shfe': ak.get_shfe_daily,
+    'ine': ak.get_shfe_daily,
+}
+
+# 各交易所期货数据列名映射 → 统一英文名
+_FUTURES_COLUMN_MAP = {
+    'czce': {},  # CZCE 返回英文列名
+    'dce': {
+        '合约代码': 'symbol',
+        '开盘价': 'open',
+        '最高价': 'high',
+        '最低价': 'low',
+        '收盘价': 'close',
+        '成交量': 'volume',
+    },
+    'shfe': {
+        '合约代码': 'symbol',
+        '开盘价': 'open',
+        '最高价': 'high',
+        '最低价': 'low',
+        '收盘价': 'close',
+        '成交量': 'volume',
+    },
+    'ine': {
+        '合约代码': 'symbol',
+        '开盘价': 'open',
+        '最高价': 'high',
+        '最低价': 'low',
+        '收盘价': 'close',
+        '成交量': 'volume',
+    },
+}
+
+# 各交易所期权数据列名映射 → 统一中文名
+_OPTION_COLUMN_MAP = {
+    'czce': {},  # CZCE 列名正确
+    'dce': {},   # DCE 可能不同, 运行时检测
+    'shfe': {},  # SHFE 可能不同, 运行时检测
+    'ine': {},
 }
 
 _UPLOAD_INTERVAL = 100  # 每处理多少天中途上传一次
@@ -98,15 +213,22 @@ def _load_trade_days() -> set[str] | None:
 
 
 
-def _fetch_one_option(sym: str, oname: str, trade_date: str, day: str) -> tuple[str, pd.DataFrame]:
-    """拉取并处理单个品种的期权数据（用于 ThreadPoolExecutor）"""
+def _fetch_one_option(sym: str, oname: str, exchange: str, trade_date: str, day: str) -> tuple[str, pd.DataFrame]:
+    """拉取并处理单个品种的期权数据（根据交易所分发到不同 AKShare 函数）"""
     try:
-        o = ak.option_hist_czce(symbol=oname, trade_date=trade_date)
+        func = EXCHANGE_OPTION_FUNC.get(exchange)
+        if not func:
+            return sym, pd.DataFrame()
+        o = func(symbol=oname, trade_date=trade_date)
         if o.empty:
             return sym, pd.DataFrame()
         o.columns = o.columns.str.strip()
         for c in o.select_dtypes(include='str'):
             o[c] = o[c].str.strip()
+        # 列名映射（如有需要）
+        col_map = _OPTION_COLUMN_MAP.get(exchange, {})
+        if col_map:
+            o = o.rename(columns=col_map)
         parsed = o['合约代码'].apply(parse_opt_code)
         o['strike'] = parsed.apply(lambda x: x[0] if x else None)
         o['type'] = parsed.apply(lambda x: x[1] if x else None)
@@ -170,26 +292,55 @@ def calc_be(opt_df: pd.DataFrame, px: float, is_call: bool) -> float | None:
     return round((low + high) / 2, 2)
 
 
-def _process_date(d: str, ds: str, symbols: list[str], opt_names: dict[str, str]) -> tuple[str, dict]:
-    """处理单个日期：期货 + 期权 + 计算，返回 (status, {sym: entry})"""
-    # 期货
-    try:
-        fut = _call_with_timeout(lambda: ak.get_czce_daily(date=ds))
-        if fut is _TIME_OUT:
-            return ('timeout', {})
-        if fut is None or fut.empty:
-            return ('empty', {})
-        fut['date'] = d
-        for c in ['open', 'high', 'low', 'close']:
-            fut[c] = pd.to_numeric(fut[c], errors='coerce')
-        fut['volume'] = pd.to_numeric(fut['volume'], errors='coerce').fillna(0)
-    except Exception:
+def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> tuple[str, dict]:
+    """处理单个日期：按交易所分组获取期货和期权数据，计算指标"""
+    # 按交易所分组品种
+    by_exchange: dict[str, list[str]] = {}
+    for sym in symbols:
+        if sym in cfg:
+            exc = cfg[sym]['exchange']
+            by_exchange.setdefault(exc, []).append(sym)
+    if not by_exchange:
         return ('empty', {})
 
-    # 期权
+    # 期货：每个交易所调用对应函数
+    per_exchange_futures: dict[str, pd.DataFrame] = {}
+    for exc, syms in by_exchange.items():
+        fut_func = EXCHANGE_FUTURES_FUNC.get(exc)
+        if not fut_func:
+            continue
+        try:
+            fut = _call_with_timeout(lambda: fut_func(date=ds))
+            if fut is _TIME_OUT:
+                return ('timeout', {})
+            if fut is None or fut.empty:
+                continue
+            fut['date'] = d
+            # 列名标准化
+            col_map = _FUTURES_COLUMN_MAP.get(exc, {})
+            if col_map:
+                fut = fut.rename(columns=col_map)
+            for c in ['open', 'high', 'low', 'close']:
+                fut[c] = pd.to_numeric(fut[c], errors='coerce')
+            fut['volume'] = pd.to_numeric(fut['volume'], errors='coerce').fillna(0)
+            per_exchange_futures[exc] = fut
+        except Exception:
+            continue
+
+    if not per_exchange_futures:
+        return ('empty', {})
+
+    # 期权：并行拉取所有品种（按交易所分发函数）
     opts: dict[str, pd.DataFrame] = {}
     with ThreadPoolExecutor(max_workers=3) as ex:
-        fs = {ex.submit(_fetch_one_option, sym, oname, ds, d): sym for sym, oname in opt_names.items()}
+        fs = {}
+        for sym in symbols:
+            if sym not in cfg:
+                continue
+            oname = cfg[sym]['name']
+            exchange = cfg[sym]['exchange']
+            f = ex.submit(_fetch_one_option, sym, oname, exchange, ds, d)
+            fs[f] = sym
         try:
             for f in as_completed(fs, timeout=_TIMEOUT):
                 sym, df = f.result()
@@ -200,10 +351,14 @@ def _process_date(d: str, ds: str, symbols: list[str], opt_names: dict[str, str]
     # 计算
     entries = {}
     for sym in symbols:
-        opt = opts.get(sym)
-        if opt is None or opt.empty:
+        if sym not in cfg:
             continue
-        day_fut = fut[fut['symbol'].astype(str).str.startswith(sym)]
+        exchange = cfg[sym]['exchange']
+        fut = per_exchange_futures.get(exchange)
+        opt = opts.get(sym)
+        if fut is None or opt is None or opt.empty:
+            continue
+        day_fut = fut[fut['symbol'].astype(str).str.upper().str.startswith(sym)]
         if day_fut.empty:
             continue
         fr = day_fut.loc[day_fut['volume'].idxmax()]
@@ -238,8 +393,8 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
         worker_url: str | None = None, api_key: str | None = None,
         gh_token: str = '') -> dict:
     """逐日获取并处理数据（从最新一天往前，连续30天无数据自动停）"""
-    symbols = symbols or list(SYMBOL_CFG.keys())
-    opt_names = {sym: SYMBOL_CFG[sym] for sym in symbols if sym in SYMBOL_CFG}
+    symbols = symbols or list(DEFAULT_SYMBOLS)
+    cfg_subset = {sym: SYMBOL_CFG[sym] for sym in symbols if sym in SYMBOL_CFG}
     result = {s: [] for s in symbols}
     t0 = time.time()
     MAX_EMPTY = 30
@@ -287,7 +442,7 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
         with ThreadPoolExecutor(max_workers=len(batch)) as ex:
             fs_map = {}
             for d, ds in batch:
-                f = ex.submit(_process_date, d, ds, symbols, opt_names)
+                f = ex.submit(_process_date, d, ds, symbols, cfg_subset)
                 fs_map[f] = d
             for f in as_completed(fs_map):
                 d = fs_map[f]
@@ -345,7 +500,7 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
         still_timed_out: set[str] = set()
         for d in sorted(timed_out):
             ds = d.replace('-', '')
-            status, entries = _process_date(d, ds, symbols, opt_names)
+            status, entries = _process_date(d, ds, symbols, cfg_subset)
             if status == 'timeout':
                 still_timed_out.add(d)
                 print(f'  ⚠ {d} 重试超时', flush=True)
@@ -388,7 +543,9 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
 
 
 def _normalize_symbols(raw: str) -> list[str]:
-    """解析用户输入的品种参数，返回大写代码列表（支持大小写、逗号分隔）"""
+    """解析用户输入的品种参数，空=默认活跃品种"""
+    if not raw:
+        return list(DEFAULT_SYMBOLS)
     syms = []
     for s in raw.split(','):
         s = s.strip().upper()
@@ -400,16 +557,31 @@ def _normalize_symbols(raw: str) -> list[str]:
     return syms
 
 
+def _load_db_symbols(worker_url: str, api_key: str, gh_token: str = '') -> list[str] | None:
+    """查询 Worker API 获取数据库中已有的品种列表，失败返回 None"""
+    headers = {'Authorization': f'Bearer {api_key}'}
+    if gh_token:
+        headers['X-GitHub-Token'] = gh_token
+    req = Request(f'{worker_url}/api/symbols', headers=headers, method='GET')
+    try:
+        with urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read())
+            return result.get('symbols', [])
+    except Exception as e:
+        print(f'  ⚠ 查询 DB 品种失败: {e}', flush=True)
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', '-o', default='data.json')
     parser.add_argument('--max-dates', type=int, default=0, help='测试用限制处理日期数')
     parser.add_argument('--recent', type=int, default=0, help='仅处理最近 N 个交易日')
     parser.add_argument('--year', type=int, default=0, help='指定年份，如 2026，只处理该年数据')
-    parser.add_argument('--symbol', required=True,
-                        help='品种，用逗号分隔 (如 pta,ma,sa)')
+    parser.add_argument('--symbol', default='',
+                        help='品种，用逗号分隔 (如 TA,MA,SA)，空=查 DB 或默认品种')
     parser.add_argument('--worker-url', default=os.getenv('WORKER_URL', ''),
-                        help='Worker API 地址，设置后每 100 天中途上传一次')
+                        help='Worker API 地址')
     parser.add_argument('--api-key', default=os.getenv('D1_API_KEY', ''),
                         help='API 密钥')
     parser.add_argument('--gh-token', default=os.getenv('GH_UPLOAD_TOKEN', ''),
@@ -417,20 +589,32 @@ def main():
     args = parser.parse_args()
 
     upload = args.worker_url and args.api_key
-    syms = _normalize_symbols(args.symbol)
-    all_data = {}
 
-    for sym in syms:
-        print(f'\n{"="*40}')
-        print(f'处理品种: {sym}')
-        print(f'{"="*40}')
-        data = run(max_dates=args.max_dates, recent=args.recent, year=args.year, symbols=[sym],
+    # 确定品种列表
+    if args.symbol:
+        syms = _normalize_symbols(args.symbol)
+    elif args.worker_url and args.api_key:
+        db_syms = _load_db_symbols(args.worker_url, args.api_key, args.gh_token)
+        if db_syms:
+            # 只取 DB 已有且在配置中的品种
+            syms = [s for s in db_syms if s in SYMBOL_CFG]
+            print(f'从 DB 获取 {len(syms)} 个品种: {", ".join(syms)}')
+        else:
+            syms = list(DEFAULT_SYMBOLS)
+            print(f'⚠ 查询 DB 失败，回退到默认 {len(syms)} 个品种')
+    else:
+        syms = list(DEFAULT_SYMBOLS)
+
+    print(f'处理品种: {", ".join(syms)} ({len(syms)} 个)')
+    all_data = run(max_dates=args.max_dates, recent=args.recent, year=args.year, symbols=syms,
                    worker_url=args.worker_url if upload else None,
                    api_key=args.api_key if upload else None,
                    gh_token=args.gh_token)
-        all_data[sym] = data.get(sym, [])
-        if upload and all_data[sym]:
-            _upload_batch(sym, all_data[sym], args.worker_url, args.api_key, args.gh_token)
+
+    if upload:
+        for sym, records in all_data.items():
+            if records:
+                _upload_batch(sym, records, args.worker_url, args.api_key, args.gh_token)
 
     out = Path(args.output)
     out.write_text(json.dumps(all_data, ensure_ascii=False))

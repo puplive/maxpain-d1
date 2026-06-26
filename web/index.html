@@ -148,9 +148,58 @@ tr:hover td { background: #1a2a3a; }
 <script>
 const API_BASE = 'https://api.starrysay.com';
 const SYM_CFG = {
-  TA: { name: 'PTA精对苯二甲酸', mult: 5 },
-  MA: { name: '甲醇',            mult: 10 },
-  SA: { name: '纯碱',            mult: 20 },
+  // CZCE
+  TA: { name: 'PTA',     mult: 5 },
+  MA: { name: '甲醇',    mult: 10 },
+  SA: { name: '纯碱',    mult: 20 },
+  SR: { name: '白糖',    mult: 10 },
+  CF: { name: '棉花',    mult: 5 },
+  RM: { name: '菜粕',    mult: 10 },
+  OI: { name: '菜油',    mult: 10 },
+  PK: { name: '花生',    mult: 5 },
+  PF: { name: '短纤',    mult: 5 },
+  SM: { name: '锰硅',    mult: 5 },
+  SF: { name: '硅铁',    mult: 5 },
+  UR: { name: '尿素',    mult: 20 },
+  AP: { name: '苹果',    mult: 10 },
+  CJ: { name: '红枣',    mult: 5 },
+  FG: { name: '玻璃',    mult: 20 },
+  PX: { name: '对二甲苯', mult: 5 },
+  SH: { name: '烧碱',    mult: 10 },
+  // DCE
+  C:  { name: '玉米',     mult: 10 },
+  M:  { name: '豆粕',     mult: 10 },
+  I:  { name: '铁矿石',   mult: 100 },
+  PG: { name: '液化石油气', mult: 20 },
+  L:  { name: '聚乙烯',   mult: 5 },
+  V:  { name: '聚氯乙烯', mult: 5 },
+  PP: { name: '聚丙烯',   mult: 5 },
+  P:  { name: '棕榈油',   mult: 10 },
+  A:  { name: '豆一',     mult: 10 },
+  B:  { name: '豆二',     mult: 10 },
+  Y:  { name: '豆油',     mult: 10 },
+  EG: { name: '乙二醇',   mult: 10 },
+  EB: { name: '苯乙烯',   mult: 5 },
+  JD: { name: '鸡蛋',     mult: 5 },
+  CS: { name: '玉米淀粉', mult: 10 },
+  LH: { name: '生猪',     mult: 16 },
+  LG: { name: '原木',     mult: 90 },
+  // SHFE
+  CU: { name: '铜',       mult: 5 },
+  AL: { name: '铝',       mult: 5 },
+  ZN: { name: '锌',       mult: 5 },
+  PB: { name: '铅',       mult: 5 },
+  RB: { name: '螺纹钢',   mult: 10 },
+  NI: { name: '镍',       mult: 1 },
+  SN: { name: '锡',       mult: 1 },
+  AU: { name: '黄金',     mult: 1000 },
+  AG: { name: '白银',     mult: 15 },
+  RU: { name: '橡胶',     mult: 10 },
+  BR: { name: '丁二烯橡胶', mult: 5 },
+  AO: { name: '氧化铝',   mult: 20 },
+  // INE
+  SC: { name: '原油',     mult: 1000 },
+  NR: { name: '20号胶',   mult: 10 },
 };
 let ALL_DATA = {};
 let defaultParams = {};
@@ -181,7 +230,15 @@ async function loadAllData() {
   const sel = document.getElementById('symbol');
   status.textContent = '加载数据中...';
 
-  const symbols = Object.keys(SYM_CFG);
+  // 查询 DB 已有品种，回退到全部
+  let symbols;
+  try {
+    const resp = await fetch(API_BASE + '/api/symbols');
+    const result = await resp.json();
+    symbols = (result.symbols || []).filter(s => SYM_CFG[s]);
+  } catch {
+    symbols = Object.keys(SYM_CFG);
+  }
 
   // 动态填充品种选择器
   sel.innerHTML = '';

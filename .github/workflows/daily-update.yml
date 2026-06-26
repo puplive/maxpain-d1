@@ -23,7 +23,7 @@ on:
           - full
           - incremental
       symbol:
-        description: '品种，用逗号分隔 (如 ta,ma,sa)，空=全部'
+        description: '品种，用逗号分隔 (如 TA,MA,SA,SR,CF,RM,OI,C,M,I,PG,L,V,PP,P,Y,CU,AL,ZN,RB,AU,AG,RU,SC  )，空=全部'
         required: false
         default: ''
         type: string
@@ -48,7 +48,7 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Fetch data (incremental)
-        run: python scripts/fetch_data.py --output data.json --recent 5 --symbol TA,MA,SA
+        run: python scripts/fetch_data.py --output data.json --recent 5
         if: github.event_name == 'schedule' || inputs.mode == 'incremental'
         env:
           WORKER_URL: ${{ secrets.WORKER_URL }}
@@ -56,7 +56,7 @@ jobs:
           GH_UPLOAD_TOKEN: ${{ secrets.GH_UPLOAD_TOKEN }}
 
       - name: Fetch data (full history)
-        run: python scripts/fetch_data.py --output data.json --year ${{ inputs.year }} --symbol "${{ inputs.symbol && inputs.symbol || 'TA,MA,SA' }}"
+        run: python scripts/fetch_data.py --output data.json --year ${{ inputs.year }} --symbol "${{ inputs.symbol }}"
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'full'
         env:
           WORKER_URL: ${{ secrets.WORKER_URL }}
@@ -64,7 +64,12 @@ jobs:
           GH_UPLOAD_TOKEN: ${{ secrets.GH_UPLOAD_TOKEN }}
 
       - name: Upload to D1
-        run: python scripts/upload_to_d1.py --input data.json
+        run: |
+          if [ -f data.json ]; then
+            python scripts/upload_to_d1.py --input data.json
+          else
+            echo "无数据文件，跳过上传"
+          fi
         env:
           WORKER_URL: ${{ secrets.WORKER_URL }}
           D1_API_KEY: ${{ secrets.D1_API_KEY }}
