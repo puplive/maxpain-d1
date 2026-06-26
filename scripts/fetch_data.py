@@ -77,6 +77,7 @@ SYMBOL_CFG: dict[str, dict] = {
     'RU': {'name': '橡胶期权',             'exchange': 'shfe', 'mult': 10},
     'BR': {'name': '丁二烯橡胶期权',        'exchange': 'shfe', 'mult': 5},
     'AO': {'name': '氧化铝期权',           'exchange': 'shfe', 'mult': 20},
+    'HC': {'name': '热卷期权',             'exchange': 'shfe', 'mult': 10},
     # ===== INE (能源中心, 通过 SHFE 函数获取) =====
     'SC': {'name': '原油期权',             'exchange': 'ine', 'mult': 1000},
     'NR': {'name': '20号胶期权',           'exchange': 'ine', 'mult': 10},
