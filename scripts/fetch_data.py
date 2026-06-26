@@ -600,8 +600,8 @@ def main():
             syms = [s for s in db_syms if s in SYMBOL_CFG]
             print(f'从 DB 获取 {len(syms)} 个品种: {", ".join(syms)}')
         else:
-            syms = list(DEFAULT_SYMBOLS)
-            print(f'⚠ 查询 DB 失败，回退到默认 {len(syms)} 个品种')
+            print('⚠ 查询 DB 品种失败，跳过更新')
+            return
     else:
         syms = list(DEFAULT_SYMBOLS)
 
