@@ -84,12 +84,15 @@ SYMBOL_CFG: dict[str, dict] = {
 }
 
 # 默认活跃品种（产业成熟，期权流动性好）
+# 注意：DCE (大商所) API 挂了，定时任务走 AKShare 时自动跳过
+_BROKEN_EXCHANGES = {'dce'}  # API 不可用的交易所
+_DEFAULT_EXCHANGES = {'czce', 'shfe', 'ine'}  # 定时任务可用的交易所
+
 # 不传 --symbol 时默认处理这些
 DEFAULT_SYMBOLS = [
-    'TA', 'MA', 'SA', 'SR', 'CF', 'RM', 'OI',    # CZCE
-    'C', 'M', 'I', 'PG', 'L', 'V', 'PP', 'P', 'Y',  # DCE
-    'CU', 'AL', 'ZN', 'RB', 'HC', 'AU', 'AG', 'RU',      # SHFE
-    'SC',                                            # INE
+    'TA', 'MA', 'SA', 'SR', 'CF', 'RM', 'OI',           # CZCE
+    'CU', 'AL', 'ZN', 'RB', 'HC', 'AU', 'AG', 'RU',     # SHFE
+    'SC',                                                  # INE
 ]
 
 # AKShare 期权函数分发表
@@ -597,9 +600,11 @@ def main():
     elif args.worker_url and args.api_key:
         db_syms = _load_db_symbols(args.worker_url, args.api_key, args.gh_token)
         if db_syms:
-            # 只取 DB 已有且在配置中的品种
-            syms = [s for s in db_syms if s in SYMBOL_CFG]
-            print(f'从 DB 获取 {len(syms)} 个品种: {", ".join(syms)}')
+            # 只取 DB 已有且在配置中的品种，跳过 API 不可用的交易所
+            syms = [s for s in db_syms
+                    if s in SYMBOL_CFG
+                    and SYMBOL_CFG[s]['exchange'] not in _BROKEN_EXCHANGES]
+            print(f'从 DB 获取 {len(syms)} 个品种（跳过 DCE）: {", ".join(syms)}')
         else:
             print('⚠ 查询 DB 品种失败，跳过更新')
             return

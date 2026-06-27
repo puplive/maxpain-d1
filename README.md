@@ -1,91 +1,121 @@
 # MaxPain D1 — 数据流水线
 
-GitHub Actions 定时从 AKShare 获取郑商所期货/期权数据，计算 Max Pain，写入 Cloudflare D1。
+GitHub Actions 定时从 AKShare 获取期货/期权数据，计算 Max Pain，写入 Cloudflare D1。
 
 ## 架构
 
 ```
-AKShare → Python 预处理 → Cloudflare Worker API → D1 数据库 → 前端查询
+AKShare / DCE官网 xlsx → Python 预处理 → Cloudflare Worker API → D1 数据库 → 前端查询
 ```
+
+## 交易所 & 数据来源
+
+| 交易所 | 品种 | 来源 | 更新方式 |
+|--------|------|------|----------|
+| CZCE 郑商所 | TA/MA/SA/SR/CF/RM/OI | AKShare ✅ | 定时任务自动 |
+| SHFE 上期所 | CU/AL/ZN/RB/HC/AU/AG/RU | AKShare ✅ | 定时任务自动 |
+| INE 能源中心 | SC | AKShare ✅ | 定时任务自动 |
+| DCE 大商所 | M/C/L/V/PP/I/PG/Y... | DCE官网 xlsx | 手动下载 → 脚本上传 |
+
+> DCE（大商所）官网加了 WAF，AKShare 接口挂了。走本地 xlsx 转 JSON 上传。
 
 ## 文件结构
 
 ```
-├── .github/workflows/daily-update.yml   # 定时任务 (工作日 16:00)
+├── .github/workflows/
+│   ├── daily-update.yml    # 定时任务 (CZCE/SHFE/INE, 工作日每30分钟)
+│   └── upload-dce.yml      # DCE 手动上传
 ├── scripts/
-│   ├── fetch_data.py      # AKShare → Max Pain 计算 → JSON
-│   ├── upload_to_d1.py    # JSON → Worker API → D1
+│   ├── fetch_data.py       # AKShare → Max Pain → JSON
+│   ├── upload_to_d1.py     # JSON → Worker API → D1
+│   ├── convert_dce_xlsx.py # DCE xlsx → data/dce/*.json
+│   ├── upload_dce_local.py # data/dce/*.json → D1
 │   └── requirements.txt
+├── data/
+│   └── dce/                # DCE 预处理后的 JSON (按年)
+│       ├── 2025.json
+│       └── 2026.json
+├── file/dce/               # DCE 官网下载的原始 xlsx (不入 git)
+│   ├── allVarietyFtr2026/  # 2026 期货
+│   └── allVarietyOpt2026/  # 2026 期权
 ├── worker/
-│   ├── wrangler.toml      # Cloudflare Worker 配置
-│   ├── package.json
-│   ├── schema.sql         # D1 建表
-│   └── src/
-│       └── index.ts       # API 路由
+│   ├── wrangler.toml
+│   ├── schema.sql
+│   └── src/index.ts
+└── web/
+    ├── index.html          # 回测页面
+    └── train.html          # 模拟训练
 ```
 
-## 部署
+## 日常操作
 
-### 1. 初始化 Cloudflare D1 + Worker
+### 定时任务（自动）
+
+GitHub Actions 工作日在 16:00-21:00 每 30 分钟触发一次：
+
+1. 查 GitHub API — 今日已有成功运行 → 跳过
+2. 查 DB 品种列表，跳过 DCE
+3. AKShare 拉数据 → `fetch_data.py --recent 5` → `upload_to_d1.py` → D1
+
+### DCE 数据更新（手动）
+
+每 1-2 周操作一次：
+
+```bash
+# 1. 去 DCE 官网下载
+#    http://www.dce.com.cn → 历史数据
+#    下载 allVarietyFtr2026.zip (期货)
+#    下载 allVarietyOpt2026.zip (期权)
+
+# 2. 解压到 file/dce/
+unzip -o allVarietyFtr2026.zip -d file/dce/allVarietyFtr2026
+unzip -o allVarietyOpt2026.zip -d file/dce/allVarietyOpt2026
+
+# 3. 转为 JSON (只转 2026)
+python scripts/convert_dce_xlsx.py --year 2026
+
+# 4. 上传到 D1
+D1_API_KEY="your-key" python scripts/upload_dce_local.py --year 2026
+
+# 5. 提交 JSON
+git add data/dce/2026.json && git commit -m "DCE 2026 数据更新" && git push
+```
+
+## 首次部署
+
+### 1. Cloudflare D1 + Worker
 
 ```bash
 cd worker
-
-# 安装依赖
 npm install
-
-# 创建 D1 数据库
 npx wrangler d1 create maxpain-db
-
 # ↑ 输出 database_id，填入 wrangler.toml
-
-# 创建表
 npx wrangler d1 execute maxpain-db --file schema.sql
-
-# 生成 API 密钥
-# 并设置到 wrangler.toml 的 vars.API_KEY
-
-# 部署 Worker
+# 设置 wrangler.toml 中的 API_KEY
 npx wrangler deploy
-
-# 记录部署后输出的 Worker URL
 ```
 
-### 2. 设置 GitHub Secrets
+### 2. GitHub Secrets
 
 | Secret | 值 |
 |--------|---|
 | `WORKER_URL` | `https://maxpain-api.xxx.workers.dev` |
-| `D1_API_KEY` | 与 wrangler.toml 中 API_KEY 一致 |
+| `D1_API_KEY` | 与 wrangler.toml 中 `API_KEY` 一致 |
+| `GH_UPLOAD_TOKEN` | GitHub PAT（可选） |
 
 ### 3. 本地测试
 
 ```bash
-# 首次全量拉取（可能较慢，AKShare 有频率限制）
-python scripts/fetch_data.py
-
-# 或限定期望范围
+# AKShare 拉取
 python scripts/fetch_data.py --symbol TA
 
-# 上传到 D1
+# 上传
 python scripts/upload_to_d1.py --input data.json \
-  --worker-url http://localhost:8787 \
-  --api-key test-key
+  --worker-url http://localhost:8787 --api-key test-key
 
-# 验证
-curl http://localhost:8787/api/data?symbol=TA | head
+# DCE 上传
+D1_API_KEY="your-key" python scripts/upload_dce_local.py --year 2026
 ```
-
-## 首次数据加载（推荐方案）
-
-AKShare 逐日请求较慢。首次可用现有 JSON 数据初始化 D1：
-
-```bash
-# 从现有项目中复制数据
-cp ../MaxPain/web/data/*.json ./
-```
-
-或用 `upload_to_d1.py` 分批上传。
 
 ## API 接口
 
@@ -96,17 +126,7 @@ cp ../MaxPain/web/data/*.json ./
 | GET | `/api/symbols` | 获取数据库已有品种列表 |
 | GET | `/api/stats` | 查看各品种数据统计 |
 
-## 前端集成
+## 已知问题
 
-在 `web/index.html` 中将：
-```html
-<script src="data.js"></script>
-```
-改为：
-```html
-<script>
-const resp = await fetch('https://maxpain-api.xxx.workers.dev/api/data?symbol=TA');
-const { data } = await resp.json();
-const ALL_DATA = { TA: data, MA: [], SA: [] };
-</script>
-```
+- **DCE API 挂了**：大商所官网加了 WAF 反爬，`get_dce_daily` / `option_hist_dce` 返回 412。等 AKShare 适配或换数据源。
+- 恢复后：删除 `scripts/fetch_data.py` 中 `_BROKEN_EXCHANGES` 的 `'dce'` 即可。
