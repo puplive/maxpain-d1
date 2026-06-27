@@ -12,11 +12,13 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
 
-def upload(symbol: str, records: list[dict], worker_url: str, api_key: str):
+def upload(symbol: str, records: list[dict], worker_url: str, api_key: str, gh_token: str = ''):
     """上传单个品种数据到 D1"""
     headers = {
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {api_key}',
+        'X-GitHub-Token': gh_token,
+        'User-Agent': 'MaxPain/1.0',
     }
     payload = json.dumps({'symbol': symbol, 'data': records}).encode('utf-8')
     req = Request(f'{worker_url}/api/update', data=payload, headers=headers, method='POST')
@@ -41,6 +43,8 @@ def main():
                         help='Worker API 地址')
     parser.add_argument('--api-key', default=os.getenv('D1_API_KEY', ''),
                         help='API 密钥')
+    parser.add_argument('--gh-token', default=os.getenv('GH_UPLOAD_TOKEN', ''),
+                        help='GitHub Token (X-GitHub-Token)')
     args = parser.parse_args()
 
     if not args.worker_url:
@@ -90,7 +94,7 @@ def main():
         batch_size = 500
         for i in range(0, len(records), batch_size):
             batch = records[i:i + batch_size]
-            upload(sym, batch, args.worker_url, args.api_key)
+            upload(sym, batch, args.worker_url, args.api_key, args.gh_token)
 
 
 if __name__ == '__main__':

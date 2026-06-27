@@ -49,7 +49,7 @@ export default {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-GitHub-Token',
     };
 
     if (request.method === 'OPTIONS') {
@@ -77,7 +77,8 @@ export default {
     // ── POST /api/update ──
     if (request.method === 'POST' && path === '/api/update') {
       const auth = request.headers.get('Authorization') || '';
-      if (auth !== `Bearer ${env.API_KEY}`) {
+      const ghToken = request.headers.get('X-GitHub-Token') || '';
+      if (auth !== `Bearer ${env.API_KEY}` && ghToken !== env.API_KEY) {
         return new Response(JSON.stringify({ error: '未授权' }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

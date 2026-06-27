@@ -165,8 +165,13 @@ def process_symbol(sym, prefix, year):
     return result
 
 
-def upload_batch(symbol, records, worker_url, api_key):
-    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {api_key}'}
+def upload_batch(symbol, records, worker_url, api_key, gh_token=''):
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {api_key}',
+        'X-GitHub-Token': gh_token,
+        'User-Agent': 'MaxPain/1.0',
+    }
     payload = json.dumps({'symbol': symbol, 'data': records}).encode('utf-8')
     req = Request(f'{worker_url}/api/update', data=payload, headers=headers, method='POST')
     try:
@@ -187,6 +192,7 @@ def main():
     parser.add_argument('--upload', action='store_true', help='转换后直接上传到 D1')
     parser.add_argument('--worker-url', default=os.getenv('WORKER_URL', 'https://api.starrysay.com'))
     parser.add_argument('--api-key', default=os.getenv('D1_API_KEY', ''))
+    parser.add_argument('--gh-token', default=os.getenv('GH_UPLOAD_TOKEN', ''), help='GitHub Token')
     args = parser.parse_args()
 
     if args.upload and not args.api_key:
@@ -221,7 +227,7 @@ def main():
                 for sym, records in output.items():
                     print(f'  ↗ {sym} ({len(records)} 条)...')
                     for i in range(0, len(records), 500):
-                        n = upload_batch(sym, records[i:i+500], args.worker_url, args.api_key)
+                        n = upload_batch(sym, records[i:i+500], args.worker_url, args.api_key, args.gh_token)
                         uploaded += n
                 print(f'  📤 已上传 {uploaded} 条到 D1')
 
