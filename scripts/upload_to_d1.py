@@ -76,7 +76,10 @@ def main():
         print('❌ 需要 --input 或 --data-dir')
         sys.exit(1)
 
-    symbols = [args.symbol] if args.symbol else list(all_data.keys())
+    if args.symbol:
+        symbols = [s.strip().upper() for s in args.symbol.split(',')]
+    else:
+        symbols = list(all_data.keys())
 
     for sym in symbols:
         records = all_data.get(sym, [])
