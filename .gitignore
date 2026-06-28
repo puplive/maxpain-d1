@@ -5,3 +5,8 @@ data.json
 .DS_Store
 file
 .wrangler/
+
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
