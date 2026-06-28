@@ -10,6 +10,8 @@
 │   ├── fetch_data.py                   # AKShare 拉期货/期权 → 计算 MP/BE/VR/IVS → JSON
 │   ├── upload_to_d1.py                 # JSON → POST /api/update → D1
 │   ├── convert_dce_xlsx.py             # DCE 官网 XLSX → data/dce/*.json
+│   ├── convert_czce.py                 # CZCE 官网 TXT → data/czce/*.json
+│   ├── convert_shfe.py                 # SHFE 官网 XLSX → data/shfe/*.json
 │   └── requirements.txt                # akshare, pandas, numpy
 ├── data/
 │   └── dce/                            # DCE 预处理后的 JSON
@@ -61,15 +63,14 @@ SHFE: 官网 XLSX → convert_shfe.py → data/shfe/*.json → upload_to_d1.py �
 
 ## 部署
 
-Worker 通过本地 wrangler 部署（不是 GitHub Actions）：
+Cloudflare Dashboard 已关联 GitHub 仓库，Worker 自动部署。配置在 Dashboard 中设置：
+- **Root directory**: `worker`
+- **Build command**: `npm install`（或空，视情况）
+- **Deploy command**: `npx wrangler deploy`
 
-```bash
-cd worker
-npx wrangler login      # 首次需要，认证存在 .wrangler/ 中
-npx wrangler deploy
-```
+推送到 main 分支后 Cloudflare 自动部署，无需本地手动执行 `wrangler deploy`，也**不要**使用 GitHub Actions 部署（Workers CI/CD 互斥）。
 
-⚠️ `.wrangler/` 存 wrangler 登录态，已在 .gitignore 中，不能删。
+`wrangler.toml` 在 `worker/` 目录下，包含 D1 绑定和 API_KEY 环境变量。
 
 ## 日常操作
 
@@ -105,12 +106,18 @@ python convert_dce_xlsx.py --year 2026
 
 两个 HTML 页面（`web/index.html`、`web/train.html`），内联 JS，无构建工具。
 
-API_BASE: `https://api.starrysay.com`
+API_BASE: `https://api.starrysay.com`（由 Cloudflare Worker 路由绑定）
 
-`loadAllData()` 逻辑：
-1. `GET /api/symbols` 获取 DB 已有品种
-2. 失败则回退到 `SYM_CFG` 全部 48 个品种（会导致下拉框很多但加载不出来）
-3. 逐个 `GET /api/data?symbol=X` 加载数据到 `ALL_DATA`
+### 数据加载逻辑（按需加载，不预加载全部）
+
+`loadAllData()`:
+1. `GET /api/symbols` 获取 DB 已有品种列表
+2. 失败则回退到 `SYM_CFG` 全部品种
+3. 只填充下拉框，**不加载数据**
+
+品种数据按需加载：
+- `index.html`: 打开页面时加载第一个品种，`switchSymbol()` 切换时懒加载
+- `train.html`: `pickSegment()` 点击开始训练时才加载选中的品种
 
 SYM_CFG 定义了两个页面各自独立的品种配置（约 48 个），覆盖 CZCE/DCE/SHFE/INE。
 
