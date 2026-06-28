@@ -1278,15 +1278,16 @@ function drawChart(data, trades, params, stopCurve) {
       ctx.fillStyle = bearish ? '#e74c3c' : '#2ecc71';
       ctx.strokeStyle = 'rgba(0,0,0,0.3)';
       ctx.lineWidth = 1;
+      const gap = sz * 2.5;
       ctx.beginPath();
-      if (bearish) { // ▼ 下跌，标在看涨BE上方
-        ctx.moveTo(x, beY - sz * 1.5);
-        ctx.lineTo(x - sz * 0.8, beY - sz * 0.5);
-        ctx.lineTo(x + sz * 0.8, beY - sz * 0.5);
-      } else { // ▲ 上涨，标在看跌BE下方
-        ctx.moveTo(x, beY + sz * 1.5);
-        ctx.lineTo(x - sz * 0.8, beY + sz * 0.5);
-        ctx.lineTo(x + sz * 0.8, beY + sz * 0.5);
+      if (bearish) { // ▼ 下跌，尖向下跌方向，标在看涨BE上方
+        ctx.moveTo(x, beY - gap * 0.3);          // 尖头（靠近BE线）
+        ctx.lineTo(x - sz * 0.8, beY - gap);      // 底部左
+        ctx.lineTo(x + sz * 0.8, beY - gap);      // 底部右
+      } else { // ▲ 上涨，尖向上涨方向，标在看跌BE下方
+        ctx.moveTo(x, beY + gap * 0.3);           // 尖头（靠近BE线）
+        ctx.lineTo(x - sz * 0.8, beY + gap);      // 底部左
+        ctx.lineTo(x + sz * 0.8, beY + gap);      // 底部右
       }
       ctx.closePath();
       ctx.fill();
@@ -1295,7 +1296,7 @@ function drawChart(data, trades, params, stopCurve) {
       ctx.fillStyle = bearish ? '#e74c3c' : '#2ecc71';
       ctx.font = `bold ${Math.max(8, Math.min(10, state.barW * 0.5))}px sans-serif`;
       ctx.textAlign = 'center';
-      const lY = bearish ? beY - sz * 1.5 - 5 : beY + sz * 1.5 + 11;
+      const lY = bearish ? beY - gap - 5 : beY + gap + 11;
       ctx.fillText(bearish ? '下跌' : '上涨', x, lY);
       ctx.restore();
     }
