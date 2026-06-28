@@ -1,17 +1,5 @@
 name: Daily Data Update
 on:
-  schedule:
-    - cron: '0 8 * * 1-5'   # 16:00 CST
-    - cron: '30 8 * * 1-5'  # 16:30
-    - cron: '0 9 * * 1-5'   # 17:00
-    - cron: '30 9 * * 1-5'  # 17:30
-    - cron: '0 10 * * 1-5'  # 18:00
-    - cron: '30 10 * * 1-5' # 18:30
-    - cron: '0 11 * * 1-5'  # 19:00
-    - cron: '30 11 * * 1-5' # 19:30
-    - cron: '0 12 * * 1-5'  # 20:00
-    - cron: '30 12 * * 1-5' # 20:30
-    - cron: '0 13 * * 1-5'  # 21:00
   workflow_dispatch:
     inputs:
       mode:
@@ -21,7 +9,6 @@ on:
         type: choice
         options:
           - full
-          - incremental
       data_source:
         description: '数据来源'
         required: true
@@ -36,7 +23,7 @@ on:
         default: ''
         type: string
       year:
-        description: '年份 (full+akshare 模式，如2026)'
+        description: '日期范围: 2026(全年) / 202606(6月) / 20260626(单日)'
         required: false
         default: '0'
         type: string
@@ -45,58 +32,27 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      # 定时任务：查 GitHub API，今日已有成功运行则跳过
-      - name: Check if already done today
-        id: check
-        if: github.event_name == 'schedule'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TODAY=$(date -u +%Y-%m-%d)
-          WF_RUNS=$(curl -s --max-time 10 -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs?event=schedule&status=success&per_page=10" 2>/dev/null || echo '{}')
-          RUN_COUNT=$(echo "$WF_RUNS" | jq --arg today "$TODAY" \
-            '[.workflow_runs // [] | .[] | select(.run_started_at | startswith($today)) | .id] | length')
-          if [ "$RUN_COUNT" -ge 1 ]; then
-            echo "already_done=true" >> $GITHUB_OUTPUT
-            echo "✅ 今日已有成功的运行记录 (${RUN_COUNT}次)，跳过"
-          else
-            echo "already_done=false" >> $GITHUB_OUTPUT
-            echo "📥 今日尚未更新，继续执行"
-          fi
+      - uses: actions/checkout@v4
 
-      - uses: actions/checkout@v6
-        if: steps.check.outputs.already_done != 'true'
-
-      # ── AKShare 路径：需要 pip install ──
-      - uses: actions/setup-python@v6
-        if: (steps.check.outputs.already_done != 'true') && (github.event_name == 'schedule' || inputs.data_source == 'akshare')
+      - uses: actions/setup-python@v5
+        if: inputs.data_source == 'akshare'
         with:
           python-version: '3.12'
           cache: 'pip'
 
       - name: Install dependencies (AKShare)
-        if: (steps.check.outputs.already_done != 'true') && (github.event_name == 'schedule' || inputs.data_source == 'akshare')
+        if: inputs.data_source == 'akshare'
         run: pip install -r scripts/requirements.txt
 
-      - name: Fetch data from AKShare (incremental)
-        if: (steps.check.outputs.already_done != 'true') && (github.event_name == 'schedule' || (inputs.mode == 'incremental' && inputs.data_source == 'akshare'))
-        run: python scripts/fetch_data.py --output data.json --recent 5
-        env:
-          WORKER_URL: ${{ secrets.WORKER_URL }}
-          D1_API_KEY: ${{ secrets.D1_API_KEY }}
-
-      - name: Fetch data from AKShare (full)
-        if: (steps.check.outputs.already_done != 'true') && (github.event_name == 'workflow_dispatch' && inputs.mode == 'full' && inputs.data_source == 'akshare')
+      - name: Fetch data from AKShare
+        if: inputs.mode == 'full' && inputs.data_source == 'akshare'
         run: python scripts/fetch_data.py --output data.json --year ${{ inputs.year }} --symbol "${{ inputs.symbol }}"
         env:
           WORKER_URL: ${{ secrets.WORKER_URL }}
           D1_API_KEY: ${{ secrets.D1_API_KEY }}
 
-      # ── 上传 ──
       - name: Upload (from AKShare)
-        if: (steps.check.outputs.already_done != 'true') && (github.event_name == 'schedule' || inputs.data_source == 'akshare')
+        if: inputs.data_source == 'akshare'
         run: |
           if [ -f data.json ]; then
             SYM_FLAG="${{ inputs.symbol }}"
@@ -109,7 +65,7 @@ jobs:
           D1_API_KEY: ${{ secrets.D1_API_KEY }}
 
       - name: Upload (from data/ directory)
-        if: (steps.check.outputs.already_done != 'true') && (inputs.data_source == 'local')
+        if: inputs.data_source == 'local'
         run: |
           SYM_FLAG="${{ inputs.symbol }}"
           python scripts/upload_to_d1.py --data-dir data ${SYM_FLAG:+--symbol "$SYM_FLAG"}

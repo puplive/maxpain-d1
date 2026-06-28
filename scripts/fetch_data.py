@@ -6,7 +6,7 @@
 首次全量: ~1500 交易日 × 4 调用 × 0.3s ≈ 30min
 增量: --max-dates 10
 """
-import argparse, json, os, re, sys, time
+import argparse, calendar, json, os, re, sys, time
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -393,7 +393,31 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
     return ('ok' if entries else 'empty', entries)
 
 
-def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] | None = None,
+def _parse_year_range(y: str) -> tuple[str, str] | None:
+    """解析日期范围参数:
+    2026     → ('2026-01-01', '2026-12-31')
+    202606   → ('2026-06-01', '2026-06-30')
+    20260626 → ('2026-06-26', '2026-06-26')
+    0 / ''   → None（不限日期范围）
+    """
+    if not y or y == '0':
+        return None
+    y = y.strip()
+    if len(y) == 4:  # 全年
+        return (f'{y}-01-01', f'{y}-12-31')
+    elif len(y) == 6:  # 年月
+        yr, mo = y[:4], y[4:6]
+        last_day = calendar.monthrange(int(yr), int(mo))[1]
+        return (f'{yr}-{mo}-01', f'{yr}-{mo}-{last_day:02d}')
+    elif len(y) == 8:  # 年月日
+        yr, mo, dy = y[:4], y[4:6], y[6:8]
+        return (f'{yr}-{mo}-{dy}', f'{yr}-{mo}-{dy}')
+    else:
+        print(f'⚠ 无法解析日期范围: {y}，支持 4/6/8 位格式')
+        sys.exit(1)
+
+
+def run(max_dates: int = 0, recent: int = 0, year_start: str = '', year_end: str = '', symbols: list[str] | None = None,
         worker_url: str | None = None, api_key: str | None = None,
         gh_token: str = '') -> dict:
     """逐日获取并处理数据（从最新一天往前，连续30天无数据自动停）"""
@@ -406,11 +430,10 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
     success = 0
     today = datetime.now()
 
-    # year 模式：从该年最后一天往前，超出该年即停
-    if year:
-        year_end = datetime(year, 12, 31)
-        ref_date = min(today, year_end)
-        year_start = datetime(year, 1, 1)
+    # 日期范围模式：从末尾往前，超出起始即停
+    if year_start:
+        end_dt = datetime.strptime(year_end, '%Y-%m-%d')
+        ref_date = min(today, end_dt)
     else:
         ref_date = today
 
@@ -431,7 +454,7 @@ def run(max_dates: int = 0, recent: int = 0, year: int = 0, symbols: list[str] |
             day_offset += 1
             if limit > 0 and processed >= limit:
                 break
-            if year and d < str(year):
+            if year_start and d < year_start:
                 break
             # 交易日历过滤：非交易日跳过，不计入空日
             if trade_days is not None and d not in trade_days:
@@ -581,7 +604,7 @@ def main():
     parser.add_argument('--output', '-o', default='data.json')
     parser.add_argument('--max-dates', type=int, default=0, help='测试用限制处理日期数')
     parser.add_argument('--recent', type=int, default=0, help='仅处理最近 N 个交易日')
-    parser.add_argument('--year', type=int, default=0, help='指定年份，如 2026，只处理该年数据')
+    parser.add_argument('--year', default='0', help='日期范围: 2026(全年) / 202606(6月) / 20260626(单日)')
     parser.add_argument('--symbol', default='',
                         help='品种，用逗号分隔 (如 TA,MA,SA)，空=查 DB 或默认品种')
     parser.add_argument('--worker-url', default=os.getenv('WORKER_URL', ''),
@@ -619,8 +642,11 @@ def main():
             print(f'{today_str} 非交易日，跳过')
             return
 
+    yr = _parse_year_range(args.year)
     print(f'处理品种: {", ".join(syms)} ({len(syms)} 个)')
-    all_data = run(max_dates=args.max_dates, recent=args.recent, year=args.year, symbols=syms,
+    all_data = run(max_dates=args.max_dates, recent=args.recent,
+                   year_start=yr[0] if yr else '', year_end=yr[1] if yr else '',
+                   symbols=syms,
                    worker_url=args.worker_url if upload else None,
                    api_key=args.api_key if upload else None,
                    gh_token=args.gh_token)
