@@ -1,3 +1,4 @@
+// MaxPain API Worker - Cloudflare Workers + D1
 // 类型使用内联方式，避免 @cloudflare/workers-types 运行时问题
 interface Env {
   DB: any; // D1Database
