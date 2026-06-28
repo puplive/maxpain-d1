@@ -230,7 +230,7 @@ async function loadData(symbol) {
 async function loadAllData() {
   const status = document.getElementById('dataStatus');
   const sel = document.getElementById('symbol');
-  status.textContent = '加载数据中...';
+  status.textContent = '加载品种列表...';
 
   // 查询 DB 已有品种，回退到全部
   let symbols;
@@ -251,26 +251,16 @@ async function loadAllData() {
     sel.appendChild(opt);
   }
 
-  let loaded = 0;
-  for (const sym of symbols) {
-    const data = await loadData(sym);
-    if (data) {
-      ALL_DATA[sym] = data;
-      loaded++;
-    }
+  // 只加载第一个品种的数据
+  const firstSym = sel.value;
+  const data = await loadData(firstSym);
+  if (data) {
+    ALL_DATA[firstSym] = data;
+    status.textContent = symbols.length + ' 品种可选';
+    return true;
   }
-  if (loaded === 0) {
-    status.textContent = '所有品种数据加载失败';
-    return false;
-  }
-  const firstSym = document.getElementById('symbol').value;
-  const firstData = ALL_DATA[firstSym];
-  if (firstData) {
-    document.getElementById('p_start').value = firstData[0].d;
-    document.getElementById('p_end').value = firstData[firstData.length - 1].d;
-  }
-  status.textContent = '数据就绪 (' + loaded + '/' + symbols.length + ' 品种)';
-  return true;
+  status.textContent = '数据加载失败';
+  return false;
 }
 
 async function switchSymbol() {
@@ -1560,15 +1550,7 @@ function drawChart(data, trades, params, stopCurve) {
 
 window.onload = async function() {
   const ok = await loadAllData();
-  if (ok) {
-    const sym = document.getElementById('symbol').value;
-    const data = ALL_DATA[sym];
-    if (data) {
-      document.getElementById('p_start').value = data[0].d;
-      document.getElementById('p_end').value = data[data.length - 1].d;
-    }
-    runBacktest();
-  }
+  if (ok) runBacktest();
 };
 </script>
 </body>
