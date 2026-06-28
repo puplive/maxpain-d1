@@ -963,6 +963,13 @@ function drawChart(data, trades, params, stopCurve) {
     const _becSlope = _becProj !== null ? (_becProj / (_becHist[_becHist.length - 1] || 1) * 100).toFixed(1) : null;
     const _closeSlope = _closeProj !== null ? (_closeProj / (_closeHist[_closeHist.length - 1] || 1) * 100).toFixed(1) : null;
     const spread = row.mp > 0 ? (row.c - row.mp) / row.mp : 0;
+    // BE-MP 交叉信号
+    const beCross = beCrossMarkers.filter(m => m.idx === idx);
+    let beCrossHtml = '';
+    for (const bm of beCross) {
+      if (bm.type === 'bear') beCrossHtml += '<div class="sig" style="background:#e74c3c15;border:1px solid #e74c3c33;">▼ BE-MP交叉：看涨BE下穿MP 下跌信号</div>';
+      else beCrossHtml += '<div class="sig" style="background:#2ecc7115;border:1px solid #2ecc7133;">▲ BE-MP交叉：看跌BE上穿MP 上涨信号</div>';
+    }
     let sigHtml = '';
     const dayTrades = tradeByDate[row.d];
     if (dayTrades) {
@@ -994,7 +1001,7 @@ function drawChart(data, trades, params, stopCurve) {
       <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">OI偏度</span><span class="val ' + (oiSkew>0?'pos':'neg') + '">' + oiSkew + '% <span style="font-size:11px;' + (absSkew < 0.3 ? (parseFloat(oiSkew)>0?'color:#5cd85a':'color:#ff6b6b') : 'color:#e8c84a') + '">' + oiDir + '</span></span></div>\
       <div class="row"><span class="label">IV偏斜 / 量比</span><span class="val" style="font-size:11px"><span class="' + (row.ivs < 0 ? 'pos' : 'neg') + '">' + (row.ivs != null ? row.ivs.toFixed(1) : '-') + '</span> / ' + (row.vr != null ? row.vr.toFixed(2) : '-') + (vrDir ? '<span style="font-size:10px;' + (row.vr>1?'color:#5cd85a':'color:#ff6b6b') + '">' + vrDir + '</span>' : '') + '</span></div>\
       ' + (stopCurve && stopCurve[idx] && (stopCurve[idx].stop !== null || stopCurve[idx].breakLevel != null) ? '<div class="row"><span class="label">止损/结构</span><span class="val" style="font-size:11px">' + (stopCurve[idx].stop !== null ? '<span style="color:#ff9f43">' + stopCurve[idx].stop.toFixed(0) + '</span>' : '-') + ' / ' + (stopCurve[idx].breakLevel != null ? '<span style="color:#a55eea">' + stopCurve[idx].breakLevel.toFixed(0) + '</span>' : '-') + '</span></div>' : '') + '\
-      ' + sigHtml + posHtml + '\
+      ' + beCrossHtml + sigHtml + posHtml + '\
     ';
   }
 
@@ -1006,6 +1013,18 @@ function drawChart(data, trades, params, stopCurve) {
     if (xIdx >= 0) tradeMarkers.push({ idx: xIdx, type: 'exit', dir: t.dir, qty: t.qty, pnl: t.pnl, price: t.exitPx });
   }
   tradeMarkers.sort((a, b) => a.idx - b.idx || (a.type === 'entry' ? -1 : 1));
+
+  // BE-MP 交叉标记：看涨BE下穿MP → 下跌，看跌BE上穿MP → 上涨
+  const beCrossMarkers = [];
+  for (let i = 1; i < n; i++) {
+    const prev = data[i-1], cur = data[i];
+    if (prev.bec != null && cur.bec != null && prev.bec > prev.mp && cur.bec <= cur.mp) {
+      beCrossMarkers.push({ idx: i, type: 'bear' }); // 下跌标记
+    }
+    if (prev.bep != null && cur.bep != null && prev.bep < prev.mp && cur.bep >= cur.mp) {
+      beCrossMarkers.push({ idx: i, type: 'bull' }); // 上涨标记
+    }
+  }
 
   function render() {
     const start = Math.max(0, Math.round(state.start));
@@ -1122,14 +1141,22 @@ function drawChart(data, trades, params, stopCurve) {
     ctx.textAlign = 'left';
     const legX = pad.left + 8, legY2 = pad.top + 4;
     ctx.fillStyle = '#1a2a3a';
-    ctx.fillRect(legX - 4, legY2 - 2, 340, 42);
-    let lx = legX;
-    ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(lx, legY2+7); ctx.lineTo(lx+16, legY2+7); ctx.stroke();
-    ctx.fillStyle = '#c8d6e5'; ctx.fillText('MP', lx+20, legY2+11); lx += 54;
-    ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, legY2+7); ctx.lineTo(lx+16, legY2+7); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#c8d6e5'; ctx.fillText('看涨BE', lx+20, legY2+11); lx += 80;
-    ctx.setLineDash([4,3]); ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, legY2+7); ctx.lineTo(lx+16, legY2+7); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#c8d6e5'; ctx.fillText('看跌BE', lx+20, legY2+11);
+    ctx.fillRect(legX - 4, legY2 - 2, 360, 60);
+    let lx = legX, ly = legY2;
+    // 第一行：MP + BE线
+    ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('MP', lx+20, ly+11); lx += 54;
+    ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('看涨BE', lx+20, ly+11); lx += 80;
+    ctx.setLineDash([4,3]); ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('看跌BE', lx+20, ly+11);
+    // 第二行：BE-MP交叉
+    lx = legX; ly = legY2 + 18;
+    const tSz = 6;
+    ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.moveTo(lx+8, ly+tSz+1); ctx.lineTo(lx+4, ly-1); ctx.lineTo(lx+12, ly-1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('BE下穿MP 下跌', lx+20, ly+8); lx += 130;
+    ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.moveTo(lx+8, ly-3); ctx.lineTo(lx+4, ly+tSz-1); ctx.lineTo(lx+12, ly+tSz-1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('BE上穿MP 上涨', lx+20, ly+8);
     ctx.restore();
 
     if (stopCurve && stopCurve.length === n) {
@@ -1235,6 +1262,41 @@ function drawChart(data, trades, params, stopCurve) {
         ctx.restore();
         tmIdx++;
       }
+    }
+
+    // BE-MP 交叉标记：▲上涨(绿) ▼下跌(红)
+    let bcIdx = 0;
+    while (bcIdx < beCrossMarkers.length && beCrossMarkers[bcIdx].idx < start) bcIdx++;
+    for (; bcIdx < beCrossMarkers.length && beCrossMarkers[bcIdx].idx < end; bcIdx++) {
+      const m = beCrossMarkers[bcIdx];
+      const x = toX(m.idx);
+      const bearish = m.type === 'bear';
+      const markY = bearish ? toY(data[m.idx].h) + 4 : toY(data[m.idx].l) - 4; // 下跌标在柱顶, 上涨标在柱底
+      const sz = Math.max(8, Math.min(14, state.barW * 0.7));
+      ctx.save();
+      ctx.fillStyle = bearish ? '#e74c3c' : '#2ecc71';
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (bearish) { // ▼ 下跌
+        ctx.moveTo(x, markY + sz);
+        ctx.lineTo(x - sz * 0.8, markY);
+        ctx.lineTo(x + sz * 0.8, markY);
+      } else { // ▲ 上涨
+        ctx.moveTo(x, markY - sz);
+        ctx.lineTo(x - sz * 0.8, markY);
+        ctx.lineTo(x + sz * 0.8, markY);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // 文字标签
+      ctx.fillStyle = bearish ? '#e74c3c' : '#2ecc71';
+      ctx.font = `bold ${Math.max(8, Math.min(10, state.barW * 0.5))}px sans-serif`;
+      ctx.textAlign = 'center';
+      const lY = bearish ? markY + sz + 11 : markY - sz - 5;
+      ctx.fillText(bearish ? '下跌' : '上涨', x, lY);
+      ctx.restore();
     }
 
     const lastVis = Math.min(end - 1, n - 1);
