@@ -1264,14 +1264,14 @@ function drawChart(data, trades, params, stopCurve) {
       }
     }
 
-    // BE-MP 交叉标记：▲上涨(绿)标在看跌BE上方，▼下跌(红)标在看涨BE下方
+    // BE-MP 交叉标记：▼下跌(红)标在看涨BE上方，▲上涨(绿)标在看跌BE下方
     let bcIdx = 0;
     while (bcIdx < beCrossMarkers.length && beCrossMarkers[bcIdx].idx < start) bcIdx++;
     for (; bcIdx < beCrossMarkers.length && beCrossMarkers[bcIdx].idx < end; bcIdx++) {
       const m = beCrossMarkers[bcIdx];
       const x = toX(m.idx);
       const bearish = m.type === 'bear'; // 看涨BE下穿MP → 下跌
-      const beVal = bearish ? data[m.idx].bec : data[m.idx].bep; // 下跌标在bec下方，上涨标在bep上方
+      const beVal = bearish ? data[m.idx].bec : data[m.idx].bep; // 下跌标在bec上方，上涨标在bep下方
       const beY = toY(beVal);
       const sz = Math.max(8, Math.min(14, state.barW * 0.7));
       ctx.save();
@@ -1279,14 +1279,14 @@ function drawChart(data, trades, params, stopCurve) {
       ctx.strokeStyle = 'rgba(0,0,0,0.3)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      if (bearish) { // ▼ 下跌，标在看涨BE下方
-        ctx.moveTo(x, beY + sz * 1.5);
-        ctx.lineTo(x - sz * 0.8, beY + sz * 0.5);
-        ctx.lineTo(x + sz * 0.8, beY + sz * 0.5);
-      } else { // ▲ 上涨，标在看跌BE上方
+      if (bearish) { // ▼ 下跌，标在看涨BE上方
         ctx.moveTo(x, beY - sz * 1.5);
         ctx.lineTo(x - sz * 0.8, beY - sz * 0.5);
         ctx.lineTo(x + sz * 0.8, beY - sz * 0.5);
+      } else { // ▲ 上涨，标在看跌BE下方
+        ctx.moveTo(x, beY + sz * 1.5);
+        ctx.lineTo(x - sz * 0.8, beY + sz * 0.5);
+        ctx.lineTo(x + sz * 0.8, beY + sz * 0.5);
       }
       ctx.closePath();
       ctx.fill();
@@ -1295,7 +1295,7 @@ function drawChart(data, trades, params, stopCurve) {
       ctx.fillStyle = bearish ? '#e74c3c' : '#2ecc71';
       ctx.font = `bold ${Math.max(8, Math.min(10, state.barW * 0.5))}px sans-serif`;
       ctx.textAlign = 'center';
-      const lY = bearish ? beY + sz * 1.5 + 11 : beY - sz * 1.5 - 5;
+      const lY = bearish ? beY - sz * 1.5 - 5 : beY + sz * 1.5 + 11;
       ctx.fillText(bearish ? '下跌' : '上涨', x, lY);
       ctx.restore();
     }
