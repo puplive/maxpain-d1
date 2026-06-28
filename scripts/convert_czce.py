@@ -71,17 +71,21 @@ def calc_be(opt_df, px, is_call):
 
 
 def _read_czce_txt(path) -> pd.DataFrame | None:
-    """读取 CZCE 的管道分隔 txt 文件"""
+    """读取 CZCE 的管道分隔 txt 文件（兼容单文件和按品种拆分两种格式）"""
     try:
         with open(path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
         if len(lines) < 3:
             return None
         # 第一行标题，第二行表头，第三行起数据
-        headers = [h.strip() for h in lines[1].split('|')]
+        header_line = lines[1].rstrip('\n\r').rstrip('|')  # 2017-2023 末尾有 |
+        headers = [h.strip() for h in header_line.split('|')]
+        # 统一列名：2017-2023 用品种代码/空盘量，2024+ 用合约代码/持仓量
+        col_rename = {'品种代码': '合约代码', '空盘量': '持仓量'}
+        headers = [col_rename.get(h, h) for h in headers]
         rows = []
         for line in lines[2:]:
-            line = line.strip()
+            line = line.rstrip('\n\r').rstrip('|')
             if not line:
                 continue
             vals = [v.strip() for v in line.split('|')]
@@ -100,12 +104,18 @@ def _clean_num(series):
 
 
 def load_all_futures(year):
-    """读所有 CZCE 期货 txt，返回 {sym: pd.DataFrame}"""
-    fut_dir = FILE_DIR / f'ALLFUTURES{year}'
-    if not fut_dir.exists():
-        return {}
+    """读所有 CZCE 期货 txt，返回 {sym: pd.DataFrame}（兼容单文件和目录两种格式）"""
+    fut_path = FILE_DIR / f'ALLFUTURES{year}'
     all_df = []
-    for f in sorted(fut_dir.glob('*FUTURES*.txt')):
+    if fut_path.is_dir():
+        # 2024+ 按品种拆分目录
+        files = sorted(fut_path.glob('*FUTURES*.txt'))
+    elif fut_path.with_suffix('.txt').exists():
+        # 2017-2023 单文件
+        files = [fut_path.with_suffix('.txt')]
+    else:
+        return {}
+    for f in files:
         df = _read_czce_txt(f)
         if df is not None and '交易日期' in df.columns and '合约代码' in df.columns:
             all_df.append(df)
@@ -125,12 +135,16 @@ def load_all_futures(year):
 
 
 def load_all_options(year):
-    """读所有 CZCE 期权 txt，返回 {sym: pd.DataFrame}"""
-    opt_dir = FILE_DIR / f'ALLOPTIONS{year}'
-    if not opt_dir.exists():
-        return {}
+    """读所有 CZCE 期权 txt，返回 {sym: pd.DataFrame}（兼容单文件和目录两种格式）"""
+    opt_path = FILE_DIR / f'ALLOPTIONS{year}'
     all_df = []
-    for f in sorted(opt_dir.glob('*OPTIONS*.txt')):
+    if opt_path.is_dir():
+        files = sorted(opt_path.glob('*OPTIONS*.txt'))
+    elif opt_path.with_suffix('.txt').exists():
+        files = [opt_path.with_suffix('.txt')]
+    else:
+        return {}
+    for f in files:
         df = _read_czce_txt(f)
         if df is not None and '交易日期' in df.columns and '合约代码' in df.columns:
             all_df.append(df)
@@ -213,12 +227,18 @@ def main():
 
     years = []
     for d in sorted(FILE_DIR.glob('ALLFUTURES*')):
-        if d.is_dir():
-            try:
-                y = int(d.name.replace('ALLFUTURES', ''))
-                years.append(y)
-            except ValueError:
-                pass
+        name = d.name.replace('ALLFUTURES', '')
+        # 兼容目录(2024+)和单文件(2017-2023, 有.txt后缀)
+        if name.endswith('.txt'):
+            name = name[:-4]
+        elif not d.is_dir():
+            continue
+        try:
+            y = int(name)
+            years.append(y)
+        except ValueError:
+            pass
+    years = sorted(set(years))
     if args.year:
         years = [y for y in years if y == args.year]
 
