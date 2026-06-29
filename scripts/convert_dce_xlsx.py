@@ -1,8 +1,9 @@
 """将 DCE xlsx 原始数据转为 JSON，按年份存入 data/ 目录，可选直接上传 D1
 用法:
-  python scripts/convert_dce_xlsx.py                     # 全部年份
-  python scripts/convert_dce_xlsx.py --year 2026         # 仅某年
-  python scripts/convert_dce_xlsx.py --year 2026 --upload  # 转换并上传
+  python scripts/convert_dce_xlsx.py --date 2026              # 全年
+  python scripts/convert_dce_xlsx.py --date 202606            # 某月
+  python scripts/convert_dce_xlsx.py --date 20260629          # 某天
+  python scripts/convert_dce_xlsx.py --date 20260629 --upload # 转换并上传
 输出:
   data/dce/2025.json  → { "M": [...], "C": [...], ... }
 """
@@ -130,14 +131,24 @@ def process_symbol(sym, prefix, year, date=None):
     opt_by_date = {str(d): g for d, g in opt_all.groupby('date')}
 
     if date:
-        date_s = f'{date[:4]}-{date[4:6]}-{date[6:8]}' if '-' not in date else date
-        if date_s in fut_dates and date_s in opt_by_date:
-            fut_dates = {date_s: fut_dates[date_s]}
-            opt_by_date = {date_s: opt_by_date[date_s]}
-            print(f'    {sym}: --date {date_s}')
-        else:
-            print(f'    {sym}: ⚠ {date_s} 无数据，跳过')
-            return {}
+        dl = len(date)
+        if dl >= 8:  # YYYYMMDD 或 YYYY-MM-DD
+            date_s = f'{date[:4]}-{date[4:6]}-{date[6:8]}' if '-' not in date else date
+            if date_s in fut_dates and date_s in opt_by_date:
+                fut_dates = {date_s: fut_dates[date_s]}
+                opt_by_date = {date_s: opt_by_date[date_s]}
+                print(f'    {sym}: --date {date_s}')
+            else:
+                print(f'    {sym}: ⚠ {date_s} 无数据，跳过')
+                return {}
+        elif dl == 6:  # YYYYMM
+            ym = f'{date[:4]}-{date[4:6]}'
+            fut_dates = {d: v for d, v in fut_dates.items() if d.startswith(ym)}
+            opt_by_date = {d: v for d, v in opt_by_date.items() if d.startswith(ym)}
+            if not fut_dates:
+                print(f'    {sym}: ⚠ {ym} 无数据，跳过')
+                return {}
+            print(f'    {sym}: --date {ym} ({len(fut_dates)} 天)')
 
     result = {}
     for date, row in sorted(fut_dates.items()):
@@ -197,51 +208,67 @@ def upload_batch(symbol, records, worker_url, api_key, gh_token=''):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--year', type=int, default=0, help='仅处理某年，默认全部')
+    parser.add_argument('--date', default='', help='2026(全年) / 202606(月) / 20260629(日)')
     parser.add_argument('--symbol', default='', help='仅处理某品种')
-    parser.add_argument('--date', default='', help='仅处理指定日期，如 20260629')
     parser.add_argument('--upload', action='store_true', help='转换后直接上传到 D1')
     parser.add_argument('--worker-url', default=os.getenv('WORKER_URL', 'https://api.starrysay.com'))
     parser.add_argument('--api-key', default=os.getenv('D1_API_KEY', ''))
     parser.add_argument('--gh-token', default=os.getenv('GH_UPLOAD_TOKEN', ''), help='GitHub Token')
-    parser.add_argument('--latest', action='store_true', help='仅输出每个品种最新一天的数据')
     args = parser.parse_args()
+
+    if not args.date:
+        print('❌ 请指定 --date（2026 / 202606 / 20260629）')
+        sys.exit(1)
 
     if args.upload and not args.api_key:
         print('❌ --upload 需要 D1_API_KEY 环境变量')
         sys.exit(1)
 
+    date_filter = args.date if len(args.date) > 4 else None
+    year = int(args.date[:4])
+
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    years = [args.year] if args.year else sorted(
-        set(d.name.replace('allVarietyFtr', '') for d in XLSX_DIR.glob('allVarietyFtr*') if d.is_dir())
-    )
+    output = {}
+    for sym, prefix in DCE_SYMBOLS.items():
+        if args.symbol and sym != args.symbol.upper():
+            continue
+        entries = process_symbol(sym, prefix, year, date=date_filter)
+        if entries:
+            records = sorted(entries.values(), key=lambda r: r['d'])
+            output[sym] = records
+            print(f'  {sym}: {len(records)} 天')
 
-    for year in years:
-        output = {}
-        for sym, prefix in DCE_SYMBOLS.items():
-            if args.symbol and sym != args.symbol.upper():
-                continue
-            entries = process_symbol(sym, prefix, year, date=args.date)
-            if entries:
-                records = sorted(entries.values(), key=lambda r: r['d'])
-                output[sym] = records
-                print(f'  {sym}: {len(records)} 天')
+    if output:
+        out_path = DATA_DIR / f'{year}.json'
+        # 合并到已有文件（追加/更新，不丢失旧数据）
+        if out_path.exists():
+            existing = json.loads(out_path.read_text())
+        else:
+            existing = {}
+        for sym, records in output.items():
+            if sym not in existing:
+                existing[sym] = records
+            else:
+                by_date = {r['d']: i for i, r in enumerate(existing[sym])}
+                for rec in records:
+                    if rec['d'] in by_date:
+                        existing[sym][by_date[rec['d']]] = rec
+                    else:
+                        existing[sym].append(rec)
+                existing[sym].sort(key=lambda r: r['d'])
+        out_path.write_text(json.dumps(existing, ensure_ascii=False))
+        total = sum(len(v) for v in existing.values())
+        print(f'✅ {year}.json ({total} 条, {len(existing)} 品种)')
 
-        if output:
-            out_path = DATA_DIR / f'{year}.json'
-            out_path.write_text(json.dumps(output, ensure_ascii=False))
-            total = sum(len(v) for v in output.values())
-            print(f'✅ {year}.json ({total} 条, {len(output)} 品种)')
-
-            if args.upload:
-                uploaded = 0
-                for sym, records in output.items():
-                    print(f'  ↗ {sym} ({len(records)} 条)...')
-                    for i in range(0, len(records), 500):
-                        n = upload_batch(sym, records[i:i+500], args.worker_url, args.api_key, args.gh_token)
-                        uploaded += n
-                print(f'  📤 已上传 {uploaded} 条到 D1')
+        if args.upload:
+            uploaded = 0
+            for sym, records in output.items():
+                print(f'  ↗ {sym} ({len(records)} 条)...')
+                for i in range(0, len(records), 500):
+                    n = upload_batch(sym, records[i:i+500], args.worker_url, args.api_key, args.gh_token)
+                    uploaded += n
+            print(f'  📤 已上传 {uploaded} 条到 D1')
 
     print(f'\n📦 data/dce/')
 

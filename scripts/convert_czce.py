@@ -1,6 +1,9 @@
 """CZCE 郑商所 txt → JSON，存入 data/czce/
 一批读完所有 txt，再按品种分组处理
-用法: python scripts/convert_czce.py --year 2026
+用法:
+  python scripts/convert_czce.py --date 2026          # 全年
+  python scripts/convert_czce.py --date 202606        # 某月
+  python scripts/convert_czce.py --date 20260629      # 某天
 """
 import argparse, json, os, re, sys, time
 from pathlib import Path
@@ -193,14 +196,24 @@ def process_one(sym, fut, opt, date=None):
     opt_by_date = {str(d): g for d, g in opt.groupby('date')}
 
     if date:
-        date_s = f'{date[:4]}-{date[4:6]}-{date[6:8]}' if '-' not in date else date
-        if date_s in fut_dates and date_s in opt_by_date:
-            fut_dates = {date_s: fut_dates[date_s]}
-            opt_by_date = {date_s: opt_by_date[date_s]}
-            print(f'    {sym}: --date {date_s}')
-        else:
-            print(f'    {sym}: ⚠ {date_s} 无数据，跳过')
-            return {}
+        dl = len(date)
+        if dl >= 8:  # YYYYMMDD 或 YYYY-MM-DD
+            date_s = f'{date[:4]}-{date[4:6]}-{date[6:8]}' if '-' not in date else date
+            if date_s in fut_dates and date_s in opt_by_date:
+                fut_dates = {date_s: fut_dates[date_s]}
+                opt_by_date = {date_s: opt_by_date[date_s]}
+                print(f'    {sym}: --date {date_s}')
+            else:
+                print(f'    {sym}: ⚠ {date_s} 无数据，跳过')
+                return {}
+        elif dl == 6:  # YYYYMM
+            ym = f'{date[:4]}-{date[4:6]}'
+            fut_dates = {d: v for d, v in fut_dates.items() if d.startswith(ym)}
+            opt_by_date = {d: v for d, v in opt_by_date.items() if d.startswith(ym)}
+            if not fut_dates:
+                print(f'    {sym}: ⚠ {ym} 无数据，跳过')
+                return {}
+            print(f'    {sym}: --date {ym} ({len(fut_dates)} 天)')
 
     result = {}
     for date, row in sorted(fut_dates.items()):
@@ -229,55 +242,60 @@ def process_one(sym, fut, opt, date=None):
 
 def main():
     parser = argparse.ArgumentParser(description='CZCE txt → JSON')
-    parser.add_argument('--year', type=int, default=0, help='仅处理某年份')
+    parser.add_argument('--date', default='', help='2026(全年) / 202606(月) / 20260629(日)')
     parser.add_argument('--symbol', default='', help='仅处理某品种')
-    parser.add_argument('--date', default='', help='仅处理指定日期，如 20260629')
     args = parser.parse_args()
+
+    if not args.date:
+        print('❌ 请指定 --date（2026 / 202606 / 20260629）')
+        sys.exit(1)
+
+    date_filter = args.date if len(args.date) > 4 else None
+    year = int(args.date[:4])
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    years = []
-    for d in sorted(FILE_DIR.glob('ALLFUTURES*')):
-        name = d.name.replace('ALLFUTURES', '')
-        # 兼容目录(2024+)和单文件(2017-2023, 有.txt后缀)
-        if name.endswith('.txt'):
-            name = name[:-4]
-        elif not d.is_dir():
-            continue
-        try:
-            y = int(name)
-            years.append(y)
-        except ValueError:
-            pass
-    years = sorted(set(years))
-    if args.year:
-        years = [y for y in years if y == args.year]
+    t0 = time.time()
+    print(f'\n=== {year} ===')
+    fut_by_sym = load_all_futures(year)
+    opt_by_sym = load_all_options(year)
+    print(f'  期货: {len(fut_by_sym)} 品种, 期权: {len(opt_by_sym)} 品种 ({time.time()-t0:.0f}s)')
 
-    for year in years:
-        t0 = time.time()
-        print(f'\n=== {year} ===')
-        fut_by_sym = load_all_futures(year)
-        opt_by_sym = load_all_options(year)
-        print(f'  期货: {len(fut_by_sym)} 品种, 期权: {len(opt_by_sym)} 品种 ({time.time()-t0:.0f}s)')
+    all_syms = set(fut_by_sym) & set(opt_by_sym)
+    if args.symbol:
+        all_syms = {s for s in all_syms if s == args.symbol.upper()}
 
-        all_syms = set(fut_by_sym) & set(opt_by_sym)
-        if args.symbol:
-            all_syms = {s for s in all_syms if s == args.symbol.upper()}
+    output = {}
+    for sym in sorted(all_syms):
+        entries = process_one(sym, fut_by_sym[sym], opt_by_sym[sym], date=date_filter)
+        if entries:
+            records = sorted(entries.values(), key=lambda r: r['d'])
+            output[sym] = records
+            print(f'  {sym}: {len(records)} 天')
 
-        output = {}
-        for sym in sorted(all_syms):
-            entries = process_one(sym, fut_by_sym[sym], opt_by_sym[sym], date=args.date)
-            if entries:
-                records = sorted(entries.values(), key=lambda r: r['d'])
-                output[sym] = records
-                print(f'  {sym}: {len(records)} 天')
+    if output:
+        out = DATA_DIR / f'{year}.json'
+        # 合并到已有文件（追加/更新，不丢失旧数据）
+        if out.exists():
+            existing = json.loads(out.read_text())
+        else:
+            existing = {}
+        for sym, records in output.items():
+            if sym not in existing:
+                existing[sym] = records
+            else:
+                by_date = {r['d']: i for i, r in enumerate(existing[sym])}
+                for rec in records:
+                    if rec['d'] in by_date:
+                        existing[sym][by_date[rec['d']]] = rec
+                    else:
+                        existing[sym].append(rec)
+                existing[sym].sort(key=lambda r: r['d'])
+        out.write_text(json.dumps(existing, ensure_ascii=False))
+        print(f'✅ {year}.json ({sum(len(v) for v in existing.values())} 条, {len(existing)} 品种, {time.time()-t0:.0f}s)')
 
-        if output:
-            out = DATA_DIR / f'{year}.json'
-            out.write_text(json.dumps(output, ensure_ascii=False))
-            print(f'✅ {year}.json ({sum(len(v) for v in output.values())} 条, {len(output)} 品种, {time.time()-t0:.0f}s)')
-
-    print(f'\n📦 data/czce/')
+    if not date_filter:
+        print(f'\n📦 data/czce/')
 
 
 if __name__ == '__main__':

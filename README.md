@@ -66,12 +66,10 @@ GitHub Actions → Daily Data Update → Run workflow：
 也可本地转换 CZCE 官网 TXT 文件（需提前下载到 `file/czce/`）：
 
 ```bash
-# 全部转换
-python scripts/convert_czce.py --year 2026
-
-# 只更新某一天
-python scripts/convert_czce.py --year 2026 --date 20260629
-python scripts/convert_czce.py --year 2026 --date 20260629 --symbol TA
+python scripts/convert_czce.py --date 2026            # 全年
+python scripts/convert_czce.py --date 202606          # 某月
+python scripts/convert_czce.py --date 20260629        # 某天
+python scripts/convert_czce.py --date 20260629 --symbol TA  # 单品种
 ```
 
 ### DCE 数据更新（手动下载 + Workflow 上传）
@@ -89,11 +87,10 @@ unzip -o allVarietyFtr2026.zip -d file/dce/allVarietyFtr2026
 unzip -o allVarietyOpt2026.zip -d file/dce/allVarietyOpt2026
 
 # 3. 转为 JSON
-python scripts/convert_dce_xlsx.py --year 2026
-
-# 也可只更新某一天（下载新文件后增量追加）
-python scripts/convert_dce_xlsx.py --year 2026 --date 20260629
-python scripts/convert_dce_xlsx.py --year 2026 --date 20260629 --symbol M  # 单品种
+python scripts/convert_dce_xlsx.py --date 2026              # 全年
+python scripts/convert_dce_xlsx.py --date 202606            # 某月
+python scripts/convert_dce_xlsx.py --date 20260629          # 某天
+python scripts/convert_dce_xlsx.py --date 20260629 --symbol M  # 单品种
 ```
 
 然后 GitHub Actions → Daily Data Update → Run workflow：
@@ -109,8 +106,8 @@ python scripts/convert_dce_xlsx.py --year 2026 --date 20260629 --symbol M  # 单
 #    期货放 file/shfe/fu2026/，期权放 file/shfe/opt2026/
 
 # 2. 转为 JSON
-python scripts/convert_shfe.py --year 2026
-python scripts/convert_shfe.py --year 2026 --date 20260629  # 仅更新某天
+python scripts/convert_shfe.py --date 2026          # 全年
+python scripts/convert_shfe.py --date 20260629      # 某天
 ```
 
 然后 Workflow 同 DCE，`data_source: local` 会自动读取 `data/shfe/` 下 JSON。
