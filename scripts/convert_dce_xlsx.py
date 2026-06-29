@@ -101,11 +101,11 @@ def process_symbol(sym, prefix, year, date=None):
     fut['low'] = pd.to_numeric(fut['最低价'], errors='coerce').fillna(0)
 
     fut_dates = {}
-    for date, group in fut.groupby('date'):
+    for dt, group in fut.groupby('date'):
         idx = group['volume'].idxmax()
         row = group.loc[idx]
         if row['close'] > 0:
-            fut_dates[date] = row
+            fut_dates[dt] = row
 
     if not opt_file.exists():
         return {}
@@ -151,10 +151,10 @@ def process_symbol(sym, prefix, year, date=None):
             print(f'    {sym}: --date {ym} ({len(fut_dates)} 天)')
 
     result = {}
-    for date, row in sorted(fut_dates.items()):
-        if date not in opt_by_date:
+    for dt, row in sorted(fut_dates.items()):
+        if dt not in opt_by_date:
             continue
-        opt = opt_by_date[date]
+        opt = opt_by_date[dt]
         px = float(row['close'])
 
         rng = 0.20
@@ -176,8 +176,8 @@ def process_symbol(sym, prefix, year, date=None):
         piv = opt[(opt['type'] == 'P') & (opt['delta'].between(-0.30, -0.20))]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
 
-        result[date] = {
-            'd': date, 'o': round(float(row['open']), 2), 'c': round(px, 2),
+        result[dt] = {
+            'd': dt, 'o': round(float(row['open']), 2), 'c': round(px, 2),
             'h': round(float(row['high']), 2), 'l': round(float(row['low']), 2),
             'mp': mp, 'co': co, 'po': po,
             'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs,
