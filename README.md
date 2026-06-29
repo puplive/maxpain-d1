@@ -63,6 +63,17 @@ GitHub Actions → Daily Data Update → Run workflow：
 - symbol: 空=取 DB 已有品种，或指定如 `TA,MA,SA`
 - year: `2026`(全年) / `202606`(6月) / `20260626`(单日) / `0`(不限)
 
+也可本地转换 CZCE 官网 TXT 文件（需提前下载到 `file/czce/`）：
+
+```bash
+# 全部转换
+python scripts/convert_czce.py --year 2026
+
+# 只更新某一天
+python scripts/convert_czce.py --year 2026 --date 20260629
+python scripts/convert_czce.py --year 2026 --date 20260629 --symbol TA
+```
+
 ### DCE 数据更新（手动下载 + Workflow 上传）
 
 每 1-2 周操作一次：
@@ -79,6 +90,10 @@ unzip -o allVarietyOpt2026.zip -d file/dce/allVarietyOpt2026
 
 # 3. 转为 JSON
 python scripts/convert_dce_xlsx.py --year 2026
+
+# 也可只更新某一天（下载新文件后增量追加）
+python scripts/convert_dce_xlsx.py --year 2026 --date 20260629
+python scripts/convert_dce_xlsx.py --year 2026 --date 20260629 --symbol M  # 单品种
 ```
 
 然后 GitHub Actions → Daily Data Update → Run workflow：
@@ -95,6 +110,7 @@ python scripts/convert_dce_xlsx.py --year 2026
 
 # 2. 转为 JSON
 python scripts/convert_shfe.py --year 2026
+python scripts/convert_shfe.py --year 2026 --date 20260629  # 仅更新某天
 ```
 
 然后 Workflow 同 DCE，`data_source: local` 会自动读取 `data/shfe/` 下 JSON。

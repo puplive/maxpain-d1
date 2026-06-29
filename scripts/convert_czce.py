@@ -174,23 +174,33 @@ def load_all_options(year):
     return symbols
 
 
-def process_one(sym, fut, opt):
+def process_one(sym, fut, opt, date=None):
     """从已过滤的 fut/opt df 计算指标"""
     if fut is None or opt is None:
         return {}
 
     fut_dates = {}
-    for date, g in fut.groupby('date'):
+    for date_i, g in fut.groupby('date'):
         if '成交量(手)' in g.columns:
             idx = g['成交量(手)'].idxmax()
         else:
             idx = g.index[0]
         r = g.loc[idx]
         if r.get('今收盘', 0) > 0:
-            fut_dates[date] = {'o': float(r.get('今开盘', 0)), 'c': float(r.get('今收盘', 0)),
-                               'h': float(r.get('最高价', 0)), 'l': float(r.get('最低价', 0))}
+            fut_dates[date_i] = {'o': float(r.get('今开盘', 0)), 'c': float(r.get('今收盘', 0)),
+                                 'h': float(r.get('最高价', 0)), 'l': float(r.get('最低价', 0))}
 
     opt_by_date = {str(d): g for d, g in opt.groupby('date')}
+
+    if date:
+        date_s = f'{date[:4]}-{date[4:6]}-{date[6:8]}' if '-' not in date else date
+        if date_s in fut_dates and date_s in opt_by_date:
+            fut_dates = {date_s: fut_dates[date_s]}
+            opt_by_date = {date_s: opt_by_date[date_s]}
+            print(f'    {sym}: --date {date_s}')
+        else:
+            print(f'    {sym}: ⚠ {date_s} 无数据，跳过')
+            return {}
 
     result = {}
     for date, row in sorted(fut_dates.items()):
@@ -221,6 +231,7 @@ def main():
     parser = argparse.ArgumentParser(description='CZCE txt → JSON')
     parser.add_argument('--year', type=int, default=0, help='仅处理某年份')
     parser.add_argument('--symbol', default='', help='仅处理某品种')
+    parser.add_argument('--date', default='', help='仅处理指定日期，如 20260629')
     args = parser.parse_args()
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -255,7 +266,7 @@ def main():
 
         output = {}
         for sym in sorted(all_syms):
-            entries = process_one(sym, fut_by_sym[sym], opt_by_sym[sym])
+            entries = process_one(sym, fut_by_sym[sym], opt_by_sym[sym], date=args.date)
             if entries:
                 records = sorted(entries.values(), key=lambda r: r['d'])
                 output[sym] = records

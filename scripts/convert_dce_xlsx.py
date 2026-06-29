@@ -77,7 +77,7 @@ def calc_be(opt_df, px, is_call):
     return round((low + high) / 2, 2)
 
 
-def process_symbol(sym, prefix, year):
+def process_symbol(sym, prefix, year, date=None):
     """处理单个品种某一年"""
     ftr_year = f'allVarietyFtr{year}'
     opt_year = f'allVarietyOpt{year}'
@@ -128,6 +128,16 @@ def process_symbol(sym, prefix, year):
     opt_all['iv'] = pd.to_numeric(opt_all['隐含波动率(%)'], errors='coerce').fillna(0) / 100
 
     opt_by_date = {str(d): g for d, g in opt_all.groupby('date')}
+
+    if date:
+        date_s = f'{date[:4]}-{date[4:6]}-{date[6:8]}' if '-' not in date else date
+        if date_s in fut_dates and date_s in opt_by_date:
+            fut_dates = {date_s: fut_dates[date_s]}
+            opt_by_date = {date_s: opt_by_date[date_s]}
+            print(f'    {sym}: --date {date_s}')
+        else:
+            print(f'    {sym}: ⚠ {date_s} 无数据，跳过')
+            return {}
 
     result = {}
     for date, row in sorted(fut_dates.items()):
@@ -189,10 +199,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--year', type=int, default=0, help='仅处理某年，默认全部')
     parser.add_argument('--symbol', default='', help='仅处理某品种')
+    parser.add_argument('--date', default='', help='仅处理指定日期，如 20260629')
     parser.add_argument('--upload', action='store_true', help='转换后直接上传到 D1')
     parser.add_argument('--worker-url', default=os.getenv('WORKER_URL', 'https://api.starrysay.com'))
     parser.add_argument('--api-key', default=os.getenv('D1_API_KEY', ''))
     parser.add_argument('--gh-token', default=os.getenv('GH_UPLOAD_TOKEN', ''), help='GitHub Token')
+    parser.add_argument('--latest', action='store_true', help='仅输出每个品种最新一天的数据')
     args = parser.parse_args()
 
     if args.upload and not args.api_key:
@@ -210,7 +222,7 @@ def main():
         for sym, prefix in DCE_SYMBOLS.items():
             if args.symbol and sym != args.symbol.upper():
                 continue
-            entries = process_symbol(sym, prefix, year)
+            entries = process_symbol(sym, prefix, year, date=args.date)
             if entries:
                 records = sorted(entries.values(), key=lambda r: r['d'])
                 output[sym] = records
