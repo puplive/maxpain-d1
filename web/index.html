@@ -120,12 +120,13 @@ tr:hover td { background: #1a2a3a; }
 
   <div class="params" id="paramBar">
     <div class="param-group"><label>Lookback:</label><input type="number" id="p_lookback" value="21" min="5" max="60"></div>
-    <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" value="1.0" min="0.1" max="10" step="0.1" class="wide"></div>
+    <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" value="0" min="0" max="10" step="0.1" class="wide"></div>
     <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" value="30" min="5" max="100" class="wide"></div>
     <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" value="15" min="5" max="50" class="wide"></div>
 <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="1.0" min="0" max="10" step="0.1" class="wide"></div>
       <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="75" min="0" max="100" step="5" class="wide"></div>
       <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="2" min="0" max="10" step="1" class="wide"></div>
+      <div class="param-group"><label>动量天:</label><input type="number" id="p_mom" value="3" min="1" max="30" step="1" class="wide"></div>
 
     <div class="param-group"><label>本金:</label><input type="number" id="p_capital" value="100000" min="10000" step="10000" class="wide"></div>
     <div class="param-group"><label>封顶(万):</label><input type="number" id="p_cap_limit" value="0" min="0" step="10" class="wide"></div>
@@ -278,26 +279,28 @@ async function switchSymbol() {
   runBacktest();
 }
 
-function mpTrending(arr, lookback, minPct) {
-  if (!arr || arr.length < lookback + 1) return { dir: null, r2: 0 };
-  const a = arr.slice(-lookback - 1);
-  const n = a.length;
-  let sx = 0, sy = 0, sxy = 0, sx2 = 0;
-  for (let i = 0; i < n; i++) {
-    sx += i; sy += a[i]; sxy += i * a[i]; sx2 += i * i;
-  }
-  const slope = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
-  const projected = slope * (n - 1);
-  const threshold = Math.abs(a[0] * minPct);
-  const yMean = sy / n;
-  const inter = (sy - slope * sx) / n;
-  let ssRes = 0, ssTot = 0;
-  for (let i = 0; i < n; i++) { const d = a[i] - inter - slope * i; ssRes += d * d; const d2 = a[i] - yMean; ssTot += d2 * d2; }
-  const r2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
-  let dir = null;
-  if (projected > threshold) dir = 'up';
-  else if (projected < -threshold) dir = 'down';
-  return { dir, r2 };
+function emaDirection(arr, period, buffer) {
+  if (!arr || arr.length < period) return { dir: null };
+  const vals = arr.slice(-period);
+  let ema = vals[0];
+  const k = 2 / (period + 1);
+  for (let i = 1; i < vals.length; i++) { ema = vals[i] * k + ema * (1 - k); }
+  const last = vals[vals.length - 1];
+  if (last > ema * (1 + buffer)) return { dir: 'up' };
+  if (last < ema * (1 - buffer)) return { dir: 'down' };
+  return { dir: null };
+}
+
+function emaChange(arr, period) {
+  if (!arr || arr.length < period * 2) return null;
+  const k = 2 / (period + 1);
+  const cu = arr.slice(-period - 1);
+  let ce = cu[0];
+  for (let i = 1; i < cu.length; i++) ce = cu[i] * k + ce * (1 - k);
+  const pv = arr.slice(-period * 2 - 1, arr.length - period);
+  let pe = pv[0];
+  for (let i = 1; i < pv.length; i++) pe = pv[i] * k + pe * (1 - k);
+  return (ce - pe) / Math.abs(pe);
 }
 
 function linearProjected(arr, lookback) {
@@ -329,7 +332,7 @@ function calcATR(data, period) {
   return atr;
 }
 function _runCore(data, fullData, firstIdx, params, mult) {
-  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, lockPct: LOCK_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
+  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, lockPct: LOCK_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP, momDays } = params;
   const preStart = Math.max(0, firstIdx - LBK);
   let eq = CAP, peakEq = CAP, maxDd = 0, pos = null;
   const mpHist = [], priceHist = [], trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
@@ -351,14 +354,14 @@ function _runCore(data, fullData, firstIdx, params, mult) {
       let exitPx = null;
 
       if (!exitPx) {
-        const { dir: currDir } = mpTrending(mpHist, LBK, MIN_PCT);
+        const { dir: currDir } = emaDirection(mpHist, LBK, MIN_PCT);
         if (currDir !== pos.entryTrend && currDir !== null) { exitPx = px; reason = '方向反转'; }
       }
 
       if (!exitPx) {
-        const _mpProj = linearProjected(mpHist, LBK);
-        const _mpSlope = _mpProj !== null ? Math.abs(_mpProj) / Math.abs(prevMp || mp) : 0;
-        const _trailPct = Math.max(MIN_PCT, BE_TH) * (1 + _mpSlope / 0.05);
+        const _emaChg = emaChange(mpHist, LBK);
+        const _emaSlope = _emaChg !== null ? Math.abs(_emaChg) : 0;
+        const _trailPct = Math.max(MIN_PCT, BE_TH) * (1 + _emaSlope / 0.05);
         if (pos.direction === 'long') {
           let stop = prevClose * (1 - _trailPct);
           if (pos.beActive) { const pp = pos.peakPx - pos.entryPx; stop = Math.max(stop, pos.entryPx + pp * LOCK_PCT); }
@@ -381,7 +384,7 @@ function _runCore(data, fullData, firstIdx, params, mult) {
     }
 
     if (!pos && (reason === '' || reason === '方向反转')) {
-      const { dir: mpDir } = mpTrending(mpHist, LBK, MIN_PCT);
+      const { dir: mpDir } = emaDirection(mpHist, LBK, MIN_PCT);
       let td = null;
       if (mpDir === 'up') td = 'long';
       else if (mpDir === 'down') td = 'short';
@@ -391,11 +394,13 @@ function _runCore(data, fullData, firstIdx, params, mult) {
           td = null;
         }
       }
+      if (td && mpHist.length > momDays + 1) {
+        const _currMp = mpHist[mpHist.length - 1];  // yesterday
+        const _prevMp = mpHist[mpHist.length - 1 - momDays];
+        if (td === 'long' && _currMp <= _prevMp) td = null;
+        else if (td === 'short' && _currMp >= _prevMp) td = null;
+      }
       if (td) {
-        let pass = false;
-        if (td === 'long') pass = prevClose > prevMp;
-        else pass = prevClose < prevMp;
-        if (pass) {
           const dn = op * mult * MR;
           if (dn > 0) {
             let alloc = eq * MAX_POS;
@@ -405,7 +410,6 @@ function _runCore(data, fullData, firstIdx, params, mult) {
               pos = { direction: td, entryPx: op, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: op, beActive: false, entryTrend: mpDir };
             }
           }
-        }
       }
     }
 
@@ -422,9 +426,9 @@ function _runCore(data, fullData, firstIdx, params, mult) {
     }
     if (pos) {
       const _breakLevel = pos.direction === 'long' ? prevBep : prevBec;
-      const _mpProj = linearProjected(mpHist, LBK);
-      const _mpSlope = _mpProj !== null ? Math.abs(_mpProj) / Math.abs(prevMp || mp) : 0;
-      const _trailPct = Math.max(MIN_PCT, BE_TH) * (1 + _mpSlope / 0.05);
+      const _emaChg = emaChange(mpHist, LBK);
+      const _emaSlope = _emaChg !== null ? Math.abs(_emaChg) : 0;
+      const _trailPct = Math.max(MIN_PCT, BE_TH) * (1 + _emaSlope / 0.05);
       let _s = pos.direction === 'long' ? prevClose * (1 - _trailPct) : prevClose * (1 + _trailPct);
       if (pos.beActive) {
         const _pp = pos.direction === 'long' ? pos.peakPx - pos.entryPx : pos.entryPx - pos.peakPx;
@@ -499,6 +503,7 @@ function runBacktest() {
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
     skipCount: parseInt(document.getElementById('p_skip').value) || 2,
+    momDays: parseInt(document.getElementById('p_mom').value) || 3,
   };
   params.mult = cfg.mult;
   const MULT = cfg.mult;
@@ -591,6 +596,7 @@ function runBacktest() {
       <div class="stat-card"><div class="value">' + fmt(s.avgPnl) + '</div><div class="label">均PnL</div></div>\
     </div>\
     <div class="chart-wrap"><h2>K线 & 信号</h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+    <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th></tr>' + yrHtml + '</table></div>\
     <div class="section"><h2>按退出原因</h2><table><tr><th>原因</th><th class="num">笔数</th><th class="num">占比</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">均持仓</th></tr>' + rsHtml + '</table></div>\
     <div class="section"><h2>按持仓天数</h2><table><tr><th>持仓</th><th class="num">笔数</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + holdHtml + '</table></div>\
@@ -600,7 +606,7 @@ function runBacktest() {
     <div class="section"><h2>全部交易</h2><table class="recent"><tr><th>入场</th><th>出场</th><th>方向</th><th class="num">手数</th><th class="num">开仓价</th><th class="num">平仓价</th><th class="num">PnL</th><th>原因</th><th class="num">持仓</th></tr>\
       ' + recent.map(t => '<tr><td>' + t.entry + '</td><td>' + t.exit + '</td><td>' + dirText(t.dir) + '</td><td class="num">' + t.qty + '</td><td class="num">' + t.entryPx.toFixed(0) + '</td><td class="num">' + t.exitPx.toFixed(0) + '</td><td class="num ' + cls(t.pnl) + '">' + fmt(Math.round(t.pnl)) + '</td><td>' + t.reason + '</td><td class="num">' + Math.round(t.hold) + '天</td></tr>').join('') + '</table></div>';
 
-  setTimeout(function() { try { drawChart(fullData, trades, params, stopCurve); } catch(e) { console.error(e); } }, 50);
+  setTimeout(function() { try { drawChart(fullData, trades, params, stopCurve); } catch(e) { console.error(e); } try { drawEquityCurve(eqCurve, CAP); } catch(e) { console.error(e); } }, 50);
 
   window._lastTrades = trades; window._lastParams = params; window._lastCAP = CAP;
   var capInfo = params.capLimit > 0 ? ' | 封顶' + fmt(params.capLimit) : '';
@@ -625,6 +631,7 @@ function setParamValues(p) {
   if (p.capLimit !== undefined) document.getElementById('p_cap_limit').value = Math.round(p.capLimit / 10000);
   if (p.lockPct !== undefined) document.getElementById('p_lock_pct').value = Math.round(p.lockPct * 100);
   if (p.skipCount !== undefined) document.getElementById('p_skip').value = p.skipCount;
+  if (p.momDays !== undefined) document.getElementById('p_mom').value = p.momDays;
 }
 
 function toggleManual() {
@@ -654,6 +661,7 @@ function runMonteCarlo() {
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
     skipCount: parseInt(document.getElementById('p_skip').value) || 2,
+    momDays: parseInt(document.getElementById('p_mom').value) || 3,
   };
   params.mult = cfg.mult;
   const core = _runCore(data, fullData, firstIdx, params, cfg.mult);
@@ -740,6 +748,7 @@ const OPT_PARAMS = {
   beTh:       { label: '保本%',       range: [0, 5, 0.2], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 70, 5], unit: '%' },
   skipCount:  { label: '跳过次',      range: [0, 5, 1] },
+  momDays:    { label: '动量天',      range: [1, 30, 1] },
 };
 
 function optimizeParam() {
@@ -770,6 +779,7 @@ function optimizeParam() {
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
     skipCount: parseInt(document.getElementById('p_skip').value) || 2,
+    momDays: parseInt(document.getElementById('p_mom').value) || 3,
     mult: cfg.mult,
   };
 
@@ -948,7 +958,7 @@ function drawChart(data, trades, params, stopCurve) {
     const oiDir = absSkew < 0.3 ? (parseFloat(oiSkew) > 0 ? '涨' : '跌') : (parseFloat(oiSkew) > 0 ? '跌⚠' : '涨⚠');
     const vrDir = row.vr != null ? (row.vr > 1 ? '涨' : row.vr < 1 ? '跌' : '—') : '';
     const subHist = data.slice(0, idx).map(r => r.mp);
-    const { dir: trendDir } = mpTrending(subHist, params.lookback, params.minPct);
+    const { dir: trendDir } = emaDirection(subHist, params.lookback, params.minPct);
     const _proj = linearProjected(subHist, params.lookback);
     const _slopePct = _proj !== null ? (_proj / (subHist[subHist.length - 1] || 1) * 100).toFixed(1) : null;
     const trendText = (trendDir === 'up' ? '<span class="pos">↑ 上涨</span>' : trendDir === 'down' ? '<span class="neg">↓ 下跌</span>' : '<span style="color:#576574">— 震荡</span>')
@@ -1106,6 +1116,26 @@ function drawChart(data, trades, params, stopCurve) {
     ctx.stroke();
     ctx.globalAlpha = 1;
 
+    // EMA 线
+    ctx.strokeStyle = '#54a0ff';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.7;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    let emaVal = null, emaStarted = false;
+    const emaK = 2 / (params.lookback + 1);
+    for (let i = 0; i < end; i++) {
+      if (emaVal === null) emaVal = data[i].mp;
+      else emaVal = data[i].mp * emaK + emaVal * (1 - emaK);
+      if (i >= start) {
+        const x = toX(i), y = toY(emaVal);
+        if (!emaStarted) { ctx.moveTo(x, y); emaStarted = true; } else ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+
     ctx.strokeStyle = '#2ecc71';
     ctx.lineWidth = 1;
     ctx.globalAlpha = 0.6;
@@ -1149,7 +1179,9 @@ function drawChart(data, trades, params, stopCurve) {
     ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('看涨BE', lx+20, ly+11); lx += 80;
     ctx.setLineDash([4,3]); ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#c8d6e5'; ctx.fillText('看跌BE', lx+20, ly+11);
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('看跌BE', lx+20, ly+11); lx += 80;
+    ctx.strokeStyle = '#54a0ff'; ctx.lineWidth = 1.5; ctx.setLineDash([2,2]); ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('EMA', lx+20, ly+11);
     // 第二行：BE-MP交叉
     lx = legX; ly = legY2 + 18;
     const tSz = 6;
@@ -1610,6 +1642,50 @@ function drawChart(data, trades, params, stopCurve) {
   }
 
   render();
+}
+
+function drawEquityCurve(eqCurve, cap) {
+  const canvas = document.getElementById('eqChart');
+  if (!canvas || !eqCurve || eqCurve.length < 2) return;
+  const W = canvas.clientWidth || 600;
+  const H = 200;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const pad = { top: 20, right: 16, bottom: 28, left: 70 };
+  const cw = W - pad.left - pad.right, ch = H - pad.top - pad.bottom;
+  let min = cap, max = cap;
+  for (const p of eqCurve) { if (p.eq < min) min = p.eq; if (p.eq > max) max = p.eq; }
+  const rng = max - min || 1, pr = rng * 0.05; min -= pr; max += pr;
+  const toX = i => pad.left + i / (eqCurve.length - 1) * cw;
+  const toY = v => pad.top + ch - (v - min) / (max - min) * ch;
+  ctx.fillStyle = '#0f1923'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#1a2a3a'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) { const y = pad.top + (ch / 4) * i; ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke(); }
+  ctx.fillStyle = '#576574'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) ctx.fillText(Math.round(max - (rng / 4) * i).toLocaleString(), pad.left - 6, pad.top + (ch / 4) * i + 4);
+  ctx.strokeStyle = '#8395a7'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+  const capY = toY(cap); ctx.beginPath(); ctx.moveTo(pad.left, capY); ctx.lineTo(W - pad.right, capY); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#8395a7'; ctx.textAlign = 'left'; ctx.font = '10px sans-serif'; ctx.fillText('本金', W - pad.right - 30, capY - 3);
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+  grad.addColorStop(0, 'rgba(84, 160, 255, 0.12)'); grad.addColorStop(1, 'rgba(84, 160, 255, 0.01)');
+  ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(toX(0), toY(eqCurve[0].eq));
+  for (let i = 1; i < eqCurve.length; i++) ctx.lineTo(toX(i), toY(eqCurve[i].eq));
+  ctx.lineTo(toX(eqCurve.length - 1), pad.top + ch); ctx.lineTo(toX(0), pad.top + ch); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#54a0ff'; ctx.lineWidth = 1.5; ctx.beginPath();
+  for (let i = 0; i < eqCurve.length; i++) { const x = toX(i), y = toY(eqCurve[i].eq); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+  ctx.stroke();
+  ctx.fillStyle = '#576574'; ctx.textAlign = 'center'; ctx.font = '10px sans-serif';
+  for (const di of [0, Math.floor(eqCurve.length / 2), eqCurve.length - 1]) ctx.fillText(eqCurve[di].d, toX(di), pad.top + ch + 16);
+  const last = eqCurve[eqCurve.length - 1].eq;
+  ctx.fillStyle = '#54a0ff'; ctx.textAlign = 'right'; ctx.font = 'bold 12px sans-serif';
+  ctx.fillText(Math.round(last).toLocaleString(), W - pad.right, pad.top - 4);
+  ctx.fillStyle = '#8395a7'; ctx.font = '11px sans-serif';
+  ctx.fillText((last / cap - 1 > 0 ? '+' : '') + (last / cap - 1).toFixed(1) + '%', W - pad.right, pad.top + 10);
 }
 
 window.onload = async function() {
