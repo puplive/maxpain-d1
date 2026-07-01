@@ -52,6 +52,9 @@ export default {
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-GitHub-Token',
     };
+    const cacheHeaders = {
+      'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400',
+    };
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
@@ -67,11 +70,11 @@ export default {
         });
       }
       const { results } = await env.DB.prepare(
-        'SELECT * FROM daily_data WHERE symbol = ? ORDER BY date'
+        'SELECT date,open,close,high,low,mp,co,po,bec,bep,vr,ivs,expiry,dte FROM daily_data WHERE symbol = ? ORDER BY date'
       ).bind(symbol).all<DailyRow>();
       const data = (results || []).map(toFrontend);
       return new Response(JSON.stringify({ data }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, ...cacheHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -130,7 +133,7 @@ export default {
       ).all<{ symbol: string }>();
       const symbols = (results || []).map(r => r.symbol);
       return new Response(JSON.stringify({ symbols }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, ...cacheHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -140,7 +143,7 @@ export default {
         'SELECT symbol, COUNT(*) as count, MIN(date) as first, MAX(date) as last FROM daily_data GROUP BY symbol'
       ).all();
       return new Response(JSON.stringify({ stats: results }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, ...cacheHeaders, 'Content-Type': 'application/json' },
       });
     }
 
