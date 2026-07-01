@@ -1,15 +1,44 @@
 """将预处理后的 JSON 数据上传到 Cloudflare D1 Worker
 
 用法:
-  python scripts/upload_to_d1.py --input data.json              # 单文件
-  python scripts/upload_to_d1.py --input data.json --symbol TA  # 指定品种
-  python scripts/upload_to_d1.py --data-dir data/dce            # 目录（所有 JSON）
-  python scripts/upload_to_d1.py --data-dir data/dce --symbol M # 目录指定品种
+  python scripts/upload_to_d1.py --input data.json                        # 单文件
+  python scripts/upload_to_d1.py --input data.json --symbol TA            # 指定品种
+  python scripts/upload_to_d1.py --data-dir data/dce                      # 目录（所有 JSON）
+  python scripts/upload_to_d1.py --data-dir data/dce --symbol M           # 目录指定品种
+  python scripts/upload_to_d1.py --data-dir data --year 20260630          # 仅上传指定日期
+  python scripts/upload_to_d1.py --data-dir data --year 202606            # 仅上传指定月份
 """
-import argparse, json, os, sys
+import argparse, calendar, json, os, sys
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
+
+
+def parse_year_range(y: str) -> tuple[str, str] | None:
+    """解析日期范围参数: 同 fetch_data.py"""
+    if not y or y == '0':
+        return None
+    y = y.strip()
+    if len(y) == 4:
+        return (f'{y}-01-01', f'{y}-12-31')
+    elif len(y) == 6:
+        yr, mo = y[:4], y[4:6]
+        last_day = calendar.monthrange(int(yr), int(mo))[1]
+        return (f'{yr}-{mo}-01', f'{yr}-{mo}-{last_day:02d}')
+    elif len(y) == 8:
+        yr, mo, dy = y[:4], y[4:6], y[6:8]
+        return (f'{yr}-{mo}-{dy}', f'{yr}-{mo}-{dy}')
+    print(f'⚠ 无法解析日期参数: {y}，支持 4/6/8 位格式')
+    sys.exit(1)
+
+
+def filter_by_year(records: list[dict], year_param: str) -> list[dict]:
+    """按日期范围过滤记录，record['d'] 格式为 'YYYY-MM-DD'"""
+    yr = parse_year_range(year_param)
+    if yr is None:
+        return records
+    start, end = yr
+    return [r for r in records if start <= r['d'] <= end]
 
 
 def upload(symbol: str, records: list[dict], worker_url: str, api_key: str, gh_token: str = ''):
@@ -45,6 +74,8 @@ def main():
                         help='API 密钥')
     parser.add_argument('--gh-token', default=os.getenv('GH_UPLOAD_TOKEN', ''),
                         help='GitHub Token (X-GitHub-Token)')
+    parser.add_argument('--year', default='0',
+                        help='日期过滤: 2026(全年) / 202606(6月) / 20260626(单日), 默认全部')
     args = parser.parse_args()
 
     if not args.worker_url:
@@ -84,6 +115,11 @@ def main():
         symbols = [s.strip().upper() for s in args.symbol.split(',')]
     else:
         symbols = list(all_data.keys())
+
+    # 日期过滤
+    if args.year and args.year != '0':
+        for sym in symbols:
+            all_data[sym] = filter_by_year(all_data.get(sym, []), args.year)
 
     for sym in symbols:
         records = all_data.get(sym, [])

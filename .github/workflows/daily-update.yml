@@ -51,24 +51,12 @@ jobs:
           WORKER_URL: ${{ secrets.WORKER_URL }}
           D1_API_KEY: ${{ secrets.D1_API_KEY }}
 
-      - name: Upload (from AKShare)
-        if: inputs.data_source == 'akshare'
-        run: |
-          if [ -f data.json ]; then
-            SYM_FLAG="${{ inputs.symbol }}"
-            python scripts/upload_to_d1.py --input data.json ${SYM_FLAG:+--symbol "$SYM_FLAG"}
-          else
-            echo "无数据文件，跳过上传"
-          fi
-        env:
-          WORKER_URL: ${{ secrets.WORKER_URL }}
-          D1_API_KEY: ${{ secrets.D1_API_KEY }}
-
       - name: Upload (from data/ directory)
         if: inputs.data_source == 'local'
         run: |
           SYM_FLAG="${{ inputs.symbol }}"
-          python scripts/upload_to_d1.py --data-dir data ${SYM_FLAG:+--symbol "$SYM_FLAG"}
+          YR_FLAG="${{ inputs.year }}"
+          python scripts/upload_to_d1.py --data-dir data ${SYM_FLAG:+--symbol "$SYM_FLAG"} ${YR_FLAG:+--year "$YR_FLAG"}
         env:
           WORKER_URL: ${{ secrets.WORKER_URL }}
           D1_API_KEY: ${{ secrets.D1_API_KEY }}
