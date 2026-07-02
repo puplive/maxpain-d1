@@ -339,6 +339,7 @@ function _runCore(data, fullData, firstIdx, params, mult) {
   let prevCo = null, prevPo = null;
   let prevClose = firstIdx > 0 ? fullData[firstIdx - 1].c : data[0].c;
   let prevMp = firstIdx > 0 ? fullData[firstIdx - 1].mp : data[0].mp;
+  let prevGex = firstIdx > 0 ? (fullData[firstIdx - 1].gex || 0) : (data[0].gex || 0);
   let prevBec = null, prevBep = null, prevIvs = null;
   for (let i = preStart; i < firstIdx; i++) { mpHist.push(fullData[i].mp); priceHist.push(fullData[i].c); }
 
@@ -355,6 +356,14 @@ function _runCore(data, fullData, firstIdx, params, mult) {
       if (!exitPx) {
         const { dir: currDir } = emaDirection(mpHist, LBK, MIN_PCT);
         if (currDir !== pos.entryTrend && currDir !== null) { exitPx = px; reason = '方向反转'; }
+      }
+
+      if (!exitPx) {
+        const curGex = row.gex != null ? row.gex : 0;
+        if ((pos.direction === 'long' && prevGex > 0 && curGex < 0) ||
+            (pos.direction === 'short' && prevGex < 0 && curGex > 0)) {
+          exitPx = px; reason = 'GEX反转';
+        }
       }
 
       if (!exitPx) {
@@ -400,6 +409,9 @@ function _runCore(data, fullData, firstIdx, params, mult) {
         else if (td === 'short' && _currMp >= _prevMp) td = null;
       }
       if (td) {
+        if ((td === 'long' && prevGex <= 0) || (td === 'short' && prevGex >= 0)) td = null;
+      }
+      if (td) {
           const dn = op * mult * MR;
           if (dn > 0) {
             let alloc = eq * MAX_POS;
@@ -441,6 +453,7 @@ function _runCore(data, fullData, firstIdx, params, mult) {
     prevCo = co; prevPo = po;
     prevClose = px;
     prevMp = mp;
+    prevGex = row.gex != null ? row.gex : 0;
     prevBec = bec; prevBep = bep; prevIvs = ivs;
     eqCurve.push({ d, eq });
   }
