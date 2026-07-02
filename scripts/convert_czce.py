@@ -57,8 +57,8 @@ def calc_max_pain(opt_df):
 
 
 def calc_gex(opt_df, px, mult):
-    """计算总 Gamma Exposure (GEX)
-    GEX = Σ (gamma_i × OI_i × mult × S)
+    """计算净 Gamma Exposure (GEX) = Σ call_GEX - Σ put_GEX
+    正值=看涨gamma主导，负值=看跌gamma主导，零值附近=平衡
     gamma_i 由 BS 公式计算，假设 r=0, T=30/365
     """
     total = 0.0
@@ -68,12 +68,14 @@ def calc_gex(opt_df, px, mult):
         iv = row.get('iv', 0)
         oi = row.get('oi', 0)
         K = row.get('strike', 0)
+        cp = row.get('type', 'C')
         if pd.isna(iv) or iv <= 1e-6 or oi <= 0 or K <= 0:
             continue
         d1 = (np.log(px / K) + 0.5 * iv**2 * T) / (iv * sqrt_T)
         pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
         gamma = pdf / (px * iv * sqrt_T)
-        total += gamma * oi * mult * px
+        g = gamma * oi * mult * px
+        total += g if cp == 'C' else -g
     return round(total, 2)
 
 
@@ -305,7 +307,7 @@ def main():
     if output:
         out = DATA_DIR / f'{year}.json'
         # 合并到已有文件（追加/更新，不丢失旧数据）
-        if out.exists():
+        if out.exists() and out.stat().st_size > 0:
             existing = json.loads(out.read_text())
         else:
             existing = {}

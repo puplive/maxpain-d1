@@ -148,7 +148,7 @@ tr:hover td { background: #1a2a3a; }
 </div>
 
 <script>
-const API_BASE = 'https://api.starrysay.com';
+const API_BASE = 'data/';
 const SYM_CFG = {
   // CZCE
   TA: { name: 'PTA',     mult: 5 },
@@ -209,12 +209,11 @@ let defaultParams = {};
 
 async function loadData(symbol) {
   const status = document.getElementById('dataStatus');
-  status.textContent = '加载 ' + symbol + ' 数据...';
+  status.textContent = '加载 ' + symbol + ' ...';
   try {
-    const resp = await fetch(API_BASE + '/api/data?symbol=' + symbol);
+    const resp = await fetch(API_BASE + symbol + '.json');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const json = await resp.json();
-    const data = json.data || [];
+    const data = await resp.json();
     if (data.length === 0) {
       status.textContent = symbol + ' 数据为空';
       return [];
@@ -233,10 +232,10 @@ async function loadAllData() {
   const sel = document.getElementById('symbol');
   status.textContent = '加载品种列表...';
 
-  // 查询 DB 已有品种，回退到全部
+  // 本地 data/index.json 获取品种列表
   let symbols;
   try {
-    const resp = await fetch(API_BASE + '/api/symbols');
+    const resp = await fetch(API_BASE + 'index.json');
     const result = await resp.json();
     symbols = (result.symbols || []).filter(s => SYM_CFG[s]);
   } catch {
@@ -879,9 +878,9 @@ function drawChart(data, trades, params, stopCurve) {
   const n = data.length;
 
   const subCanvas = document.getElementById('subChart');
-  var _subDiff, _subSkewD, _subMinD, _subMaxD, _subMinS, _subMaxS;
+  var _subGex, _subSkewD, _subMinG, _subMaxG, _subMinS, _subMaxS;
   var _subVr, _subMinV, _subMaxV;
-  const subVis = { diff: true, skew: true, vr: true };
+  const subVis = { gex: true, skew: false, vr: false };
   if (subCanvas) {
     subCanvas.width = W * dpr;
     subCanvas.height = 110 * dpr;
@@ -890,32 +889,32 @@ function drawChart(data, trades, params, stopCurve) {
     const sctx = subCanvas.getContext('2d');
     sctx.scale(dpr, dpr);
 
-    _subDiff = new Float64Array(n);
+    _subGex = new Float64Array(n);
     _subSkewD = new Float64Array(n);
     _subVr = new Float64Array(n);
     var _prevSk = null;
-    _subMinD = Infinity; _subMaxD = -Infinity;
+    _subMinG = Infinity; _subMaxG = -Infinity;
     _subMinS = Infinity; _subMaxS = -Infinity;
     _subMinV = Infinity; _subMaxV = -Infinity;
     for (let i = 0; i < n; i++) {
       const r = data[i];
-      const d = r.c - r.mp;
+      const g = r.gex != null ? r.gex : 0;
       const sk = (r.co - r.po) / (r.co + r.po + 1e-10);
       const sd = _prevSk !== null ? sk - _prevSk : 0;
       const v = r.vr != null ? r.vr : 1;
-      _subDiff[i] = d;
+      _subGex[i] = g;
       _subSkewD[i] = sd;
       _subVr[i] = v;
-      if (d < _subMinD) _subMinD = d;
-      if (d > _subMaxD) _subMaxD = d;
+      if (g < _subMinG) _subMinG = g;
+      if (g > _subMaxG) _subMaxG = g;
       if (sd < _subMinS) _subMinS = sd;
       if (sd > _subMaxS) _subMaxS = sd;
       if (v < _subMinV) _subMinV = v;
       if (v > _subMaxV) _subMaxV = v;
       _prevSk = sk;
     }
-    const dr = _subMaxD - _subMinD || 1;
-    _subMinD -= dr * 0.1; _subMaxD += dr * 0.1;
+    const gr = _subMaxG - _subMinG || 1;
+    _subMinG -= gr * 0.1; _subMaxG += gr * 0.1;
     const sr = _subMaxS - _subMinS || 1;
     _subMinS -= sr * 0.1; _subMaxS += sr * 0.1;
     const vr = _subMaxV - _subMinV || 1;
@@ -1010,7 +1009,7 @@ function drawChart(data, trades, params, stopCurve) {
       <div class="row"><span class="label">COI/POI</span><span class="val" style="font-size:11px">' + Math.round(row.co).toLocaleString() + ' / ' + Math.round(row.po).toLocaleString() + '</span></div>\
       <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">OI偏度</span><span class="val ' + (oiSkew>0?'pos':'neg') + '">' + oiSkew + '% <span style="font-size:11px;' + (absSkew < 0.3 ? (parseFloat(oiSkew)>0?'color:#5cd85a':'color:#ff6b6b') : 'color:#e8c84a') + '">' + oiDir + '</span></span></div>\
       <div class="row"><span class="label">IV偏斜 / 量比</span><span class="val" style="font-size:11px"><span class="' + (row.ivs < 0 ? 'pos' : 'neg') + '">' + (row.ivs != null ? row.ivs.toFixed(1) : '-') + '</span> / ' + (row.vr != null ? row.vr.toFixed(2) : '-') + (vrDir ? '<span style="font-size:10px;' + (row.vr>1?'color:#5cd85a':'color:#ff6b6b') + '">' + vrDir + '</span>' : '') + '</span></div>\
-      <div class="row"><span class="label">GEX</span><span class="val" style="font-size:11px;color:#a55eea">' + (row.gex != null ? row.gex.toLocaleString('zh-CN',{maximumFractionDigits:0}) : '-') + '</span></div>\
+      <div class="row"><span class="label">GEX</span><span class="val ' + (row.gex>0?'pos':'neg') + '" style="font-size:11px">' + (row.gex != null ? row.gex.toLocaleString('zh-CN',{maximumFractionDigits:0}) : '-') + '</span></div>\
       ' + (stopCurve && stopCurve[idx] && (stopCurve[idx].stop !== null || stopCurve[idx].breakLevel != null) ? '<div class="row"><span class="label">止损/结构</span><span class="val" style="font-size:11px">' + (stopCurve[idx].stop !== null ? '<span style="color:#ff9f43">' + stopCurve[idx].stop.toFixed(0) + '</span>' : '-') + ' / ' + (stopCurve[idx].breakLevel != null ? '<span style="color:#a55eea">' + stopCurve[idx].breakLevel.toFixed(0) + '</span>' : '-') + '</span></div>' : '') + '\
       ' + beCrossHtml + sigHtml + posHtml + '\
     ';
@@ -1389,7 +1388,7 @@ function drawChart(data, trades, params, stopCurve) {
         sctx.beginPath(); sctx.moveTo(pad.left, y); sctx.lineTo(W - spad.right, y); sctx.stroke();
       }
 
-      const zy = s2y(0, _subMinD, _subMaxD);
+      const zy = s2y(0, _subMinG, _subMaxG);
       if (zy >= spad.top && zy <= spad.top + sch) {
         sctx.save();
         sctx.setLineDash([3, 3]);
@@ -1400,47 +1399,60 @@ function drawChart(data, trades, params, stopCurve) {
         sctx.restore();
       }
 
-      sctx.fillStyle = '#576574';
-      sctx.font = '10px sans-serif';
-      sctx.textAlign = 'right';
-      for (let i = 0; i <= 4; i++) {
-        const v = _subMinD + (_subMaxD - _subMinD) / 4 * i;
-        const y = spad.top + (sch / 4) * (4 - i);
-        sctx.fillText(v.toFixed(0), pad.left - 4, y + 3);
-      }
-
-      sctx.textAlign = 'left';
-      for (let i = 0; i <= 4; i++) {
-        const v = _subMinS + (_subMaxS - _subMinS) / 4 * i;
-        const y = spad.top + (sch / 4) * (4 - i);
-        sctx.fillStyle = '#e8c84a';
-        sctx.fillText((v * 100).toFixed(1) + '%', W - spad.right + 4, y + 3);
-      }
-
-      sctx.textAlign = 'left';
-      for (let i = 0; i <= 4; i++) {
-        const v = _subMinV + (_subMaxV - _subMinV) / 4 * i;
-        const y = spad.top + (sch / 4) * (4 - i);
-        sctx.fillStyle = '#5cd85a';
-        sctx.fillText(v.toFixed(2), W - 4, y + 3);
-      }
-
-      if (subVis.diff) {
-        sctx.strokeStyle = '#54a0ff';
-        sctx.lineWidth = 1.5;
-        sctx.beginPath();
-        let started = false;
-        for (let i = start; i < end && i < n; i++) {
-          const x = toX(i);
-          const y = s2y(_subDiff[i], _subMinD, _subMaxD);
-          if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
+      if (subVis.gex) {
+        sctx.fillStyle = '#576574';
+        sctx.font = '10px sans-serif';
+        sctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+          const v = _subMinG + (_subMaxG - _subMinG) / 4 * i;
+          const y = spad.top + (sch / 4) * (4 - i);
+          let label;
+          if (Math.abs(v) >= 1e6) label = (v / 1e6).toFixed(1) + 'M';
+          else if (Math.abs(v) >= 1e3) label = (v / 1e3).toFixed(0) + 'K';
+          else label = v.toFixed(0);
+          sctx.fillText(label, pad.left - 4, y + 3);
         }
-        sctx.stroke();
       }
 
       if (subVis.skew) {
-        sctx.strokeStyle = '#e8c84a';
-        sctx.lineWidth = 1.5;
+        sctx.textAlign = 'left';
+        for (let i = 0; i <= 4; i++) {
+          const v = _subMinS + (_subMaxS - _subMinS) / 4 * i;
+          const y = spad.top + (sch / 4) * (4 - i);
+          sctx.fillStyle = '#48dbfb';
+          sctx.fillText((v * 100).toFixed(1) + '%', W - spad.right + 4, y + 3);
+        }
+      }
+
+      if (subVis.vr) {
+        sctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+          const v = _subMinV + (_subMaxV - _subMinV) / 4 * i;
+          const y = spad.top + (sch / 4) * (4 - i);
+          sctx.fillStyle = '#ff9f43';
+          sctx.fillText(v.toFixed(2), W - 8, y + 3);
+        }
+      }
+
+      if (subVis.gex) {
+        for (let i = start; i < end && i < n; i++) {
+          const g = _subGex[i];
+          if (g === 0) continue;
+          const x = toX(i);
+          const y0 = s2y(0, _subMinG, _subMaxG);
+          const y1 = s2y(g, _subMinG, _subMaxG);
+          const bw = Math.max(1, state.barW * 0.5);
+          sctx.fillStyle = g > 0 ? '#5cd85a' : '#ff6b6b';
+          sctx.globalAlpha = 0.6;
+          sctx.fillRect(x - bw / 2, Math.min(y0, y1), bw, Math.abs(y1 - y0));
+          sctx.globalAlpha = 1;
+        }
+      }
+
+      if (subVis.skew) {
+        sctx.strokeStyle = '#48dbfb';
+        sctx.lineWidth = 1;
+        sctx.setLineDash([2, 2]);
         sctx.beginPath();
         started = false;
         for (let i = start; i < end && i < n; i++) {
@@ -1449,11 +1461,13 @@ function drawChart(data, trades, params, stopCurve) {
           if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
         }
         sctx.stroke();
+        sctx.setLineDash([]);
       }
 
       if (subVis.vr) {
-        sctx.strokeStyle = '#5cd85a';
-        sctx.lineWidth = 1.5;
+        sctx.strokeStyle = '#ff9f43';
+        sctx.lineWidth = 1;
+        sctx.setLineDash([2, 2]);
         sctx.beginPath();
         started = false;
         for (let i = start; i < end && i < n; i++) {
@@ -1462,6 +1476,7 @@ function drawChart(data, trades, params, stopCurve) {
           if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
         }
         sctx.stroke();
+        sctx.setLineDash([]);
       }
 
       sctx.font = '10px sans-serif';
@@ -1484,9 +1499,9 @@ function drawChart(data, trades, params, stopCurve) {
         sctx.fillStyle = on ? '#c8d6e5' : '#576574';
         sctx.fillText(label, x + 14, legY + 13);
       }
-      drawLegItem(pad.left + 4, '#54a0ff', '收盘-MP', 'diff');
-      drawLegItem(pad.left + 84, '#e8c84a', 'OI偏度差', 'skew');
-      drawLegItem(pad.left + 164, '#5cd85a', '成交量比', 'vr');
+      drawLegItem(pad.left + 4, '#a55eea', 'GEX', 'gex');
+      drawLegItem(pad.left + 84, '#48dbfb', 'OI偏度差', 'skew');
+      drawLegItem(pad.left + 164, '#ff9f43', '成交量比', 'vr');
 
       if (state.hoverIdx >= start && state.hoverIdx < end) {
         const hx = toX(state.hoverIdx);
@@ -1498,24 +1513,24 @@ function drawChart(data, trades, params, stopCurve) {
         sctx.setLineDash([]);
 
         const hi = state.hoverIdx;
-        const dv = _subDiff[hi];
+        const gv = _subGex[hi];
         const sv = _subSkewD[hi] * 100;
         const vv = _subVr[hi];
         sctx.font = '10px sans-serif';
         sctx.textAlign = 'left';
         let hoverY = spad.top + 14;
-        if (subVis.diff) {
-          sctx.fillStyle = '#54a0ff';
-          sctx.fillText((dv > 0 ? '+' : '') + dv.toFixed(0), hx + 4, hoverY);
+        if (subVis.gex) {
+          sctx.fillStyle = gv >= 0 ? '#5cd85a' : '#ff6b6b';
+          sctx.fillText('GEX: ' + (gv >= 0 ? '+' : '') + gv.toLocaleString('zh-CN',{maximumFractionDigits:0}), hx + 4, hoverY);
           hoverY += 12;
         }
         if (subVis.skew) {
-          sctx.fillStyle = '#e8c84a';
+          sctx.fillStyle = '#48dbfb';
           sctx.fillText((sv > 0 ? '+' : '') + sv.toFixed(1) + '%', hx + 4, hoverY);
           hoverY += 12;
         }
         if (subVis.vr) {
-          sctx.fillStyle = '#5cd85a';
+          sctx.fillStyle = '#ff9f43';
           sctx.fillText('VR:' + vv.toFixed(2), hx + 4, hoverY);
         }
         sctx.restore();
@@ -1544,7 +1559,7 @@ function drawChart(data, trades, params, stopCurve) {
     const idx = getBarIdx(e.clientX);
     if (state.dragging) {
       const dx = getDataX(e.clientX) - state.dragStartX;
-      state.start = Math.max(0, Math.min(n - getVisibleCount() + 10, state.dragStartIdx - dx / state.barW));
+      state.start = Math.max(0, Math.min(n - getVisibleCount() + 60, state.dragStartIdx - dx / state.barW));
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
     } else {
       if (idx !== state.hoverIdx) {
@@ -1572,7 +1587,7 @@ function drawChart(data, trades, params, stopCurve) {
     const idxUnderMouse = state.start + mx / state.barW;
     const zoom = e.deltaY > 0 ? 0.85 : 1.18;
     const newBarW = Math.max(2, Math.min(40, state.barW * zoom));
-    state.start = Math.max(0, Math.min(n - Math.ceil(cw / newBarW) + 10, idxUnderMouse - mx / newBarW));
+    state.start = Math.max(0, Math.min(n - Math.ceil(cw / newBarW) + 60, idxUnderMouse - mx / newBarW));
     state.barW = newBarW;
     render();
   };
@@ -1597,7 +1612,7 @@ function drawChart(data, trades, params, stopCurve) {
     if (e.touches.length === 1 && state.dragging) {
       const touch = e.touches[0];
       const dx = getDataX(touch.clientX) - state.dragStartX;
-      state.start = Math.max(0, Math.min(n - getVisibleCount() + 10, state.dragStartIdx - dx / state.barW));
+      state.start = Math.max(0, Math.min(n - getVisibleCount() + 60, state.dragStartIdx - dx / state.barW));
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
       const idx = getBarIdx(touch.clientX);
       if (idx !== state.hoverIdx) {
@@ -1613,7 +1628,7 @@ function drawChart(data, trades, params, stopCurve) {
       const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - br.left;
       const idxUnderMouse = state.start + mx / state.barW;
       const newBarW = Math.max(2, Math.min(40, state.barW * scale));
-      state.start = Math.max(0, Math.min(n - Math.ceil(cw / newBarW) + 10, idxUnderMouse - mx / newBarW));
+      state.start = Math.max(0, Math.min(n - Math.ceil(cw / newBarW) + 60, idxUnderMouse - mx / newBarW));
       state.barW = newBarW;
       state.pinchDist = dist;
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
@@ -1640,6 +1655,20 @@ function drawChart(data, trades, params, stopCurve) {
         render();
       }
     }, { passive: false });
+    subCanvas.addEventListener('click', function(e) {
+      const br = subCanvas.getBoundingClientRect();
+      const cx = e.clientX - br.left;
+      const cy = e.clientY - br.top;
+      const spad = { top: 12, bottom: 14, left: 60, right: 72 };
+      if (cy >= spad.top + 1 && cy <= spad.top + 22) {
+        const relX = cx - (pad.left + 4);
+        if (relX >= 0 && relX < 80) subVis.gex = !subVis.gex;
+        else if (relX >= 80 && relX < 160) subVis.skew = !subVis.skew;
+        else if (relX >= 160 && relX < 240) subVis.vr = !subVis.vr;
+        else return;
+        render();
+      }
+    });
   }
 
   render();

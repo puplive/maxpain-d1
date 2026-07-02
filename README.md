@@ -1,11 +1,13 @@
 # MaxPain D1 — 数据流水线
 
-GitHub Actions 手动触发从 AKShare 获取期货/期权数据，计算 Max Pain，写入 Cloudflare D1。
+GitHub Actions 手动触发从 AKShare 获取期货/期权数据，计算 Max Pain / GEX，写入 Cloudflare D1 或导出为前端静态 JSON。
 
 ## 架构
 
 ```
-AKShare / 官网 XLSX → Python 预处理 → Worker API → D1 数据库 → 前端查询
+                   ┌→ D1 数据库 → Worker API → (历史 API 路径)
+AKShare / 官网 XLSX ┤
+                   └→ data/*.json → build_web_data.py → web/data/*.json → 前端直接加载（当前路径）
 ```
 
 ## 交易所 & 数据来源
@@ -29,29 +31,56 @@ AKShare / 官网 XLSX → Python 预处理 → Worker API → D1 数据库 → �
 │   ├── upload_to_d1.py     # JSON → Worker API → D1
 │   ├── convert_dce_xlsx.py # DCE XLSX → data/dce/*.json
 │   ├── convert_shfe.py     # SHFE XLSX → data/shfe/*.json
+│   ├── convert_czce.py     # CZCE TXT → data/czce/*.json
+│   ├── build_web_data.py   # data/*/*.json → web/data/*.json（按品种拆分 + 计算衍生指标）
 │   └── requirements.txt
 ├── data/
+│   ├── czce/               # CZCE 预处理后的 JSON (按年)
 │   ├── dce/                # DCE 预处理后的 JSON (按年)
-│   │   └── 2026.json
 │   └── shfe/               # SHFE 预处理后的 JSON (按年)
-│       └── 2026.json
-├── file/                   # 官网下载的原始 XLSX (不入 git)
-│   ├── dce/
-│   │   ├── allVarietyFtr2026/
-│   │   └── allVarietyOpt2026/
-│   └── shfe/
-│       ├── fu2026/          # 期货
-│       └── opt2026/         # 期权
-├── worker/
-│   ├── wrangler.toml
-│   ├── schema.sql
-│   ├── package.json
-│   └── src/index.ts
+├── file/                   # 官网下载的原始 XLSX/TXT (不入 git)
+│   ├── czce/               # CZCE 官网 TXT
+│   ├── dce/                # DCE 官网 XLSX
+│   └── shfe/               # SHFE 官网 XLSX
+├── worker/                 # Cloudflare Worker (D1 API，当前不活跃使用)
 ├── web/
-│   ├── index.html          # 回测页面
-│   └── train.html          # 模拟训练
+│   ├── data/               # 前端静态数据（按品种拆分，由 build_web_data.py 生成）
+│   │   ├── index.json      # 品种列表
+│   │   ├── TA.json         # PTA
+│   │   ├── MA.json         # 甲醇
+│   │   └── ...
+│   ├── index.html          # 回测页面（从 web/data/ 加载静态 JSON）
+│   └── train.html          # 模拟训练（从 web/data/ 加载静态 JSON）
 └── CLAUDE.md               # 详细项目文档
 ```
+
+## 数据流
+
+```
+交易所官网 TXT/XLSX → 转换脚本 → data/{czce,dce,shfe}/*.json（按年拆分）
+                                       ↓
+                              build_web_data.py（跨年合并去重）
+                                       ↓
+                              web/data/{symbol}.json（按品种，全量数据）
+```
+
+前端（`index.html` / `train.html`）直接从 `web/data/` 目录加载 JSON 文件，不走 Worker API。适合 GitHub Pages 或任何静态托管。
+
+### 构建前端静态数据
+
+转换脚本跑完后，执行一次构建即可更新前端数据：
+
+```bash
+python scripts/build_web_data.py
+```
+
+流程：
+1. 读取 `data/` 下所有 `*.json`（不限目录层级、不限年份）
+2. 按品种+日期去重合并，排序后写入 `web/data/{symbol}.json`
+3. 同时生成 `web/data/index.json`（品种列表 + 合约乘数）
+4. 每个记录包含：`d, o, c, h, l, mp, co, po, bec, bep, vr, ivs, gex`
+
+> 前端所有计算（MP 趋势、OI 偏度、信号判定等）均在浏览器端完成，数据文件只提供原始指标。
 
 ## 日常操作
 
@@ -70,6 +99,12 @@ python scripts/convert_czce.py --date 2026            # 全年
 python scripts/convert_czce.py --date 202606          # 某月
 python scripts/convert_czce.py --date 20260629        # 某天
 python scripts/convert_czce.py --date 20260629 --symbol TA  # 单品种
+```
+
+转换后执行以下命令更新前端数据：
+
+```bash
+python scripts/build_web_data.py                      # 刷新 web/data/
 ```
 
 ### DCE 数据更新（手动下载 + Workflow 上传）
@@ -93,7 +128,13 @@ python scripts/convert_dce_xlsx.py --date 20260629          # 某天
 python scripts/convert_dce_xlsx.py --date 20260629 --symbol M  # 单品种
 ```
 
-然后 GitHub Actions → Daily Data Update → Run workflow：
+转换后执行以下命令更新前端数据：
+
+```bash
+python scripts/build_web_data.py                      # 刷新 web/data/
+```
+
+也可通过 GitHub Actions → Daily Data Update → Run workflow 上传到 D1：
 - mode: `full`
 - data_source: `local`
 - symbol: 空=全部，或指定如 `M,C,I`
@@ -106,11 +147,11 @@ python scripts/convert_dce_xlsx.py --date 20260629 --symbol M  # 单品种
 #    期货放 file/shfe/fu2026/，期权放 file/shfe/opt2026/
 
 # 2. 转为 JSON
-python scripts/convert_shfe.py --date 2026          # 全年
-python scripts/convert_shfe.py --date 20260629      # 某天
-```
+python scripts/convert_shfe.py --year 2026          # 全年
 
-然后 Workflow 同 DCE，`data_source: local` 会自动读取 `data/shfe/` 下 JSON。
+# 3. 刷新前端数据
+python scripts/build_web_data.py
+```
 
 > ⚠️ SHFE 的 XLSX 缺少 Delta/隐含波动率字段，IV 偏斜(IVS)指标不可用。
 

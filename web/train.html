@@ -189,7 +189,7 @@ tr:hover td { background: #1a2a3a; }
 </div>
 
 <script>
-const API_BASE = 'https://api.starrysay.com';
+const API_BASE = 'data/';
 const SYM_CFG = {
   // CZCE
   TA: { name: 'PTA',     mult: 5 },
@@ -266,10 +266,9 @@ async function loadData(symbol) {
   const status = document.getElementById('status');
   status.textContent = '加载 ' + symbol + ' ...';
   try {
-    const resp = await fetch(API_BASE + '/api/data?symbol=' + symbol);
+    const resp = await fetch(API_BASE + symbol + '.json');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const json = await resp.json();
-    return json.data || [];
+    return await resp.json();
   } catch (e) {
     status.textContent = '加载失败: ' + e.message;
     return null;
@@ -281,10 +280,10 @@ async function loadAllData() {
   const sel = document.getElementById('symbol');
   status.textContent = '加载品种列表...';
 
-  // 查询 DB 已有品种，回退到全部
+  // 本地 data/index.json 获取品种列表
   let symbols;
   try {
-    const resp = await fetch(API_BASE + '/api/symbols');
+    const resp = await fetch(API_BASE + 'index.json');
     const result = await resp.json();
     symbols = (result.symbols || []).filter(s => SYM_CFG[s]);
   } catch {
@@ -971,7 +970,7 @@ function drawChart() {
       <div class="row"><span class="label">看涨BE / 看跌BE</span><span class="val" style="font-size:11px"><span style="color:#2ecc71">' + (r.bec != null ? r.bec.toFixed(0) : '-') + '</span> / <span style="color:#e74c3c">' + (r.bep != null ? r.bep.toFixed(0) : '-') + '</span></span></div>\
       <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">OI偏度</span><span class="val ' + (parseFloat(oiSkew) > 0 ? 'pos' : parseFloat(oiSkew) < 0 ? 'neg' : '') + '">' + oiSkew + '%</span></div>\
       <div class="row"><span class="label">量比 / IV偏斜</span><span class="val" style="font-size:11px">' + (r.vr != null ? r.vr.toFixed(2) : '-') + ' / ' + (r.ivs != null ? r.ivs.toFixed(1) : '-') + '</span></div>\
-      <div class="row"><span class="label">GEX</span><span class="val" style="font-size:11px;color:#a55eea">' + (r.gex != null ? Number(r.gex).toLocaleString('zh-CN',{maximumFractionDigits:0}) : '-') + '</span></div>\
+      <div class="row"><span class="label">GEX</span><span class="val ' + (row.gex>0?'pos':'neg') + '" style="font-size:11px">' + (r.gex != null ? Number(r.gex).toLocaleString('zh-CN',{maximumFractionDigits:0}) : '-') + '</span></div>\
       ' + sigHtml + '\
     ';
   }
