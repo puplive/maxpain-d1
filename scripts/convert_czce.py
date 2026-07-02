@@ -74,7 +74,7 @@ def calc_gex(opt_df, px, mult):
         d1 = (np.log(px / K) + 0.5 * iv**2 * T) / (iv * sqrt_T)
         pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
         gamma = pdf / (px * iv * sqrt_T)
-        g = gamma * oi * mult * px
+        g = gamma * oi * mult * px * px * 0.01
         total += g if cp == 'C' else -g
     return round(total, 2)
 
