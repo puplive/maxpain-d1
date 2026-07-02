@@ -22,6 +22,13 @@ CZCE_PREFIX_MAP = {
     'PX': 'PX', 'SH': 'SH', 'CY': 'CY',
 }
 
+CZCE_MULT = {
+    'TA': 5, 'MA': 10, 'SA': 20, 'SR': 10, 'CF': 5,
+    'RM': 10, 'OI': 10, 'PK': 5, 'PF': 5, 'SM': 5,
+    'SF': 5, 'UR': 20, 'AP': 10, 'CJ': 5, 'FG': 20,
+    'PX': 5, 'SH': 10,
+}
+
 
 def parse_opt_code(code: str):
     """CZCE 期权合约代码: TA602C4000 → (4000.0, 'C')"""
@@ -47,6 +54,27 @@ def calc_max_pain(opt_df):
         if val < best_val:
             best_val, best_s = val, s
     return int(best_s)
+
+
+def calc_gex(opt_df, px, mult):
+    """计算总 Gamma Exposure (GEX)
+    GEX = Σ (gamma_i × OI_i × mult × S)
+    gamma_i 由 BS 公式计算，假设 r=0, T=30/365
+    """
+    total = 0.0
+    T = 30 / 365
+    sqrt_T = np.sqrt(T)
+    for _, row in opt_df.iterrows():
+        iv = row.get('iv', 0)
+        oi = row.get('oi', 0)
+        K = row.get('strike', 0)
+        if pd.isna(iv) or iv <= 1e-6 or oi <= 0 or K <= 0:
+            continue
+        d1 = (np.log(px / K) + 0.5 * iv**2 * T) / (iv * sqrt_T)
+        pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
+        gamma = pdf / (px * iv * sqrt_T)
+        total += gamma * oi * mult * px
+    return round(total, 2)
 
 
 def calc_be(opt_df, px, is_call):
@@ -177,7 +205,7 @@ def load_all_options(year):
     return symbols
 
 
-def process_one(sym, fut, opt, date=None):
+def process_one(sym, fut, opt, date=None, mult=10):
     """从已过滤的 fut/opt df 计算指标"""
     if fut is None or opt is None:
         return {}
@@ -235,8 +263,9 @@ def process_one(sym, fut, opt, date=None):
         civ = o[(o['type'] == 'C') & (o['delta'].between(0.20, 0.30))]['iv'].mean()
         piv = o[(o['type'] == 'P') & (o['delta'].between(-0.30, -0.20))]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
+        gex = calc_gex(o, px, mult)
         result[date] = {'d': date, 'o': row['o'], 'c': px, 'h': row['h'], 'l': row['l'],
-                        'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs}
+                        'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex}
     return result
 
 
@@ -267,7 +296,7 @@ def main():
 
     output = {}
     for sym in sorted(all_syms):
-        entries = process_one(sym, fut_by_sym[sym], opt_by_sym[sym], date=date_filter)
+        entries = process_one(sym, fut_by_sym[sym], opt_by_sym[sym], date=date_filter, mult=CZCE_MULT.get(sym, 10))
         if entries:
             records = sorted(entries.values(), key=lambda r: r['d'])
             output[sym] = records

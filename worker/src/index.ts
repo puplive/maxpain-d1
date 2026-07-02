@@ -19,6 +19,7 @@ interface DailyRow {
   bep: number | null;
   vr: number | null;
   ivs: number | null;
+  gex: number | null;
   expiry: string;
   dte: number;
 }
@@ -38,6 +39,7 @@ function toFrontend(row: DailyRow) {
     bep: row.bep,
     vr: row.vr,
     ivs: row.ivs,
+    gex: row.gex,
     expiry: row.expiry,
     dte: row.dte,
   };
@@ -70,7 +72,7 @@ export default {
         });
       }
       const { results } = await env.DB.prepare(
-        'SELECT date,open,close,high,low,mp,co,po,bec,bep,vr,ivs,expiry,dte FROM daily_data WHERE symbol = ? ORDER BY date'
+        'SELECT date,open,close,high,low,mp,co,po,bec,bep,vr,ivs,gex,expiry,dte FROM daily_data WHERE symbol = ? ORDER BY date'
       ).bind(symbol).all<DailyRow>();
       const data = (results || []).map(toFrontend);
       return new Response(JSON.stringify({ data }), {
@@ -93,6 +95,7 @@ export default {
         mp: number; co?: number; po?: number;
         bec?: number | null; bep?: number | null;
         vr?: number | null; ivs?: number | null;
+        gex?: number | null;
         expiry?: string; dte?: number;
       }> } = await request.json();
 
@@ -106,8 +109,8 @@ export default {
 
       const stmt = env.DB.prepare(
         `INSERT OR REPLACE INTO daily_data
-         (symbol, date, open, close, high, low, mp, co, po, bec, bep, vr, ivs, expiry, dte)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (symbol, date, open, close, high, low, mp, co, po, bec, bep, vr, ivs, gex, expiry, dte)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
 
       const batch = data.map((r) =>
@@ -116,6 +119,7 @@ export default {
           r.co ?? 0, r.po ?? 0,
           r.bec ?? null, r.bep ?? null,
           r.vr ?? null, r.ivs ?? null,
+          r.gex ?? null,
           r.expiry ?? '', r.dte ?? 0
         )
       );

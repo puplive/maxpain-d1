@@ -26,6 +26,13 @@ DCE_SYMBOLS = {
     'LH': 'lh', 'LG': 'lg', 'JM': 'jm', 'FB': 'fb',
 }
 
+DCE_MULT = {
+    'M': 10, 'C': 10, 'L': 5, 'V': 5, 'PP': 5,
+    'I': 100, 'PG': 20, 'Y': 10, 'P': 10, 'A': 10,
+    'B': 10, 'EG': 10, 'EB': 5, 'JD': 5, 'CS': 10,
+    'LH': 16, 'LG': 90,
+}
+
 
 def parse_opt_code(code: str):
     m = re.search(r'[CP]-(\d+\.?\d*)$', str(code))
@@ -50,6 +57,24 @@ def calc_max_pain(opt_df):
         if val < best_val:
             best_val, best_s = val, s
     return int(best_s)
+
+
+def calc_gex(opt_df, px, mult):
+    """计算总 Gamma Exposure (GEX)"""
+    total = 0.0
+    T = 30 / 365
+    sqrt_T = np.sqrt(T)
+    for _, row in opt_df.iterrows():
+        iv = row.get('iv', 0)
+        oi = row.get('oi', 0)
+        K = row.get('strike', 0)
+        if pd.isna(iv) or iv <= 1e-6 or oi <= 0 or K <= 0:
+            continue
+        d1 = (np.log(px / K) + 0.5 * iv**2 * T) / (iv * sqrt_T)
+        pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
+        gamma = pdf / (px * iv * sqrt_T)
+        total += gamma * oi * mult * px
+    return round(total, 2)
 
 
 def calc_be(opt_df, px, is_call):
@@ -175,12 +200,13 @@ def process_symbol(sym, prefix, year, date=None):
         civ = opt[(opt['type'] == 'C') & (opt['delta'].between(0.20, 0.30))]['iv'].mean()
         piv = opt[(opt['type'] == 'P') & (opt['delta'].between(-0.30, -0.20))]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
+        gex = calc_gex(opt, px, DCE_MULT.get(sym, 10))
 
         result[dt] = {
             'd': dt, 'o': round(float(row['open']), 2), 'c': round(px, 2),
             'h': round(float(row['high']), 2), 'l': round(float(row['low']), 2),
             'mp': mp, 'co': co, 'po': po,
-            'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs,
+            'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex,
         }
 
     return result

@@ -971,6 +971,7 @@ function drawChart() {
       <div class="row"><span class="label">看涨BE / 看跌BE</span><span class="val" style="font-size:11px"><span style="color:#2ecc71">' + (r.bec != null ? r.bec.toFixed(0) : '-') + '</span> / <span style="color:#e74c3c">' + (r.bep != null ? r.bep.toFixed(0) : '-') + '</span></span></div>\
       <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">OI偏度</span><span class="val ' + (parseFloat(oiSkew) > 0 ? 'pos' : parseFloat(oiSkew) < 0 ? 'neg' : '') + '">' + oiSkew + '%</span></div>\
       <div class="row"><span class="label">量比 / IV偏斜</span><span class="val" style="font-size:11px">' + (r.vr != null ? r.vr.toFixed(2) : '-') + ' / ' + (r.ivs != null ? r.ivs.toFixed(1) : '-') + '</span></div>\
+      <div class="row"><span class="label">GEX</span><span class="val" style="font-size:11px;color:#a55eea">' + (r.gex != null ? Number(r.gex).toLocaleString('zh-CN',{maximumFractionDigits:0}) : '-') + '</span></div>\
       ' + sigHtml + '\
     ';
   }

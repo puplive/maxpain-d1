@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS daily_data (
   bep REAL,
   vr REAL,
   ivs REAL,
+  gex REAL,
   expiry TEXT,
   dte INTEGER,
   updated_at TEXT DEFAULT (datetime('now')),
