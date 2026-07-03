@@ -1378,6 +1378,22 @@ function drawChart(data, trades, params, stopCurve) {
       const sch = 110 - spad.top - spad.bottom;
       const s2y = (v, mn, mx) => spad.top + sch - (v - mn) / (mx - mn) * sch;
 
+      // 按可视范围重算 GEX/OI/VR scale，避免远端极端值压扁
+      let vMinG = Infinity, vMaxG = -Infinity, vMinS = Infinity, vMaxS = -Infinity, vMinV = Infinity, vMaxV = -Infinity;
+      for (let i = start; i < end && i < n; i++) {
+        const g = _subGex[i];
+        if (g !== 0) { if (g < vMinG) vMinG = g; if (g > vMaxG) vMaxG = g; }
+        const sd = _subSkewD[i];
+        if (sd !== 0) { if (sd < vMinS) vMinS = sd; if (sd > vMaxS) vMaxS = sd; }
+        const vv = _subVr[i];
+        if (vv !== 0) { if (vv < vMinV) vMinV = vv; if (vv > vMaxV) vMaxV = vv; }
+      }
+      if (vMinG === Infinity || vMinG === vMaxG) { vMinG = _subMinG; vMaxG = _subMaxG; }
+      else { const gr = vMaxG - vMinG || 1; vMinG -= gr * 0.1; vMaxG += gr * 0.1; }
+      if (vMinS === Infinity || vMinS === vMaxS) { vMinS = _subMinS; vMaxS = _subMaxS; }
+      else { const sr = vMaxS - vMinS || 1; vMinS -= sr * 0.1; vMaxS += sr * 0.1; }
+      if (vMinV === Infinity || vMinV === vMaxV) { vMinV = _subMinV; vMaxV = _subMaxV; }
+
       sctx.fillStyle = '#09131c';
       sctx.fillRect(0, 0, W, 110);
 
@@ -1388,7 +1404,7 @@ function drawChart(data, trades, params, stopCurve) {
         sctx.beginPath(); sctx.moveTo(pad.left, y); sctx.lineTo(W - spad.right, y); sctx.stroke();
       }
 
-      const zy = s2y(0, _subMinG, _subMaxG);
+      const zy = s2y(0, vMinG, vMaxG);
       if (zy >= spad.top && zy <= spad.top + sch) {
         sctx.save();
         sctx.setLineDash([3, 3]);
@@ -1404,7 +1420,7 @@ function drawChart(data, trades, params, stopCurve) {
         sctx.font = '10px sans-serif';
         sctx.textAlign = 'right';
         for (let i = 0; i <= 4; i++) {
-          const v = _subMinG + (_subMaxG - _subMinG) / 4 * i;
+          const v = vMinG + (vMaxG - vMinG) / 4 * i;
           const y = spad.top + (sch / 4) * (4 - i);
           let label;
           if (Math.abs(v) >= 1e6) label = (v / 1e6).toFixed(1) + 'M';
@@ -1417,7 +1433,7 @@ function drawChart(data, trades, params, stopCurve) {
       if (subVis.skew) {
         sctx.textAlign = 'left';
         for (let i = 0; i <= 4; i++) {
-          const v = _subMinS + (_subMaxS - _subMinS) / 4 * i;
+          const v = vMinS + (vMaxS - vMinS) / 4 * i;
           const y = spad.top + (sch / 4) * (4 - i);
           sctx.fillStyle = '#48dbfb';
           sctx.fillText((v * 100).toFixed(1) + '%', W - spad.right + 4, y + 3);
@@ -1427,7 +1443,7 @@ function drawChart(data, trades, params, stopCurve) {
       if (subVis.vr) {
         sctx.textAlign = 'right';
         for (let i = 0; i <= 4; i++) {
-          const v = _subMinV + (_subMaxV - _subMinV) / 4 * i;
+          const v = vMinV + (vMaxV - vMinV) / 4 * i;
           const y = spad.top + (sch / 4) * (4 - i);
           sctx.fillStyle = '#ff9f43';
           sctx.fillText(v.toFixed(2), W - 8, y + 3);
@@ -1439,8 +1455,8 @@ function drawChart(data, trades, params, stopCurve) {
           const g = _subGex[i];
           if (g === 0) continue;
           const x = toX(i);
-          const y0 = s2y(0, _subMinG, _subMaxG);
-          const y1 = s2y(g, _subMinG, _subMaxG);
+          const y0 = s2y(0, vMinG, vMaxG);
+          const y1 = s2y(g, vMinG, vMaxG);
           const bw = Math.max(1, state.barW * 0.5);
           sctx.fillStyle = g > 0 ? '#5cd85a' : '#ff6b6b';
           sctx.globalAlpha = 0.6;
@@ -1457,7 +1473,7 @@ function drawChart(data, trades, params, stopCurve) {
         started = false;
         for (let i = start; i < end && i < n; i++) {
           const x = toX(i);
-          const y = s2y(_subSkewD[i], _subMinS, _subMaxS);
+          const y = s2y(_subSkewD[i], vMinS, vMaxS);
           if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
         }
         sctx.stroke();
@@ -1472,7 +1488,7 @@ function drawChart(data, trades, params, stopCurve) {
         started = false;
         for (let i = start; i < end && i < n; i++) {
           const x = toX(i);
-          const y = s2y(_subVr[i], _subMinV, _subMaxV);
+          const y = s2y(_subVr[i], vMinV, vMaxV);
           if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
         }
         sctx.stroke();
