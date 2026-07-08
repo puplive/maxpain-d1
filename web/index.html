@@ -119,7 +119,7 @@ tr:hover td { background: #1a2a3a; }
   </div>
 
   <div class="params" id="paramBar">
-    <div class="param-group"><label>Lookback:</label><input type="number" id="p_lookback" value="21" min="5" max="60"></div>
+    <div class="param-group"><label>Lookback:</label><input type="number" id="p_lookback" value="5" min="5" max="60"></div>
     <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" value="0" min="0" max="10" step="0.1" class="wide"></div>
     <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" value="30" min="5" max="100" class="wide"></div>
     <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" value="15" min="5" max="50" class="wide"></div>
@@ -497,7 +497,7 @@ function runBacktest() {
   result.innerHTML = '<div class="loading">计算中...</div>';
 
   const params = {
-    lookback: parseInt(document.getElementById('p_lookback').value) || 21,
+    lookback: parseInt(document.getElementById('p_lookback').value) || 5,
     minPct: (parseFloat(document.getElementById('p_min_pct').value) || 1) / 100,
     maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 30) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
@@ -655,7 +655,7 @@ function runMonteCarlo() {
   if (data.length < 2) { alert('数据不足'); return; }
   const firstIdx = fullData.findIndex(r => r.d === data[0].d);
   const params = {
-    lookback: parseInt(document.getElementById('p_lookback').value) || 21,
+    lookback: parseInt(document.getElementById('p_lookback').value) || 5,
     minPct: (parseFloat(document.getElementById('p_min_pct').value) || 1) / 100,
     maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 30) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
@@ -773,7 +773,7 @@ function optimizeParam() {
   const firstIdx = fullData.findIndex(r => r.d === data[0].d);
 
   const p = {
-    lookback: parseInt(document.getElementById('p_lookback').value) || 21,
+    lookback: parseInt(document.getElementById('p_lookback').value) || 5,
     minPct: (parseFloat(document.getElementById('p_min_pct').value) || 1) / 100,
     maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 30) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
