@@ -400,6 +400,10 @@ function _runCore(data, fullData, firstIdx, params, mult) {
         else if (td === 'short' && _currMp >= _prevMp) td = null;
       }
       if (td) {
+        if (td === 'long' && prevBec !== null && op >= prevBec) td = null;
+        else if (td === 'short' && prevBep !== null && op <= prevBep) td = null;
+      }
+      if (td) {
           const dn = op * mult * MR;
           if (dn > 0) {
             let alloc = eq * MAX_POS;
