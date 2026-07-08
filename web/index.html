@@ -125,7 +125,7 @@ tr:hover td { background: #1a2a3a; }
     <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" value="15" min="5" max="50" class="wide"></div>
 <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="1.0" min="0" max="10" step="0.1" class="wide"></div>
       <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="75" min="0" max="100" step="5" class="wide"></div>
-      <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="2" min="0" max="10" step="1" class="wide"></div>
+      <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
       <div class="param-group"><label>动量天:</label><input type="number" id="p_mom" value="3" min="1" max="30" step="1" class="wide"></div>
 
     <div class="param-group"><label>本金:</label><input type="number" id="p_capital" value="100000" min="10000" step="10000" class="wide"></div>
@@ -505,7 +505,7 @@ function runBacktest() {
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
-    skipCount: parseInt(document.getElementById('p_skip').value) || 2,
+    skipCount: parseInt(document.getElementById('p_skip').value) || 0,
     momDays: parseInt(document.getElementById('p_mom').value) || 3,
   };
   params.mult = cfg.mult;
@@ -663,7 +663,7 @@ function runMonteCarlo() {
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
-    skipCount: parseInt(document.getElementById('p_skip').value) || 2,
+    skipCount: parseInt(document.getElementById('p_skip').value) || 0,
     momDays: parseInt(document.getElementById('p_mom').value) || 3,
   };
   params.mult = cfg.mult;
@@ -781,7 +781,7 @@ function optimizeParam() {
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
-    skipCount: parseInt(document.getElementById('p_skip').value) || 2,
+    skipCount: parseInt(document.getElementById('p_skip').value) || 0,
     momDays: parseInt(document.getElementById('p_mom').value) || 3,
     mult: cfg.mult,
   };
