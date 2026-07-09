@@ -992,6 +992,13 @@ function drawChart(data, trades, params, stopCurve) {
         nextDir = null;
       }
     }
+    // BE-MP 交叉信号（先定义，给后面覆盖判断用）
+    const beCross = beCrossMarkers.filter(m => m.idx === idx);
+    let beCrossHtml = '';
+    for (const bm of beCross) {
+      if (bm.type === 'bear') beCrossHtml += '<div class="sig" style="background:#e74c3c15;border:1px solid #e74c3c33;">▼ BE-MP交叉：看涨BE下穿MP 下跌信号</div>';
+      else beCrossHtml += '<div class="sig" style="background:#2ecc7115;border:1px solid #2ecc7133;">▲ BE-MP交叉：看跌BE上穿MP 上涨信号</div>';
+    }
     // BE-MP交叉信号覆盖
     if (nextDir && beCross.length) {
       for (const bm of beCross) {
@@ -1001,13 +1008,6 @@ function drawChart(data, trades, params, stopCurve) {
       }
     }
     const nextDirText = nextDir === 'long' ? '<span class="pos">多 ▲</span>' : nextDir === 'short' ? '<span class="neg">空 ▼</span>' : '<span style="color:#576574">—</span>';
-    // BE-MP 交叉信号
-    const beCross = beCrossMarkers.filter(m => m.idx === idx);
-    let beCrossHtml = '';
-    for (const bm of beCross) {
-      if (bm.type === 'bear') beCrossHtml += '<div class="sig" style="background:#e74c3c15;border:1px solid #e74c3c33;">▼ BE-MP交叉：看涨BE下穿MP 下跌信号</div>';
-      else beCrossHtml += '<div class="sig" style="background:#2ecc7115;border:1px solid #2ecc7133;">▲ BE-MP交叉：看跌BE上穿MP 上涨信号</div>';
-    }
     let sigHtml = '';
     const dayTrades = tradeByDate[row.d];
     if (dayTrades) {
