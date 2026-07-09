@@ -120,10 +120,10 @@ tr:hover td { background: #1a2a3a; }
 
   <div class="params" id="paramBar">
     <div class="param-group"><label>Lookback:</label><input type="number" id="p_lookback" value="5" min="5" max="60"></div>
-    <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" value="0" min="0" max="10" step="0.1" class="wide"></div>
-    <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" value="30" min="5" max="100" class="wide"></div>
+    <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" value="0.1" min="0" max="10" step="0.1" class="wide"></div>
+    <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" value="90" min="5" max="100" class="wide"></div>
     <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" value="15" min="5" max="50" class="wide"></div>
-<div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="1.0" min="0" max="10" step="0.1" class="wide"></div>
+<div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="0.2" min="0" max="10" step="0.1" class="wide"></div>
       <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="75" min="0" max="100" step="5" class="wide"></div>
       <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
       <div class="param-group"><label>动量天:</label><input type="number" id="p_mom" value="3" min="1" max="30" step="1" class="wide"></div>
@@ -498,10 +498,10 @@ function runBacktest() {
 
   const params = {
     lookback: parseInt(document.getElementById('p_lookback').value) || 5,
-    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 1) / 100,
-    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 30) / 100,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
-    beTh: (parseFloat(document.getElementById('p_be_th').value) || 1.0) / 100,
+    beTh: (parseFloat(document.getElementById('p_be_th').value) || 0.2) / 100,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
@@ -656,10 +656,10 @@ function runMonteCarlo() {
   const firstIdx = fullData.findIndex(r => r.d === data[0].d);
   const params = {
     lookback: parseInt(document.getElementById('p_lookback').value) || 5,
-    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 1) / 100,
-    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 30) / 100,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
-    beTh: (parseFloat(document.getElementById('p_be_th').value) || 1.0) / 100,
+    beTh: (parseFloat(document.getElementById('p_be_th').value) || 0.2) / 100,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
@@ -746,8 +746,8 @@ function runMonteCarlo() {
 
 const OPT_PARAMS = {
   lookback:   { label: 'Lookback',    range: [5, 60, 1] },
-  minPct:     { label: 'Min%',        range: [0.2, 5, 0.2], unit: '%' },
-  maxPos:     { label: '仓位%',       range: [5, 60, 2], unit: '%' },
+  minPct:     { label: 'Min%',        range: [0.1, 5, 0.2], unit: '%' },
+  maxPos:     { label: '仓位%',       range: [5, 100, 5], unit: '%' },
   beTh:       { label: '保本%',       range: [0, 5, 0.2], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 70, 5], unit: '%' },
   skipCount:  { label: '跳过次',      range: [0, 5, 1] },
@@ -774,10 +774,10 @@ function optimizeParam() {
 
   const p = {
     lookback: parseInt(document.getElementById('p_lookback').value) || 5,
-    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 1) / 100,
-    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 30) / 100,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
-    beTh: (parseFloat(document.getElementById('p_be_th').value) || 1.0) / 100,
+    beTh: (parseFloat(document.getElementById('p_be_th').value) || 0.2) / 100,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
