@@ -330,7 +330,33 @@ function calcATR(data, period) {
   }
   return atr;
 }
-function _runCore(data, fullData, firstIdx, params, mult) {
+function computeNextDirPred(fullData, params) {
+  const n = fullData.length, momDays = params.momDays || 3;
+  const preds = new Array(n).fill(null);
+  for (let i = 0; i < n; i++) {
+    const mpHist = fullData.slice(0, i + 1).map(r => r.mp);
+    const { dir: td } = emaDirection(mpHist, params.lookback, params.minPct);
+    let nd = null;
+    if (td === 'up') nd = 'long';
+    else if (td === 'down') nd = 'short';
+    if (nd && mpHist.length > momDays + 1) {
+      const cm = mpHist[mpHist.length - 1], pm = mpHist[mpHist.length - 1 - momDays];
+      if ((nd === 'long' && cm <= pm) || (nd === 'short' && cm >= pm)) nd = null;
+    }
+    if (nd) {
+      const r = fullData[i];
+      if ((nd === 'long' && r.bec !== null && r.c >= r.bec) || (nd === 'short' && r.bep !== null && r.c <= r.bep)) nd = null;
+    }
+    if (nd && i > 0) {
+      const prev = fullData[i-1], cur = fullData[i];
+      if (nd === 'long' && prev.bec != null && cur.bec != null && prev.bec > prev.mp && cur.bec <= cur.mp) nd = null;
+      if (nd === 'short' && prev.bep != null && cur.bep != null && prev.bep < prev.mp && cur.bep >= cur.mp) nd = null;
+    }
+    preds[i] = nd;
+  }
+  return preds;
+}
+function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
   const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, lockPct: LOCK_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP, momDays } = params;
   const preStart = Math.max(0, firstIdx - LBK);
   let eq = CAP, peakEq = CAP, maxDd = 0, pos = null;
@@ -383,25 +409,13 @@ function _runCore(data, fullData, firstIdx, params, mult) {
     }
 
     if (!pos && (reason === '' || reason === '方向反转')) {
-      const { dir: mpDir } = emaDirection(mpHist, LBK, MIN_PCT);
       let td = null;
-      if (mpDir === 'up') td = 'long';
-      else if (mpDir === 'down') td = 'short';
+      if (_di > 0) td = nextDirPred[_fullIdx - 1];
       if (td) {
         if ((td === 'long' && skipLong > 0) || (td === 'short' && skipShort > 0)) {
           if (td === 'long') skipLong--; else skipShort--;
           td = null;
         }
-      }
-      if (td && mpHist.length > momDays + 1) {
-        const _currMp = mpHist[mpHist.length - 1];  // yesterday
-        const _prevMp = mpHist[mpHist.length - 1 - momDays];
-        if (td === 'long' && _currMp <= _prevMp) td = null;
-        else if (td === 'short' && _currMp >= _prevMp) td = null;
-      }
-      if (td) {
-        if (td === 'long' && prevBec !== null && op >= prevBec) td = null;
-        else if (td === 'short' && prevBep !== null && op <= prevBep) td = null;
       }
       if (td) {
           const dn = op * mult * MR;
@@ -410,7 +424,7 @@ function _runCore(data, fullData, firstIdx, params, mult) {
             if (CAP_LIMIT > 0) alloc = Math.min(alloc, CAP_LIMIT);
             const qty = Math.floor(alloc / dn);
             if (qty >= 1) {
-              pos = { direction: td, entryPx: op, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: op, beActive: false, entryTrend: mpDir };
+              pos = { direction: td, entryPx: op, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: op, beActive: false, entryTrend: td === 'long' ? 'up' : 'down' };
             }
           }
       }
@@ -512,7 +526,8 @@ function runBacktest() {
   const MULT = cfg.mult;
 
   const firstIdx = fullData.findIndex(r => r.d === data[0].d);
-  const core = _runCore(data, fullData, firstIdx, params, MULT);
+  const nextDirPred = computeNextDirPred(fullData, params);
+  const core = _runCore(data, fullData, firstIdx, params, MULT, nextDirPred);
   const { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP } = core;
 
   if (trades.length === 0) {
@@ -609,7 +624,7 @@ function runBacktest() {
     <div class="section"><h2>全部交易</h2><table class="recent"><tr><th>入场</th><th>出场</th><th>方向</th><th class="num">手数</th><th class="num">开仓价</th><th class="num">平仓价</th><th class="num">PnL</th><th>原因</th><th class="num">持仓</th></tr>\
       ' + recent.map(t => '<tr><td>' + t.entry + '</td><td>' + t.exit + '</td><td>' + dirText(t.dir) + '</td><td class="num">' + t.qty + '</td><td class="num">' + t.entryPx.toFixed(0) + '</td><td class="num">' + t.exitPx.toFixed(0) + '</td><td class="num ' + cls(t.pnl) + '">' + fmt(Math.round(t.pnl)) + '</td><td>' + t.reason + '</td><td class="num">' + Math.round(t.hold) + '天</td></tr>').join('') + '</table></div>';
 
-  setTimeout(function() { try { drawChart(fullData, trades, params, stopCurve); } catch(e) { console.error(e); } try { drawEquityCurve(eqCurve, CAP); } catch(e) { console.error(e); } }, 50);
+  setTimeout(function() { try { drawChart(fullData, trades, params, stopCurve, nextDirPred); } catch(e) { console.error(e); } try { drawEquityCurve(eqCurve, CAP); } catch(e) { console.error(e); } }, 50);
 
   window._lastTrades = trades; window._lastParams = params; window._lastCAP = CAP;
   var capInfo = params.capLimit > 0 ? ' | 封顶' + fmt(params.capLimit) : '';
@@ -667,7 +682,8 @@ function runMonteCarlo() {
     momDays: parseInt(document.getElementById('p_mom').value) || 3,
   };
   params.mult = cfg.mult;
-  const core = _runCore(data, fullData, firstIdx, params, cfg.mult);
+  const nextDirPred = computeNextDirPred(fullData, params);
+  const core = _runCore(data, fullData, firstIdx, params, cfg.mult, nextDirPred);
   const trades = core.trades;
   if (!trades || trades.length < 10) { alert('交易笔数不足（至少10笔）'); return; }
   const result = document.getElementById('result');
@@ -801,7 +817,8 @@ function optimizeParam() {
       else if (paramKey === 'lockPct') pp.lockPct = v / 100;
       else if (paramKey === 'skipCount') pp.skipCount = v;
 
-      const core = _runCore(data, fullData, firstIdx, pp, cfg.mult);
+      const ppNextDir = computeNextDirPred(fullData, pp);
+      const core = _runCore(data, fullData, firstIdx, pp, cfg.mult, ppNextDir);
       if (core.trades.length === 0) continue;
       const wins = core.trades.filter(t => t.pnl > 0);
       const losses = core.trades.filter(t => t.pnl <= 0);
@@ -865,7 +882,7 @@ function resetParams() {
   document.getElementById('p_cap_limit').value = 0;
 }
 
-function drawChart(data, trades, params, stopCurve) {
+function drawChart(data, trades, params, stopCurve, nextDirPred) {
   const infoEl = document.getElementById('chartInfo');
   const canvas = document.getElementById('chart');
   if (!canvas) return;
@@ -976,38 +993,15 @@ function drawChart(data, trades, params, stopCurve) {
     const _becSlope = _becProj !== null ? (_becProj / (_becHist[_becHist.length - 1] || 1) * 100).toFixed(1) : null;
     const _closeSlope = _closeProj !== null ? (_closeProj / (_closeHist[_closeHist.length - 1] || 1) * 100).toFixed(1) : null;
     const spread = row.mp > 0 ? (row.c - row.mp) / row.mp : 0;
-    // 明日开仓方向
-    const momDays = params.momDays || 3;
-    let nextDir = null;
-    if (trendDir === 'up') nextDir = 'long';
-    else if (trendDir === 'down') nextDir = 'short';
-    if (nextDir && subHist.length > momDays + 1) {
-      const _cm = subHist[subHist.length - 1];
-      const _pm = subHist[subHist.length - 1 - momDays];
-      if ((nextDir === 'long' && _cm <= _pm) || (nextDir === 'short' && _cm >= _pm)) nextDir = null;
-    }
-    if (nextDir) {
-      if ((nextDir === 'long' && row.bec !== null && row.c >= row.bec) ||
-          (nextDir === 'short' && row.bep !== null && row.c <= row.bep)) {
-        nextDir = null;
-      }
-    }
-    // BE-MP 交叉信号（先定义，给后面覆盖判断用）
+    const nextDir = nextDirPred[idx];
+    const nextDirText = nextDir === 'long' ? '<span class="pos">多 ▲</span>' : nextDir === 'short' ? '<span class="neg">空 ▼</span>' : '<span style="color:#576574">—</span>';
+    // BE-MP 交叉信号
     const beCross = beCrossMarkers.filter(m => m.idx === idx);
     let beCrossHtml = '';
     for (const bm of beCross) {
       if (bm.type === 'bear') beCrossHtml += '<div class="sig" style="background:#e74c3c15;border:1px solid #e74c3c33;">▼ BE-MP交叉：看涨BE下穿MP 下跌信号</div>';
       else beCrossHtml += '<div class="sig" style="background:#2ecc7115;border:1px solid #2ecc7133;">▲ BE-MP交叉：看跌BE上穿MP 上涨信号</div>';
     }
-    // BE-MP交叉信号覆盖
-    if (nextDir && beCross.length) {
-      for (const bm of beCross) {
-        if ((bm.type === 'bear' && nextDir === 'long') || (bm.type === 'bull' && nextDir === 'short')) {
-          nextDir = null; break;
-        }
-      }
-    }
-    const nextDirText = nextDir === 'long' ? '<span class="pos">多 ▲</span>' : nextDir === 'short' ? '<span class="neg">空 ▼</span>' : '<span style="color:#576574">—</span>';
     let sigHtml = '';
     const dayTrades = tradeByDate[row.d];
     if (dayTrades) {
