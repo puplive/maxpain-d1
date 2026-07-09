@@ -976,6 +976,31 @@ function drawChart(data, trades, params, stopCurve) {
     const _becSlope = _becProj !== null ? (_becProj / (_becHist[_becHist.length - 1] || 1) * 100).toFixed(1) : null;
     const _closeSlope = _closeProj !== null ? (_closeProj / (_closeHist[_closeHist.length - 1] || 1) * 100).toFixed(1) : null;
     const spread = row.mp > 0 ? (row.c - row.mp) / row.mp : 0;
+    // 明日开仓方向
+    const momDays = params.momDays || 3;
+    let nextDir = null;
+    if (trendDir === 'up') nextDir = 'long';
+    else if (trendDir === 'down') nextDir = 'short';
+    if (nextDir && subHist.length > momDays + 1) {
+      const _cm = subHist[subHist.length - 1];
+      const _pm = subHist[subHist.length - 1 - momDays];
+      if ((nextDir === 'long' && _cm <= _pm) || (nextDir === 'short' && _cm >= _pm)) nextDir = null;
+    }
+    if (nextDir) {
+      if ((nextDir === 'long' && row.bec !== null && row.c >= row.bec) ||
+          (nextDir === 'short' && row.bep !== null && row.c <= row.bep)) {
+        nextDir = null;
+      }
+    }
+    // BE-MP交叉信号覆盖
+    if (nextDir && beCross.length) {
+      for (const bm of beCross) {
+        if ((bm.type === 'bear' && nextDir === 'long') || (bm.type === 'bull' && nextDir === 'short')) {
+          nextDir = null; break;
+        }
+      }
+    }
+    const nextDirText = nextDir === 'long' ? '<span class="pos">多 ▲</span>' : nextDir === 'short' ? '<span class="neg">空 ▼</span>' : '<span style="color:#576574">—</span>';
     // BE-MP 交叉信号
     const beCross = beCrossMarkers.filter(m => m.idx === idx);
     let beCrossHtml = '';
@@ -1014,6 +1039,7 @@ function drawChart(data, trades, params, stopCurve) {
       <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">OI偏度</span><span class="val ' + (oiSkew>0?'pos':'neg') + '">' + oiSkew + '% <span style="font-size:11px;' + (absSkew < 0.3 ? (parseFloat(oiSkew)>0?'color:#5cd85a':'color:#ff6b6b') : 'color:#e8c84a') + '">' + oiDir + '</span></span></div>\
       <div class="row"><span class="label">IV偏斜 / 量比</span><span class="val" style="font-size:11px"><span class="' + (row.ivs < 0 ? 'pos' : 'neg') + '">' + (row.ivs != null ? row.ivs.toFixed(1) : '-') + '</span> / ' + (row.vr != null ? row.vr.toFixed(2) : '-') + (vrDir ? '<span style="font-size:10px;' + (row.vr>1?'color:#5cd85a':'color:#ff6b6b') + '">' + vrDir + '</span>' : '') + '</span></div>\
       <div class="row"><span class="label">GEX</span><span class="val ' + (row.gex>0?'pos':'neg') + '" style="font-size:11px">' + (row.gex != null ? row.gex.toLocaleString('zh-CN',{maximumFractionDigits:0}) : '-') + '</span></div>\
+      <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">明日方向</span><span class="val" style="font-size:13px">' + nextDirText + '</span></div>\
       ' + (stopCurve && stopCurve[idx] && (stopCurve[idx].stop !== null || stopCurve[idx].breakLevel != null) ? '<div class="row"><span class="label">止损/结构</span><span class="val" style="font-size:11px">' + (stopCurve[idx].stop !== null ? '<span style="color:#ff9f43">' + stopCurve[idx].stop.toFixed(0) + '</span>' : '-') + ' / ' + (stopCurve[idx].breakLevel != null ? '<span style="color:#a55eea">' + stopCurve[idx].breakLevel.toFixed(0) + '</span>' : '-') + '</span></div>' : '') + '\
       ' + beCrossHtml + sigHtml + posHtml + '\
     ';
