@@ -3,6 +3,8 @@
 用法: python scripts/convert_shfe.py --year 2026
 """
 import argparse, json, os, re, sys, time
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 from pathlib import Path
 
 import numpy as np
@@ -216,15 +218,46 @@ def process_one(sym, fut, opt, mult=10):
     return result
 
 
+
+def upload_batch(symbol, records, worker_url, api_key, gh_token=''):
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {api_key}',
+        'X-GitHub-Token': gh_token,
+        'User-Agent': 'MaxPain/1.0',
+    }
+    payload = json.dumps({'symbol': symbol, 'data': records}).encode('utf-8')
+    req = Request(f'{worker_url}/api/update', data=payload, headers=headers, method='POST')
+    try:
+        with urlopen(req, timeout=120) as resp:
+            r = json.loads(resp.read())
+            if r.get('ok'):
+                return r['count']
+            print(f'    ⚠ {symbol}: {r}')
+    except HTTPError as e:
+        print(f'    ❌ {symbol}: HTTP {e.code}')
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--year', type=int, default=0)
+    parser.add_argument('--date', default='', help='2026(全年) / 202606(月) / 20260629(日)')
     parser.add_argument('--symbol', default='')
+    parser.add_argument('--upload', action='store_true', help='转换后直接上传到 D1')
+    parser.add_argument('--worker-url', default=os.getenv('WORKER_URL', 'https://api.starrysay.com'))
+    parser.add_argument('--api-key', default=os.getenv('D1_API_KEY', ''))
+    parser.add_argument('--gh-token', default=os.getenv('GH_UPLOAD_TOKEN', ''), help='GitHub Token')
     args = parser.parse_args()
 
+    if args.upload and not args.api_key:
+        print('❌ --upload 需要 D1_API_KEY 环境变量')
+        sys.exit(1)
+
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    years = sorted(set(int(d.name.replace('fu','')) for d in FILE_DIR.glob('fu*') if d.is_dir() and d.name.replace('fu','').isdigit()))
-    if args.year: years = [y for y in years if y == args.year]
+    date_filter = args.date if len(args.date) > 4 else None
+    target_year = int(args.date[:4]) if args.date else 0
+    all_years = sorted(set(int(d.name.replace('fu','')) for d in FILE_DIR.glob('fu*') if d.is_dir() and d.name.replace('fu','').isdigit()))
+    years = [y for y in all_years if not target_year or y == target_year]
 
     for year in years:
         t0 = time.time()
@@ -245,10 +278,48 @@ def main():
                 output[sym] = records
                 print(f'  {sym}: {len(records)} 天')
 
+        # 按 --date 精确过滤
+        if date_filter:
+            dl = len(date_filter)
+            if dl >= 8:  # YYYYMMDD
+                ds = f'{date_filter[:4]}-{date_filter[4:6]}-{date_filter[6:8]}'
+                for sym in list(output.keys()):
+                    output[sym] = [r for r in output[sym] if r['d'] == ds]
+                    if not output[sym]: del output[sym]
+            elif dl == 6:  # YYYYMM
+                ym = f'{date_filter[:4]}-{date_filter[4:6]}'
+                for sym in list(output.keys()):
+                    output[sym] = [r for r in output[sym] if r['d'].startswith(ym)]
+                    if not output[sym]: del output[sym]
+
         if output:
-            out = DATA_DIR / f'{year}.json'
-            out.write_text(json.dumps(output, ensure_ascii=False))
-            print(f'✅ {year}.json ({sum(len(v) for v in output.values())} 条, {len(output)} 品种, {time.time()-t0:.0f}s)')
+            out_path = DATA_DIR / f'{year}.json'
+            if out_path.exists():
+                existing = json.loads(out_path.read_text())
+            else:
+                existing = {}
+            for sym, records in output.items():
+                if sym not in existing:
+                    existing[sym] = records
+                else:
+                    by_date = {r['d']: i for i, r in enumerate(existing[sym])}
+                    for rec in records:
+                        if rec['d'] in by_date:
+                            existing[sym][by_date[rec['d']]] = rec
+                        else:
+                            existing[sym].append(rec)
+                    existing[sym].sort(key=lambda r: r['d'])
+            out_path.write_text(json.dumps(existing, ensure_ascii=False))
+            total = sum(len(v) for v in existing.values())
+            print(f'✅ {year}.json ({total} 条, {len(existing)} 品种, {time.time()-t0:.0f}s)')
+            if args.upload:
+                uploaded = 0
+                for sym, records in output.items():
+                    print(f'  ↗ {sym} ({len(records)} 条)...')
+                    for i in range(0, len(records), 500):
+                        n = upload_batch(sym, records[i:i+500], args.worker_url, args.api_key, args.gh_token)
+                        uploaded += n
+                print(f'  📤 已上传 {uploaded} 条到 D1')
 
     print(f'\n📦 data/shfe/')
 

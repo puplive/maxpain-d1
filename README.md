@@ -147,7 +147,10 @@ python scripts/build_web_data.py                      # 刷新 web/data/
 #    期货放 file/shfe/fu2026/，期权放 file/shfe/opt2026/
 
 # 2. 转为 JSON
-python scripts/convert_shfe.py --year 2026          # 全年
+python scripts/convert_shfe.py --date 2026          # 全年
+python scripts/convert_shfe.py --date 202606        # 某月
+python scripts/convert_shfe.py --date 20260629      # 某天
+python scripts/convert_shfe.py --date 202606 --upload  # 转换后直接上传 D1
 
 # 3. 刷新前端数据
 python scripts/build_web_data.py
