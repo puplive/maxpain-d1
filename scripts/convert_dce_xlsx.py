@@ -127,7 +127,21 @@ def process_symbol(sym, prefix, year, date=None):
     fut['high'] = pd.to_numeric(fut['最高价'], errors='coerce').fillna(0)
     fut['low'] = pd.to_numeric(fut['最低价'], errors='coerce').fillna(0)
 
+    # 解析合约月份，用于近月连续
+    fut['contract_ym'] = fut['合约名称'].str.extract(r'(\d{4})$')[0]
+
     fut_dates = {}
+    fut_nc = {}
+    for dt, group in fut.groupby('date'):
+        idx = group['volume'].idxmax()
+        row = group.loc[idx]
+        if row['close'] > 0:
+            fut_dates[dt] = row
+        # 近月连续：取成交量>0中交割月最早的
+        active = group[group['volume'] > 0]
+        if not active.empty:
+            front = active.sort_values('contract_ym').iloc[0]
+            fut_nc[dt] = float(front['close'])
     for dt, group in fut.groupby('date'):
         idx = group['volume'].idxmax()
         row = group.loc[idx]
@@ -207,6 +221,7 @@ def process_symbol(sym, prefix, year, date=None):
         result[dt] = {
             'd': dt, 'o': round(float(row['open']), 2), 'c': round(px, 2),
             'h': round(float(row['high']), 2), 'l': round(float(row['low']), 2),
+            'nc': round(fut_nc.get(dt, px), 2),
             'mp': mp, 'co': co, 'po': po,
             'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex,
         }

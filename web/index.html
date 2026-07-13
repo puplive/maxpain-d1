@@ -1069,8 +1069,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
     let minP = Infinity, maxP = -Infinity;
     for (let i = start; i < end; i++) {
       const row = data[i];
-      minP = Math.min(minP, row.l, row.mp, row.bec, row.bep);
-      maxP = Math.max(maxP, row.h, row.mp, row.bec, row.bep);
+      minP = Math.min(minP, row.l, row.mp, row.bec, row.bep, row.nc);
+      maxP = Math.max(maxP, row.h, row.mp, row.bec, row.bep, row.nc);
     }
     const range = maxP - minP || 1;
     const padP = range * 0.05;
@@ -1190,6 +1190,24 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
     ctx.globalAlpha = 1;
     ctx.setLineDash([]);
 
+    // 近月连续线
+    let hasAnyNc = false;
+    for (let i = start; i < end && i < n; i++) { if (data[i].nc != null) { hasAnyNc = true; break; } }
+    if (hasAnyNc) {
+      ctx.strokeStyle = '#a29bfe';
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      let ncStarted = false;
+      for (let i = start; i < end && i < n; i++) {
+        if (data[i].nc == null) { ncStarted = false; continue; }
+        const x = toX(i), y = toY(data[i].nc);
+        if (!ncStarted) { ctx.moveTo(x, y); ncStarted = true; } else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
     ctx.save();
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'left';
@@ -1197,7 +1215,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
     let lx = legX, ly = legY2;
     // 第一行：MP + BE线
     ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
-    ctx.fillStyle = '#c8d6e5'; ctx.fillText('MP', lx+20, ly+11); lx += 54;
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('MP', lx+20, ly+11); lx += 50;
+    ctx.strokeStyle = '#a29bfe'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('近月连续', lx+20, ly+11); lx += 70;
+    ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
     ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('看涨BE', lx+20, ly+11); lx += 80;
     ctx.setLineDash([4,3]); ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);

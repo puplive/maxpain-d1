@@ -29,7 +29,7 @@ SHFE_MULT = {
 
 
 def parse_opt_code(code):
-    m = re.search(r'([CP])(\d+\.?\d*)$', str(code))
+    m = re.search(r'\d{4,}([CP])(\d+\.?\d*)$', str(code))
     if m:
         return float(m.group(2)), m.group(1)
     m2 = re.search(r'(\d+\.?\d*)\s*(看涨|看跌|C|P)', str(code))
@@ -135,6 +135,9 @@ def load_all_futures(year):
     for c in ['开盘价','最高价','最低价','收盘价','成交量']:
         if c in df.columns: df[c] = _clean_num(df[c])
 
+    # 过滤掉期权合约（含 C/P 后缀的，如 SC2605C650）
+    df = df[df['合约'].str.match(r'^[A-Z]{1,2}\d+$', na=False)]
+
     symbols = {}
     for sym, grp in df.groupby(df['合约'].str.extract(r'^([A-Z]+)', expand=False)):
         if sym in SHFE_PREFIX_MAP and len(grp) > 10:
@@ -180,8 +183,14 @@ def process_one(sym, fut, opt, mult=10):
     """从已过滤的 fut/opt df 计算指标"""
     if fut is None or opt is None: return {}
 
+    # 解析合约月份用于近月连续
+    fut = fut.copy()
+    fut['contract_ym'] = fut['合约'].str.extract(r'(\d{4})$')[0]
+
     fut_dates = {}
+    fut_nc = {}
     for date, g in fut.groupby('date'):
+        vol_col = '成交量' if '成交量' in g.columns else None
         if '成交量' in g.columns:
             idx = g['成交量'].idxmax()
         else:
@@ -190,6 +199,14 @@ def process_one(sym, fut, opt, mult=10):
         if r.get('收盘价', 0) > 0:
             fut_dates[date] = {'o': float(r.get('开盘价', 0)), 'c': float(r.get('收盘价', 0)),
                                'h': float(r.get('最高价', 0)), 'l': float(r.get('最低价', 0))}
+        # 近月连续：取成交量>0中交割月最早的
+        if vol_col:
+            active = g[pd.to_numeric(g[vol_col], errors='coerce') > 0]
+        else:
+            active = g
+        if not active.empty:
+            front = active.sort_values('contract_ym').iloc[0]
+            fut_nc[date] = float(front.get('收盘价', 0))
 
     opt_by_date = {str(d): g for d, g in opt.groupby('date')}
 
@@ -213,7 +230,8 @@ def process_one(sym, fut, opt, mult=10):
         piv = o[(o['type'] == 'P') & (o['delta'].between(-0.30, -0.20))]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
         gex = calc_gex(o, px, mult)
-        result[date] = {'d': date, 'o': row['o'], 'c': px, 'h': row['h'], 'l': row['l'],
+        result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2),
+                        'h': row['h'], 'l': row['l'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex}
     return result
 

@@ -212,8 +212,14 @@ def process_one(sym, fut, opt, date=None, mult=10):
     if fut is None or opt is None:
         return {}
 
+    # 解析合约月份用于近月连续（CZCE 合约码如 TA601 → 601）
+    fut = fut.copy()
+    fut['contract_ym'] = fut['合约代码'].astype(str).str.extract(r'(\d{3})$')[0]
+
     fut_dates = {}
+    fut_nc = {}
     for date_i, g in fut.groupby('date'):
+        vol_col = '成交量(手)' if '成交量(手)' in g.columns else None
         if '成交量(手)' in g.columns:
             idx = g['成交量(手)'].idxmax()
         else:
@@ -222,6 +228,14 @@ def process_one(sym, fut, opt, date=None, mult=10):
         if r.get('今收盘', 0) > 0:
             fut_dates[date_i] = {'o': float(r.get('今开盘', 0)), 'c': float(r.get('今收盘', 0)),
                                  'h': float(r.get('最高价', 0)), 'l': float(r.get('最低价', 0))}
+        # 近月连续：取成交量>0中交割月最早的
+        if vol_col:
+            active = g[pd.to_numeric(g[vol_col], errors='coerce') > 0]
+        else:
+            active = g
+        if not active.empty:
+            front = active.sort_values('contract_ym').iloc[0]
+            fut_nc[date_i] = float(front.get('今收盘', 0))
 
     opt_by_date = {str(d): g for d, g in opt.groupby('date')}
 
@@ -266,7 +280,8 @@ def process_one(sym, fut, opt, date=None, mult=10):
         piv = o[(o['type'] == 'P') & (o['delta'].between(-0.30, -0.20))]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
         gex = calc_gex(o, px, mult)
-        result[date] = {'d': date, 'o': row['o'], 'c': px, 'h': row['h'], 'l': row['l'],
+        result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2),
+                        'h': row['h'], 'l': row['l'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex}
     return result
 
