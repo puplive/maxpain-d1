@@ -1194,8 +1194,6 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'left';
     const legX = pad.left + 8, legY2 = pad.top + 4;
-    ctx.fillStyle = '#1a2a3a';
-    ctx.fillRect(legX - 4, legY2 - 2, 360, 60);
     let lx = legX, ly = legY2;
     // 第一行：MP + BE线
     ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
