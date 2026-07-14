@@ -1779,6 +1779,11 @@ function toggleChartLine() {
 function drawEquityCurve(eqCurve, cap) {
   const canvas = document.getElementById('eqChart');
   if (!canvas || !eqCurve || eqCurve.length < 2) return;
+  if (!canvas._eqData) canvas._eqData = { hoverIdx: -1, curve: [], cap: 0 };
+  const data = canvas._eqData;
+  data.curve = eqCurve;
+  data.cap = cap;
+
   const W = canvas.clientWidth || 600;
   const H = 200;
   const dpr = window.devicePixelRatio || 1;
@@ -1790,34 +1795,77 @@ function drawEquityCurve(eqCurve, cap) {
   ctx.scale(dpr, dpr);
   const pad = { top: 20, right: 16, bottom: 28, left: 70 };
   const cw = W - pad.left - pad.right, ch = H - pad.top - pad.bottom;
-  let min = cap, max = cap;
-  for (const p of eqCurve) { if (p.eq < min) min = p.eq; if (p.eq > max) max = p.eq; }
-  const rng = max - min || 1, pr = rng * 0.05; min -= pr; max += pr;
-  const toX = i => pad.left + i / (eqCurve.length - 1) * cw;
-  const toY = v => pad.top + ch - (v - min) / (max - min) * ch;
-  ctx.fillStyle = '#0f1923'; ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = '#1a2a3a'; ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) { const y = pad.top + (ch / 4) * i; ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke(); }
-  ctx.fillStyle = '#576574'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
-  for (let i = 0; i <= 4; i++) ctx.fillText(Math.round(max - (rng / 4) * i).toLocaleString(), pad.left - 6, pad.top + (ch / 4) * i + 4);
-  ctx.strokeStyle = '#8395a7'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-  const capY = toY(cap); ctx.beginPath(); ctx.moveTo(pad.left, capY); ctx.lineTo(W - pad.right, capY); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle = '#8395a7'; ctx.textAlign = 'left'; ctx.font = '10px sans-serif'; ctx.fillText('本金', W - pad.right - 30, capY - 3);
-  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
-  grad.addColorStop(0, 'rgba(84, 160, 255, 0.12)'); grad.addColorStop(1, 'rgba(84, 160, 255, 0.01)');
-  ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(toX(0), toY(eqCurve[0].eq));
-  for (let i = 1; i < eqCurve.length; i++) ctx.lineTo(toX(i), toY(eqCurve[i].eq));
-  ctx.lineTo(toX(eqCurve.length - 1), pad.top + ch); ctx.lineTo(toX(0), pad.top + ch); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = '#54a0ff'; ctx.lineWidth = 1.5; ctx.beginPath();
-  for (let i = 0; i < eqCurve.length; i++) { const x = toX(i), y = toY(eqCurve[i].eq); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
-  ctx.stroke();
-  ctx.fillStyle = '#576574'; ctx.textAlign = 'center'; ctx.font = '10px sans-serif';
-  for (const di of [0, Math.floor(eqCurve.length / 2), eqCurve.length - 1]) ctx.fillText(eqCurve[di].d, toX(di), pad.top + ch + 16);
-  const last = eqCurve[eqCurve.length - 1].eq;
-  ctx.fillStyle = '#54a0ff'; ctx.textAlign = 'right'; ctx.font = 'bold 12px sans-serif';
-  ctx.fillText(Math.round(last).toLocaleString(), W - pad.right, pad.top - 4);
-  ctx.fillStyle = '#8395a7'; ctx.font = '11px sans-serif';
-  ctx.fillText((last / cap - 1 > 0 ? '+' : '') + (last / cap - 1).toFixed(1) + '%', W - pad.right, pad.top + 10);
+
+  function renderCurve(hoverIdx) {
+    const curve = data.curve;
+    const _cap = data.cap;
+    let min = _cap, max = _cap;
+    for (const p of curve) { if (p.eq < min) min = p.eq; if (p.eq > max) max = p.eq; }
+    const rng = max - min || 1; min -= rng * 0.05; max += rng * 0.05;
+    const toX = i => pad.left + i / (curve.length - 1) * cw;
+    const toY = v => pad.top + ch - (v - min) / (max - min) * ch;
+
+    ctx.fillStyle = '#0f1923'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#1a2a3a'; ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) { const y = pad.top + (ch / 4) * i; ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke(); }
+    ctx.fillStyle = '#576574'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+    for (let i = 0; i <= 4; i++) ctx.fillText(Math.round(max - (rng / 4) * i).toLocaleString(), pad.left - 6, pad.top + (ch / 4) * i + 4);
+    ctx.strokeStyle = '#8395a7'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+    const capY = toY(_cap); ctx.beginPath(); ctx.moveTo(pad.left, capY); ctx.lineTo(W - pad.right, capY); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#8395a7'; ctx.textAlign = 'left'; ctx.font = '10px sans-serif'; ctx.fillText('本金', W - pad.right - 30, capY - 3);
+    const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+    grad.addColorStop(0, 'rgba(84, 160, 255, 0.12)'); grad.addColorStop(1, 'rgba(84, 160, 255, 0.01)');
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(toX(0), toY(curve[0].eq));
+    for (let i = 1; i < curve.length; i++) ctx.lineTo(toX(i), toY(curve[i].eq));
+    ctx.lineTo(toX(curve.length - 1), pad.top + ch); ctx.lineTo(toX(0), pad.top + ch); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#54a0ff'; ctx.lineWidth = 1.5; ctx.beginPath();
+    for (let i = 0; i < curve.length; i++) { const x = toX(i), y = toY(curve[i].eq); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+    ctx.stroke();
+    ctx.fillStyle = '#576574'; ctx.textAlign = 'center'; ctx.font = '10px sans-serif';
+    for (const di of [0, Math.floor(curve.length / 2), curve.length - 1]) ctx.fillText(curve[di].d, toX(di), pad.top + ch + 16);
+    const last = curve[curve.length - 1].eq;
+    ctx.fillStyle = '#54a0ff'; ctx.textAlign = 'right'; ctx.font = 'bold 12px sans-serif';
+    ctx.fillText(Math.round(last).toLocaleString(), W - pad.right, pad.top - 4);
+    ctx.fillStyle = '#8395a7'; ctx.font = '11px sans-serif';
+    ctx.fillText((last / _cap - 1 > 0 ? '+' : '') + (last / _cap - 1).toFixed(1) + '%', W - pad.right, pad.top + 10);
+
+    if (hoverIdx >= 0 && hoverIdx < curve.length) {
+      const p = curve[hoverIdx];
+      const hx = toX(hoverIdx), hy = toY(p.eq);
+      ctx.save();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'rgba(200, 214, 229, 0.4)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(hx, pad.top); ctx.lineTo(hx, pad.top + ch); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pad.left, hy); ctx.lineTo(W - pad.right, hy); ctx.stroke();
+      ctx.setLineDash([]); ctx.restore();
+      ctx.fillStyle = '#1a2a3a'; ctx.fillRect(hx - 40, pad.top + ch + 2, 80, 18);
+      ctx.fillStyle = '#c8d6e5'; ctx.textAlign = 'center'; ctx.font = '10px sans-serif';
+      ctx.fillText(p.d, hx, pad.top + ch + 15);
+      const eqText = Math.round(p.eq).toLocaleString();
+      const eqW = ctx.measureText(eqText).width + 14;
+      ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - eqW, hy - 9, eqW, 18);
+      ctx.fillStyle = '#54a0ff'; ctx.textAlign = 'right'; ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(eqText, W - pad.right - 5, hy + 5);
+    }
+  }
+
+  renderCurve(-1);
+
+  if (!canvas._eqBound) {
+    canvas._eqBound = true;
+    canvas.addEventListener('mousemove', function(e) {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left - pad.left;
+      const curve = data.curve;
+      const idx = Math.round(mx / cw * (curve.length - 1));
+      data.hoverIdx = Math.max(0, Math.min(curve.length - 1, idx));
+      renderCurve(data.hoverIdx);
+    });
+    canvas.addEventListener('mouseleave', function() {
+      data.hoverIdx = -1;
+      renderCurve(-1);
+    });
+  }
 }
 
 window.onload = async function() {
