@@ -425,12 +425,12 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
             const qty = Math.floor(alloc / dn);
             if (qty >= 1) {
               pos = { direction: td, entryPx: op, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: op, beActive: false, entryTrend: td === 'long' ? 'up' : 'down' };
-              // 入场当天检查是否触发止损
+              // 入场当天用 prevClose 为基准检查止损（和后续逐日逻辑一致）
               const _emaChg2 = emaChange(mpHist, LBK);
               const _emaSlope2 = _emaChg2 !== null ? Math.abs(_emaChg2) : 0;
               const _trailPct2 = Math.max(MIN_PCT, BE_TH) * (1 + _emaSlope2 / 0.05);
               if (td === 'long') {
-                const stop2 = op * (1 - _trailPct2);
+                const stop2 = prevClose * (1 - _trailPct2);
                 if (lo < stop2) {
                   const pnl2 = (stop2 - op) * qty * mult;
                   trades.push({ entry: d, exit: d, entryPx: op, exitPx: stop2, dir: td, qty, pnl: pnl2 - 10 * qty * 2, reason: stop2 === op ? '保本出场' : '止损', entryReason: '趋势多', hold: 0 });
@@ -438,7 +438,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
                   pos = null;
                 }
               } else {
-                const stop2 = op * (1 + _trailPct2);
+                const stop2 = prevClose * (1 + _trailPct2);
                 if (hi > stop2) {
                   const pnl2 = (op - stop2) * qty * mult;
                   trades.push({ entry: d, exit: d, entryPx: op, exitPx: stop2, dir: td, qty, pnl: pnl2 - 10 * qty * 2, reason: stop2 === op ? '保本出场' : '止损', entryReason: '趋势空', hold: 0 });
