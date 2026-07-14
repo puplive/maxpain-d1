@@ -581,6 +581,12 @@ function runBacktest() {
   const firstIdx = fullData.findIndex(r => r.d === data[0].d);
   const nextDirPred = computeNextDirPred(fullData, params);
   const core = _runCore(data, fullData, firstIdx, params, MULT, nextDirPred);
+  // Pre-compute analysis for every candle for dynamic hover
+  window._analysisCache = [];
+  for (let i = 0; i < data.length; i++) {
+    window._analysisCache[i] = genAnalysis(data, fullData, params, nextDirPred, trades || core.trades, i);
+  }
+  const _lastAnalysis = window._analysisCache[data.length - 1];
   const { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP } = core;
 
   // 明日方向准确率（1/3/5/10天）
@@ -687,7 +693,7 @@ function runBacktest() {
       <div class="stat-card"><div class="value" style="font-size:10px;line-height:1.4">' + dirAccText + '</div><div class="label">明日方向准确率</div></div>\
     </div>\
     <div class="chart-wrap"><h2>K线 & 信号 <span class="line-toggles" style="font-size:11px;font-weight:normal;display:inline-flex;gap:8px;margin-left:12px;align-items:center;vertical-align:middle;"><span style="color:#576574;">显示:</span><label style="cursor:pointer;"><input type="checkbox" id="t_mp" checked onchange="toggleChartLine()"> <span style="color:#e8c84a">MP</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bec" checked onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_ema" onchange="toggleChartLine()"> <span style="color:#54a0ff">EMA</span></label></span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
-    ' + genAnalysis(data, fullData, params, nextDirPred, trades) + '\
+    ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th></tr>' + yrHtml + '</table></div>\
     <div class="section"><h2>按退出原因</h2><table><tr><th>原因</th><th class="num">笔数</th><th class="num">占比</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">均持仓</th></tr>' + rsHtml + '</table></div>\
@@ -698,14 +704,15 @@ function runBacktest() {
     <div class="section"><h2>全部交易</h2><table class="recent"><tr><th>入场</th><th>出场</th><th>方向</th><th class="num">手数</th><th class="num">开仓价</th><th class="num">平仓价</th><th class="num">PnL</th><th>原因</th><th class="num">持仓</th></tr>\
       ' + recent.map(t => '<tr><td>' + t.entry + '</td><td>' + t.exit + '</td><td>' + dirText(t.dir) + '</td><td class="num">' + t.qty + '</td><td class="num">' + t.entryPx.toFixed(0) + '</td><td class="num">' + t.exitPx.toFixed(0) + '</td><td class="num ' + cls(t.pnl) + '">' + fmt(Math.round(t.pnl)) + '</td><td>' + t.reason + '</td><td class="num">' + Math.round(t.hold) + '天</td></tr>').join('') + '</table></div>';
 
-function genAnalysis(data, fullData, params, nextDirPred, trades) {
+function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx) {
   const n = data.length;
-  const r = data[n - 1];
-  const mpHist = data.map(x => x.mp);
+  const idx = targetIdx !== undefined ? targetIdx : n - 1;
+  const r = data[idx];
+  const mpHist = data.slice(0, idx + 1).map(x => x.mp);
   const { dir: trendDir } = emaDirection(mpHist, params.lookback, params.minPct);
   const lastPredIdx = fullData.findIndex(x => x.d === r.d);
   const nd = lastPredIdx >= 0 ? nextDirPred[lastPredIdx] : null;
-  const prevR = n > 1 ? data[n - 2] : null;
+  const prevR = idx > 0 ? data[idx - 1] : null;
   const oiTotal = r.co + r.po;
   const prevOiTotal = prevR ? prevR.co + prevR.po : 0;
   const oiDrop = prevOiTotal > 0 && oiTotal < prevOiTotal * 0.5;
@@ -733,7 +740,7 @@ function genAnalysis(data, fullData, params, nextDirPred, trades) {
   const skew = (r.co - r.po) / (r.co + r.po + 1e-10);
   const prevSkew = prevR ? (prevR.co - prevR.po) / (prevR.co + prevR.po + 1e-10) : 0;
   if (prevR) addFactor('OI偏度 ' + (skew > 0 ? '看涨OI占优' : '看跌OI占优') + '(变化' + (skew - prevSkew >= 0 ? '+' : '') + (skew - prevSkew).toFixed(3) + ')', skew > 0);
-  const prevCross = n > 1 ? data[n - 2] : null;
+  const prevCross = idx > 0 ? data[idx - 1] : null;
   if (prevCross && r.bec != null && prevCross.bec != null && r.mp != null && prevCross.mp != null) {
     if (prevCross.bec > prevCross.mp && r.bec <= r.mp) addFactor('看涨BE下穿MP(看跌信号)', false, 2);
     if (prevCross.bep < prevCross.mp && r.bep >= r.mp) addFactor('看跌BE上穿MP(看涨信号)', true, 2);
@@ -780,7 +787,8 @@ function genAnalysis(data, fullData, params, nextDirPred, trades) {
 
   // 关键事件(近10天)
   const evLookback = 10;
-  const evStart = Math.max(0, n - evLookback);
+  const evStart = Math.max(0, idx + 1 - evLookback);
+  const evEnd = idx + 1;
   const evTradeMap = {};
   if (trades) {
     for (const t of trades) {
@@ -791,7 +799,7 @@ function genAnalysis(data, fullData, params, nextDirPred, trades) {
     }
   }
   const evRows = [];
-  for (let i = evStart; i < n; i++) {
+  for (let i = evStart; i < evEnd; i++) {
     const d = data[i];
     const sub = data.slice(0, i + 1).map(x => x.mp);
     const { dir: td } = emaDirection(sub, params.lookback, params.minPct);
@@ -804,6 +812,14 @@ function genAnalysis(data, fullData, params, nextDirPred, trades) {
       if (p.bep != null && d.bep != null && p.bep < p.mp && d.bep >= d.mp) evs.push('BEP↑MP');
       const mpDelta = d.mp - p.mp;
       if (Math.abs(mpDelta) / (Math.abs(p.mp) || 1) > 0.03) evs.push('MP变' + (mpDelta > 0 ? '↑' : '↓'));
+      const curOi = d.co + d.po;
+      const prevOi = p.co + p.po;
+      if (prevOi > 0 && curOi < prevOi * 0.5) evs.push('期权换月');
+      if (d.nc != null && p.nc != null) {
+        const ncChg = Math.abs(d.nc - p.nc) / (p.nc || 1);
+        const cChg = Math.abs(d.c - p.c) / (p.c || 1);
+        if (ncChg > cChg * 5 && ncChg > 0.02) evs.push('期货换月');
+      }
     }
     const nd2 = nextDirPred[fullData.findIndex(x => x.d === d.d)];
     const evSent = td === 'up' ? '多' : td === 'down' ? '空' : '—';
@@ -1204,6 +1220,9 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
     dragStartIdx: 0,
     hoverIdx: -1,
     pinchDist: 0,
+    pinned: false,
+    pinnedIdx: -1,
+    didDrag: false,
   };
 
   // 阻止浏览器页面缩放干扰图表操作
@@ -1261,7 +1280,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
       }
     }
     infoEl.innerHTML = '\
-      <div class="row"><span class="label">日期</span><span class="val">' + row.d + '</span></div>\
+      <div class="row"><span class="label">日期</span><span class="val">' + row.d + (state.pinned ? ' <span style="color:#e8c84a;font-size:10px;">[锁定]</span>' : '') + '</span></div>\
       <div class="row highlight"><span class="label">收盘</span><span class="val ' + cls(row.c - (idx>0?data[idx-1].c:row.c)) + '">' + row.c.toFixed(0) + ' ' + (idx>0?(row.c-data[idx-1].c>0?'+':'')+(row.c-data[idx-1].c).toFixed(0):'') + '</span></div>\
       <div class="row"><span class="label">最高/最低</span><span class="val">' + row.h.toFixed(0) + ' / ' + row.l.toFixed(0) + '</span></div>\
       <div class="row"><span class="label">近月连续</span><span class="val" style="color:#a29bfe">' + (row.nc != null ? row.nc.toFixed(0) : '-') + '</span></div>\
@@ -1280,6 +1299,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
       ' + (stopCurve && stopCurve[idx] && (stopCurve[idx].stop !== null || stopCurve[idx].breakLevel != null) ? '<div class="row"><span class="label">止损/结构</span><span class="val" style="font-size:11px">' + (stopCurve[idx].stop !== null ? '<span style="color:#ff9f43">' + stopCurve[idx].stop.toFixed(0) + '</span>' : '-') + ' / ' + (stopCurve[idx].breakLevel != null ? '<span style="color:#a55eea">' + stopCurve[idx].breakLevel.toFixed(0) + '</span>' : '-') + '</span></div>' : '') + '\
       ' + beCrossHtml + sigHtml + posHtml + '\
     ';
+    const aDiv = document.getElementById('candleAnalysis');
+    if (aDiv && window._analysisCache && window._analysisCache[idx]) {
+      aDiv.innerHTML = window._analysisCache[idx];
+    }
   }
 
   const tradeMarkers = [];
@@ -1888,19 +1911,28 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
 
   canvas.onmousedown = (e) => {
     state.dragging = true;
+    state.didDrag = false;
     state.dragStartX = getDataX(e.clientX);
     state.dragStartIdx = state.start;
     canvas.style.cursor = 'grabbing';
+  };
+  canvas.onclick = (e) => {
+    if (!state.didDrag) {
+      state.pinned = !state.pinned;
+      state.pinnedIdx = state.pinned ? state.hoverIdx : -1;
+      render();
+    }
   };
 
   canvas.onmousemove = (e) => {
     const idx = getBarIdx(e.clientX);
     if (state.dragging) {
+      state.didDrag = true;
       const dx = getDataX(e.clientX) - state.dragStartX;
       state.start = Math.max(0, Math.min(n - getVisibleCount() + 60, state.dragStartIdx - dx / state.barW));
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
     } else {
-      if (idx !== state.hoverIdx) {
+      if (!state.pinned && idx !== state.hoverIdx) {
         state.hoverIdx = idx;
         updateInfo(idx);
         render();
@@ -1915,8 +1947,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
 
   canvas.onmouseleave = function() {
     state.hoverIdx = -1;
-    updateInfo(-1);
-    render();
+    if (!state.pinned) render();
   };
 
   canvas.onwheel = (e) => {
