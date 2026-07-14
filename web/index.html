@@ -569,6 +569,18 @@ function runBacktest() {
   const core = _runCore(data, fullData, firstIdx, params, MULT, nextDirPred);
   const { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP } = core;
 
+  // 明日方向准确率
+  let dirCorrect = 0, dirTotal = 0;
+  const _predEnd = firstIdx + data.length - 1;
+  for (let i = firstIdx; i < _predEnd; i++) {
+    const p = nextDirPred[i];
+    if (!p) continue;
+    dirTotal++;
+    const isUp = fullData[i + 1].c > fullData[i].c;
+    if ((p === 'long' && isUp) || (p === 'short' && !isUp)) dirCorrect++;
+  }
+  const dirAcc = dirTotal > 0 ? round1(dirCorrect / dirTotal * 100) : null;
+
   if (trades.length === 0) {
     result.innerHTML = '<div class="error">无交易产生</div>';
     status.textContent = '无交易'; btn.disabled = false; return;
@@ -651,6 +663,7 @@ function runBacktest() {
       <div class="stat-card"><div class="value">' + s.profitFactor + '</div><div class="label">盈亏比</div></div>\
       <div class="stat-card"><div class="value">' + s.avgHold + '天</div><div class="label">平均持仓</div></div>\
       <div class="stat-card"><div class="value">' + fmt(s.avgPnl) + '</div><div class="label">均PnL</div></div>\
+      <div class="stat-card"><div class="value ' + (dirAcc !== null ? (dirAcc >= 50 ? 'pos' : 'neg') : '') + '">' + (dirAcc !== null ? dirAcc + '%' : '-') + '</div><div class="label">明日方向准确率（' + dirTotal + '次）</div></div>\
     </div>\
     <div class="chart-wrap"><h2>K线 & 信号 <span class="line-toggles" style="font-size:11px;font-weight:normal;display:inline-flex;gap:8px;margin-left:12px;align-items:center;vertical-align:middle;"><span style="color:#576574;">显示:</span><label style="cursor:pointer;"><input type="checkbox" id="t_mp" checked onchange="toggleChartLine()"> <span style="color:#e8c84a">MP</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bec" checked onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_ema" onchange="toggleChartLine()"> <span style="color:#54a0ff">EMA</span></label></span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
