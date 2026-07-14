@@ -142,15 +142,6 @@ tr:hover td { background: #1a2a3a; }
       <div class="param-group"><label>最低:</label><input type="number" id="p_manual_lo" class="wide" step="1"></div>
       <div class="param-group"><label>OI偏度:</label><input type="number" id="p_manual_skew" value="" step="0.01" min="-1" max="1" class="wide" placeholder="默认沿用"></div>
     </div>
-    <div class="line-toggles" style="display:flex;gap:10px;flex-wrap:wrap;padding-top:6px;margin-top:4px;border-top:1px solid #2d3436;font-size:12px;">
-      <span style="color:#576574;line-height:22px;">显示:</span>
-      <label style="cursor:pointer;line-height:22px;"><input type="checkbox" id="t_mp" checked onchange="toggleChartLine()"> <span style="color:#e8c84a">MP</span></label>
-      <label style="cursor:pointer;line-height:22px;"><input type="checkbox" id="t_bec" checked onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label>
-      <label style="cursor:pointer;line-height:22px;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label>
-      <label style="cursor:pointer;line-height:22px;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label>
-      <label style="cursor:pointer;line-height:22px;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label>
-      <label style="cursor:pointer;line-height:22px;"><input type="checkbox" id="t_ema" onchange="toggleChartLine()"> <span style="color:#54a0ff">EMA</span></label>
-    </div>
   </div>
 
   <div id="result"><div class="loading">就绪，点击"运行回测"</div></div>
@@ -622,7 +613,7 @@ function runBacktest() {
       <div class="stat-card"><div class="value">' + s.avgHold + '天</div><div class="label">平均持仓</div></div>\
       <div class="stat-card"><div class="value">' + fmt(s.avgPnl) + '</div><div class="label">均PnL</div></div>\
     </div>\
-    <div class="chart-wrap"><h2>K线 & 信号</h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+    <div class="chart-wrap"><h2>K线 & 信号 <span class="line-toggles" style="font-size:11px;font-weight:normal;display:inline-flex;gap:8px;margin-left:12px;align-items:center;vertical-align:middle;"><span style="color:#576574;">显示:</span><label style="cursor:pointer;"><input type="checkbox" id="t_mp" checked onchange="toggleChartLine()"> <span style="color:#e8c84a">MP</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bec" checked onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_ema" onchange="toggleChartLine()"> <span style="color:#54a0ff">EMA</span></label></span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th></tr>' + yrHtml + '</table></div>\
     <div class="section"><h2>按退出原因</h2><table><tr><th>原因</th><th class="num">笔数</th><th class="num">占比</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">均持仓</th></tr>' + rsHtml + '</table></div>\
