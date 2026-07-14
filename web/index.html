@@ -1944,7 +1944,24 @@ function drawEquityCurve(eqCurve, cap) {
 
 window.onload = async function() {
   const ok = await loadAllData();
-  if (ok) runBacktest();
+  if (ok) {
+    // 保存当前参数为默认值
+    defaultParams = {
+      lookback: parseInt(document.getElementById('p_lookback').value) || 5,
+      minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
+      maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
+      margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
+      beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.2 : v)() / 100,
+      entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2) / 100,
+      atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 14,
+      atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 3,
+      lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
+      capital: parseFloat(document.getElementById('p_capital').value) || 100000,
+      skipCount: parseInt(document.getElementById('p_skip').value) || 0,
+      momDays: parseInt(document.getElementById('p_mom').value) || 3,
+    };
+    runBacktest();
+  }
 };
 </script>
 </body>
