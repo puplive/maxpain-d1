@@ -126,11 +126,11 @@ tr:hover td { background: #1a2a3a; }
     <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" value="0.1" min="0" max="10" step="0.1" class="wide"></div>
     <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" value="75" min="5" max="100" class="wide"></div>
     <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" value="15" min="5" max="50" class="wide"></div>
-    <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="0.9" min="0" max="10" step="0.1" class="wide"></div>
-    <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="50" min="0" max="100" step="5" class="wide"></div>
-    <div class="param-group"><label>入场止损%:</label><input type="number" id="p_entry_stop" value="2.5" min="0" max="20" step="0.1" class="wide"></div>
-      <div class="param-group"><label>ATR周期:</label><input type="number" id="p_atr_period" value="28" min="5" max="60" step="1" class="wide"></div>
-      <div class="param-group"><label>ATR倍数:</label><input type="number" id="p_atr_mult" value="1.5" min="0.5" max="10" step="0.5" class="wide"></div>
+    <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="0.2" min="0" max="10" step="0.1" class="wide"></div>
+    <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="75" min="0" max="100" step="5" class="wide"></div>
+    <div class="param-group"><label>入场止损%:</label><input type="number" id="p_entry_stop" value="2" min="0" max="20" step="0.1" class="wide"></div>
+      <div class="param-group"><label>ATR周期:</label><input type="number" id="p_atr_period" value="14" min="5" max="60" step="1" class="wide"></div>
+      <div class="param-group"><label>ATR倍数:</label><input type="number" id="p_atr_mult" value="3" min="0.5" max="10" step="0.5" class="wide"></div>
       <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
       <div class="param-group"><label>动量天:</label><input type="number" id="p_mom" value="3" min="1" max="30" step="1" class="wide"></div>
 
@@ -211,7 +211,21 @@ const SYM_CFG = {
   NR: { name: '20号胶',   mult: 10 },
 };
 let ALL_DATA = {};
-let defaultParams = {};
+let defaultParams = {
+  lookback: 5,
+  minPct: 0.1,
+  maxPos: 75,
+  margin: 15,
+  beTh: 0.9,
+  entryStop: 2.5,
+  atrPeriod: 28,
+  atrMult: 1.5,
+  lockPct: 50,
+  capital: 100000,
+  capLimit: 0,
+  skipCount: 0,
+  momDays: 3,
+};
 
 async function loadData(symbol) {
   const status = document.getElementById('dataStatus');
@@ -547,19 +561,19 @@ function runBacktest() {
   result.innerHTML = '<div class="loading">计算中...</div>';
 
   const params = {
-    lookback: parseInt(document.getElementById('p_lookback').value) || 5,
-    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
-    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 75) / 100,
-    margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
-    beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.9 : v)() / 100,
-    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2.5) / 100,
-    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 28,
-    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 1.5,
-    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 50) / 100,
-    capital: parseFloat(document.getElementById('p_capital').value) || 100000,
-    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
-    skipCount: parseInt(document.getElementById('p_skip').value) || 0,
-    momDays: parseInt(document.getElementById('p_mom').value) || 3,
+    lookback: parseInt(document.getElementById('p_lookback').value) || defaultParams.lookback,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) || defaultParams.minPct) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || defaultParams.maxPos) / 100,
+    margin: (parseFloat(document.getElementById('p_margin').value) || defaultParams.margin) / 100,
+    beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? defaultParams.beTh : v)() / 100,
+    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || defaultParams.entryStop) / 100,
+    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || defaultParams.atrPeriod,
+    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || defaultParams.atrMult,
+    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || defaultParams.lockPct) / 100,
+    capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
+    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
+    skipCount: parseInt(document.getElementById('p_skip').value) || defaultParams.skipCount,
+    momDays: parseInt(document.getElementById('p_mom').value) || defaultParams.momDays,
   };
   params.mult = cfg.mult;
   const MULT = cfg.mult;
@@ -700,14 +714,14 @@ function round2(v) { return Math.round(v*100)/100; }
 
 function setParamValues(p) {
   document.getElementById('p_lookback').value = p.lookback;
-  document.getElementById('p_min_pct').value = round1(p.minPct*100);
-  document.getElementById('p_max_pos').value = Math.round(p.maxPos*100);
-  document.getElementById('p_margin').value = Math.round(p.margin*100);
-  if (p.beTh !== undefined) document.getElementById('p_be_th').value = round1(p.beTh*100);
-  if (p.entryStop !== undefined) document.getElementById('p_entry_stop').value = round1(p.entryStop*100);
+  document.getElementById('p_min_pct').value = p.minPct;
+  document.getElementById('p_max_pos').value = p.maxPos;
+  document.getElementById('p_margin').value = p.margin;
+  if (p.beTh !== undefined) document.getElementById('p_be_th').value = p.beTh;
+  if (p.entryStop !== undefined) document.getElementById('p_entry_stop').value = p.entryStop;
   document.getElementById('p_capital').value = Math.round(p.capital);
   if (p.capLimit !== undefined) document.getElementById('p_cap_limit').value = Math.round(p.capLimit / 10000);
-  if (p.lockPct !== undefined) document.getElementById('p_lock_pct').value = Math.round(p.lockPct * 100);
+  if (p.lockPct !== undefined) document.getElementById('p_lock_pct').value = p.lockPct;
   if (p.skipCount !== undefined) document.getElementById('p_skip').value = p.skipCount;
   if (p.momDays !== undefined) document.getElementById('p_mom').value = p.momDays;
   if (p.atrPeriod !== undefined) document.getElementById('p_atr_period').value = p.atrPeriod;
@@ -732,19 +746,19 @@ function runMonteCarlo() {
   if (data.length < 2) { alert('数据不足'); return; }
   const firstIdx = fullData.findIndex(r => r.d === data[0].d);
   const params = {
-    lookback: parseInt(document.getElementById('p_lookback').value) || 5,
-    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
-    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 75) / 100,
-    margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
-    beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.9 : v)() / 100,
-    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2.5) / 100,
-    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 28,
-    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 1.5,
-    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 50) / 100,
-    capital: parseFloat(document.getElementById('p_capital').value) || 100000,
-    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
-    skipCount: parseInt(document.getElementById('p_skip').value) || 0,
-    momDays: parseInt(document.getElementById('p_mom').value) || 3,
+    lookback: parseInt(document.getElementById('p_lookback').value) || defaultParams.lookback,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) || defaultParams.minPct) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || defaultParams.maxPos) / 100,
+    margin: (parseFloat(document.getElementById('p_margin').value) || defaultParams.margin) / 100,
+    beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? defaultParams.beTh : v)() / 100,
+    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || defaultParams.entryStop) / 100,
+    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || defaultParams.atrPeriod,
+    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || defaultParams.atrMult,
+    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || defaultParams.lockPct) / 100,
+    capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
+    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
+    skipCount: parseInt(document.getElementById('p_skip').value) || defaultParams.skipCount,
+    momDays: parseInt(document.getElementById('p_mom').value) || defaultParams.momDays,
   };
   params.mult = cfg.mult;
   const nextDirPred = computeNextDirPred(fullData, params);
@@ -857,19 +871,19 @@ function optimizeParam() {
   const firstIdx = fullData.findIndex(r => r.d === data[0].d);
 
   const p = {
-    lookback: parseInt(document.getElementById('p_lookback').value) || 5,
-    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
-    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 75) / 100,
-    margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
-    beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.9 : v)() / 100,
-    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2.5) / 100,
-    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 28,
-    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 1.5,
-    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 50) / 100,
-    capital: parseFloat(document.getElementById('p_capital').value) || 100000,
-    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
-    skipCount: parseInt(document.getElementById('p_skip').value) || 0,
-    momDays: parseInt(document.getElementById('p_mom').value) || 3,
+    lookback: parseInt(document.getElementById('p_lookback').value) || defaultParams.lookback,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) || defaultParams.minPct) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || defaultParams.maxPos) / 100,
+    margin: (parseFloat(document.getElementById('p_margin').value) || defaultParams.margin) / 100,
+    beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? defaultParams.beTh : v)() / 100,
+    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || defaultParams.entryStop) / 100,
+    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || defaultParams.atrPeriod,
+    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || defaultParams.atrMult,
+    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || defaultParams.lockPct) / 100,
+    capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
+    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
+    skipCount: parseInt(document.getElementById('p_skip').value) || defaultParams.skipCount,
+    momDays: parseInt(document.getElementById('p_mom').value) || defaultParams.momDays,
     mult: cfg.mult,
   };
 
@@ -1945,21 +1959,7 @@ function drawEquityCurve(eqCurve, cap) {
 window.onload = async function() {
   const ok = await loadAllData();
   if (ok) {
-    // 保存当前参数为默认值
-    defaultParams = {
-      lookback: parseInt(document.getElementById('p_lookback').value) || 5,
-      minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
-      maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
-      margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
-      beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.2 : v)() / 100,
-      entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2) / 100,
-      atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 14,
-      atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 3,
-      lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
-      capital: parseFloat(document.getElementById('p_capital').value) || 100000,
-      skipCount: parseInt(document.getElementById('p_skip').value) || 0,
-      momDays: parseInt(document.getElementById('p_mom').value) || 3,
-    };
+    setParamValues(defaultParams);
     runBacktest();
   }
 };
