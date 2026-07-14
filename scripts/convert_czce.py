@@ -228,11 +228,11 @@ def process_one(sym, fut, opt, date=None, mult=10):
         if r.get('今收盘', 0) > 0:
             fut_dates[date_i] = {'o': float(r.get('今开盘', 0)), 'c': float(r.get('今收盘', 0)),
                                  'h': float(r.get('最高价', 0)), 'l': float(r.get('最低价', 0))}
-        # 近月连续：取成交量>0中交割月最早的
+        # 近月连续：取成交量>0且收盘价>0中交割月最早的
         if vol_col:
-            active = g[pd.to_numeric(g[vol_col], errors='coerce') > 0]
+            active = g[(pd.to_numeric(g[vol_col], errors='coerce') > 0) & (pd.to_numeric(g['今收盘'], errors='coerce') > 0)]
         else:
-            active = g
+            active = g[pd.to_numeric(g['今收盘'], errors='coerce') > 0]
         if not active.empty:
             front = active.sort_values('contract_ym').iloc[0]
             fut_nc[date_i] = float(front.get('今收盘', 0))
@@ -280,7 +280,17 @@ def process_one(sym, fut, opt, date=None, mult=10):
         piv = o[(o['type'] == 'P') & (o['delta'].between(-0.30, -0.20))]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
         gex = calc_gex(o, px, mult)
-        result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2),
+
+        # oc: 期权对应标的期货的收盘价（按期权持仓量最大的标的合约）
+        oc_val = None
+        opt_underlying = o['合约代码'].str.extract(r'^([A-Z]+\d{3})[CP]')[0]
+        if not opt_underlying.isna().all():
+            top_u = o.groupby(opt_underlying)['oi'].sum().idxmax()
+            fut_match = fut[(fut['date'] == date) & (fut['合约代码'] == top_u)]
+            if not fut_match.empty:
+                oc_val = round(float(fut_match['今收盘'].iloc[0]), 2)
+
+        result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2), 'oc': oc_val,
                         'h': row['h'], 'l': row['l'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex}
     return result

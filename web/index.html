@@ -1023,6 +1023,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
       <div class="row"><span class="label">日期</span><span class="val">' + row.d + '</span></div>\
       <div class="row highlight"><span class="label">收盘</span><span class="val ' + cls(row.c - (idx>0?data[idx-1].c:row.c)) + '">' + row.c.toFixed(0) + ' ' + (idx>0?(row.c-data[idx-1].c>0?'+':'')+(row.c-data[idx-1].c).toFixed(0):'') + '</span></div>\
       <div class="row"><span class="label">最高/最低</span><span class="val">' + row.h.toFixed(0) + ' / ' + row.l.toFixed(0) + '</span></div>\
+      <div class="row"><span class="label">近月连续</span><span class="val" style="color:#a29bfe">' + (row.nc != null ? row.nc.toFixed(0) : '-') + '</span></div>\
+      <div class="row"><span class="label">期权期货</span><span class="val" style="color:#f368e0">' + (row.oc != null ? row.oc.toFixed(0) : '-') + '</span></div>\
       <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">Max Pain</span><span class="val" style="color:#e8c84a">' + row.mp + ' ' + (idx>0?(row.mp-data[idx-1].mp>0?'+':'')+(row.mp-data[idx-1].mp)+'':'') + '</span></div>\
       <div class="row"><span class="label">MP趋势</span><span class="val">' + trendText + '</span></div>\
       <div class="row"><span class="label">收盘斜率</span><span class="val" style="color:#576574;font-size:11px">' + (_closeSlope !== null ? _closeSlope + '%' : '-') + '</span></div>\
@@ -1069,8 +1071,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
     let minP = Infinity, maxP = -Infinity;
     for (let i = start; i < end; i++) {
       const row = data[i];
-      minP = Math.min(minP, row.l, row.mp, row.bec, row.bep, row.nc);
-      maxP = Math.max(maxP, row.h, row.mp, row.bec, row.bep, row.nc);
+      minP = Math.min(minP, row.l, row.mp, row.bec, row.bep, row.nc, row.oc);
+      maxP = Math.max(maxP, row.h, row.mp, row.bec, row.bep, row.nc, row.oc);
     }
     const range = maxP - minP || 1;
     const padP = range * 0.05;
@@ -1208,6 +1210,24 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
       ctx.globalAlpha = 1;
     }
 
+    // 期权对应标的期货价格线
+    let hasAnyOc = false;
+    for (let i = start; i < end && i < n; i++) { if (data[i].oc != null) { hasAnyOc = true; break; } }
+    if (hasAnyOc) {
+      ctx.strokeStyle = '#f368e0';
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      let ocStarted = false;
+      for (let i = start; i < end && i < n; i++) {
+        if (data[i].oc == null) { ocStarted = false; continue; }
+        const x = toX(i), y = toY(data[i].oc);
+        if (!ocStarted) { ctx.moveTo(x, y); ocStarted = true; } else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
     ctx.save();
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'left';
@@ -1218,6 +1238,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('MP', lx+20, ly+11); lx += 50;
     ctx.strokeStyle = '#a29bfe'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('近月连续', lx+20, ly+11); lx += 70;
+    ctx.strokeStyle = '#f368e0'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('期权期货', lx+20, ly+11); lx += 75;
     ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
     ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('看涨BE', lx+20, ly+11); lx += 80;

@@ -137,8 +137,8 @@ def process_symbol(sym, prefix, year, date=None):
         row = group.loc[idx]
         if row['close'] > 0:
             fut_dates[dt] = row
-        # 近月连续：取成交量>0中交割月最早的
-        active = group[group['volume'] > 0]
+        # 近月连续：取成交量>0中交割月最早的且收盘价>0
+        active = group[(group['volume'] > 0) & (group['close'] > 0)]
         if not active.empty:
             front = active.sort_values('contract_ym').iloc[0]
             fut_nc[dt] = float(front['close'])
@@ -218,10 +218,19 @@ def process_symbol(sym, prefix, year, date=None):
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
         gex = calc_gex(opt, px, DCE_MULT.get(sym, 10))
 
+        # oc: 期权对应标的期货的收盘价（按期权持仓量最大的标的合约）
+        oc_val = None
+        opt_underlying = opt['合约名称'].str.extract(r'^(.+?)-')[0]
+        if not opt_underlying.isna().all():
+            top_u = opt.groupby(opt_underlying)['oi'].sum().idxmax()
+            fut_match = fut[(fut['date'] == dt) & (fut['合约名称'] == top_u)]
+            if not fut_match.empty:
+                oc_val = round(float(fut_match['close'].iloc[0]), 2)
+
         result[dt] = {
             'd': dt, 'o': round(float(row['open']), 2), 'c': round(px, 2),
             'h': round(float(row['high']), 2), 'l': round(float(row['low']), 2),
-            'nc': round(fut_nc.get(dt, px), 2),
+            'nc': round(fut_nc.get(dt, px), 2), 'oc': oc_val,
             'mp': mp, 'co': co, 'po': po,
             'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex,
         }

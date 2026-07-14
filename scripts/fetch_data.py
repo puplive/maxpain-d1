@@ -407,7 +407,7 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
         entries[sym] = {
             'd': d, 'o': round(float(fr['open']), 2), 'c': round(px, 2),
             'h': round(float(fr['high']), 2), 'l': round(float(fr['low']), 2),
-            'nc': round(px, 2),
+            'nc': round(px, 2), 'oc': None,
             'mp': mp, 'co': co, 'po': po,
             'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex,
         }
