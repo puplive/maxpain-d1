@@ -395,12 +395,18 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
         if (pos.direction === 'long') {
           let stop;
           if (pos.beActive) { const pp = pos.peakPx - pos.entryPx; stop = pos.entryPx + pp * LOCK_PCT; }
-          else { stop = isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT; }
+          else {
+            const atrStop = isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT;
+            stop = Math.max(atrStop, pos.entryPx * (1 - ENTRY_STOP));
+          }
           if (lo < stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop > pos.entryPx ? '追踪止盈' : '止损'); }
         } else {
           let stop;
           if (pos.beActive) { const pp = pos.entryPx - pos.peakPx; stop = pos.entryPx - pp * LOCK_PCT; }
-          else { stop = isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT; }
+          else {
+            const atrStop = isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT;
+            stop = Math.min(atrStop, pos.entryPx * (1 + ENTRY_STOP));
+          }
           if (hi > stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop < pos.entryPx ? '追踪止盈' : '止损'); }
         }
       }
@@ -474,7 +480,12 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
         const _pp = pos.direction === 'long' ? pos.peakPx - pos.entryPx : pos.entryPx - pos.peakPx;
         _s = pos.direction === 'long' ? pos.entryPx + _pp * LOCK_PCT : pos.entryPx - _pp * LOCK_PCT;
       } else {
-        _s = pos.direction === 'long' ? (isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT) : (isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT);
+        const atrStop = pos.direction === 'long'
+          ? (isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT)
+          : (isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT);
+        _s = pos.direction === 'long'
+          ? Math.max(atrStop, pos.entryPx * (1 - ENTRY_STOP))
+          : Math.min(atrStop, pos.entryPx * (1 + ENTRY_STOP));
       }
       stopCurve.push({ d, stop: _s, breakLevel: _breakLevel });
     } else {
