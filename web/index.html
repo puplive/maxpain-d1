@@ -124,13 +124,13 @@ tr:hover td { background: #1a2a3a; }
   <div class="params" id="paramBar">
     <div class="param-group"><label>Lookback:</label><input type="number" id="p_lookback" value="5" min="5" max="60"></div>
     <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" value="0.1" min="0" max="10" step="0.1" class="wide"></div>
-    <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" value="90" min="5" max="100" class="wide"></div>
+    <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" value="75" min="5" max="100" class="wide"></div>
     <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" value="15" min="5" max="50" class="wide"></div>
-    <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="0" min="0" max="10" step="0.1" class="wide"></div>
-      <div class="param-group"><label>入场止损%:</label><input type="number" id="p_entry_stop" value="2" min="0" max="20" step="0.1" class="wide"></div>
-      <div class="param-group"><label>ATR周期:</label><input type="number" id="p_atr_period" value="14" min="5" max="60" step="1" class="wide"></div>
-      <div class="param-group"><label>ATR倍数:</label><input type="number" id="p_atr_mult" value="3" min="0.5" max="10" step="0.5" class="wide"></div>
-      <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="75" min="0" max="100" step="5" class="wide"></div>
+    <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="0.9" min="0" max="10" step="0.1" class="wide"></div>
+    <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="50" min="0" max="100" step="5" class="wide"></div>
+    <div class="param-group"><label>入场止损%:</label><input type="number" id="p_entry_stop" value="2.5" min="0" max="20" step="0.1" class="wide"></div>
+      <div class="param-group"><label>ATR周期:</label><input type="number" id="p_atr_period" value="28" min="5" max="60" step="1" class="wide"></div>
+      <div class="param-group"><label>ATR倍数:</label><input type="number" id="p_atr_mult" value="1.5" min="0.5" max="10" step="0.5" class="wide"></div>
       <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
       <div class="param-group"><label>动量天:</label><input type="number" id="p_mom" value="3" min="1" max="30" step="1" class="wide"></div>
 
@@ -549,13 +549,13 @@ function runBacktest() {
   const params = {
     lookback: parseInt(document.getElementById('p_lookback').value) || 5,
     minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
-    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 75) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
-    beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.2 : v)() / 100,
-    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2) / 100,
-    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 14,
-    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 3,
-    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
+    beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.9 : v)() / 100,
+    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2.5) / 100,
+    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 28,
+    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 1.5,
+    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 50) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
     skipCount: parseInt(document.getElementById('p_skip').value) || 0,
@@ -714,13 +714,13 @@ function runMonteCarlo() {
   const params = {
     lookback: parseInt(document.getElementById('p_lookback').value) || 5,
     minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
-    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 75) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
-    beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.2 : v)() / 100,
-    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2) / 100,
-    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 14,
-    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 3,
-    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
+    beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.9 : v)() / 100,
+    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2.5) / 100,
+    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 28,
+    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 1.5,
+    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 50) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
     skipCount: parseInt(document.getElementById('p_skip').value) || 0,
@@ -839,13 +839,13 @@ function optimizeParam() {
   const p = {
     lookback: parseInt(document.getElementById('p_lookback').value) || 5,
     minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
-    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 75) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
-    beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.2 : v)() / 100,
-    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2) / 100,
-    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 14,
-    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 3,
-    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
+    beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.9 : v)() / 100,
+    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2.5) / 100,
+    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 28,
+    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 1.5,
+    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 50) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
     skipCount: parseInt(document.getElementById('p_skip').value) || 0,
