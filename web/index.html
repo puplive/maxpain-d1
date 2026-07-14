@@ -124,6 +124,7 @@ tr:hover td { background: #1a2a3a; }
     <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" value="90" min="5" max="100" class="wide"></div>
     <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" value="15" min="5" max="50" class="wide"></div>
     <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="0" min="0" max="10" step="0.1" class="wide"></div>
+      <div class="param-group"><label>入场止损%:</label><input type="number" id="p_entry_stop" value="2" min="0" max="20" step="0.1" class="wide"></div>
       <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="75" min="0" max="100" step="5" class="wide"></div>
       <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
       <div class="param-group"><label>动量天:</label><input type="number" id="p_mom" value="3" min="1" max="30" step="1" class="wide"></div>
@@ -357,7 +358,7 @@ function computeNextDirPred(fullData, params) {
   return preds;
 }
 function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
-  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, lockPct: LOCK_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP, momDays } = params;
+  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryStop: ENTRY_STOP, lockPct: LOCK_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP, momDays } = params;
   const preStart = Math.max(0, firstIdx - LBK);
   let eq = CAP, peakEq = CAP, maxDd = 0, pos = null;
   const mpHist = [], priceHist = [], trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
@@ -425,12 +426,9 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
             const qty = Math.floor(alloc / dn);
             if (qty >= 1) {
               pos = { direction: td, entryPx: op, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: op, beActive: false, entryTrend: td === 'long' ? 'up' : 'down' };
-              // 入场当天用 prevClose 为基准检查止损（和后续逐日逻辑一致）
-              const _emaChg2 = emaChange(mpHist, LBK);
-              const _emaSlope2 = _emaChg2 !== null ? Math.abs(_emaChg2) : 0;
-              const _trailPct2 = Math.max(MIN_PCT, BE_TH) * (1 + _emaSlope2 / 0.05);
+              // 入场当天用固定百分比止损（ENTRY_STOP）
               if (td === 'long') {
-                const stop2 = prevClose * (1 - _trailPct2);
+                const stop2 = prevClose * (1 - ENTRY_STOP);
                 if (lo < stop2) {
                   const pnl2 = (stop2 - op) * qty * mult;
                   trades.push({ entry: d, exit: d, entryPx: op, exitPx: stop2, dir: td, qty, pnl: pnl2 - 10 * qty * 2, reason: stop2 === op ? '保本出场' : '止损', entryReason: '趋势多', hold: 0 });
@@ -438,7 +436,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
                   pos = null;
                 }
               } else {
-                const stop2 = prevClose * (1 + _trailPct2);
+                const stop2 = prevClose * (1 + ENTRY_STOP);
                 if (hi > stop2) {
                   const pnl2 = (op - stop2) * qty * mult;
                   trades.push({ entry: d, exit: d, entryPx: op, exitPx: stop2, dir: td, qty, pnl: pnl2 - 10 * qty * 2, reason: stop2 === op ? '保本出场' : '止损', entryReason: '趋势空', hold: 0 });
@@ -537,6 +535,7 @@ function runBacktest() {
     maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
     beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.2 : v)() / 100,
+    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2) / 100,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
@@ -696,6 +695,7 @@ function runMonteCarlo() {
     maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
     beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.2 : v)() / 100,
+    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2) / 100,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
