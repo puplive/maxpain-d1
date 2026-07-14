@@ -109,6 +109,8 @@ tr:hover td { background: #1a2a3a; }
     <select id="optParam" style="padding:6px 10px;border:1px solid #2d3436;border-radius:6px;background:#1a2a3a;color:#c8d6e5;font-size:12px;">
       <option value="lookback">Lookback</option>
       <option value="minPct">Min%</option>
+      <option value="entryStop">入场止损%</option>
+      <option value="trailPct">追踪%</option>
       <option value="beTh">保本%</option>
       <option value="lockPct">锁定%</option>
       <option value="maxPos">仓位%</option>
@@ -386,7 +388,9 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
       }
 
       if (!exitPx) {
-        const _trailPct = TRAIL_PCT;
+        const _emaChg = emaChange(mpHist, LBK);
+        const _emaSlope = _emaChg !== null ? Math.abs(_emaChg) : 0;
+        const _trailPct = TRAIL_PCT * (1 + _emaSlope / 0.05);
         if (pos.direction === 'long') {
           let stop = prevClose * (1 - _trailPct);
           if (pos.beActive) { const pp = pos.peakPx - pos.entryPx; stop = Math.max(stop, pos.entryPx + pp * LOCK_PCT); }
@@ -453,15 +457,17 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
     if (pos) {
       if (pos.direction === 'long' && px > pos.peakPx) {
         pos.peakPx = px;
-        if (BE_TH > 0 && !pos.beActive && pos.peakPx >= pos.entryPx * (1 + BE_TH)) pos.beActive = true;
+        if (BE_TH > 0 && LOCK_PCT > 0 && !pos.beActive && pos.peakPx >= pos.entryPx * (1 + BE_TH / LOCK_PCT)) pos.beActive = true;
       } else if (pos.direction === 'short' && px < pos.peakPx) {
         pos.peakPx = px;
-        if (BE_TH > 0 && !pos.beActive && pos.peakPx <= pos.entryPx * (1 - BE_TH)) pos.beActive = true;
+        if (BE_TH > 0 && LOCK_PCT > 0 && !pos.beActive && pos.peakPx <= pos.entryPx * (1 - BE_TH / LOCK_PCT)) pos.beActive = true;
       }
     }
     if (pos) {
       const _breakLevel = pos.direction === 'long' ? prevBep : prevBec;
-      const _trailPct = TRAIL_PCT;
+      const _emaChg = emaChange(mpHist, LBK);
+      const _emaSlope = _emaChg !== null ? Math.abs(_emaChg) : 0;
+      const _trailPct = TRAIL_PCT * (1 + _emaSlope / 0.05);
       let _s = pos.direction === 'long' ? prevClose * (1 - _trailPct) : prevClose * (1 + _trailPct);
       if (pos.beActive) {
         const _pp = pos.direction === 'long' ? pos.peakPx - pos.entryPx : pos.entryPx - pos.peakPx;
@@ -783,6 +789,8 @@ function runMonteCarlo() {
 const OPT_PARAMS = {
   lookback:   { label: 'Lookback',    range: [5, 60, 1] },
   minPct:     { label: 'Min%',        range: [0.1, 5, 0.1], unit: '%' },
+  entryStop:  { label: '入场止损%',   range: [0.5, 5, 0.1], unit: '%' },
+  trailPct:   { label: '追踪%',       range: [0.5, 5, 0.1], unit: '%' },
   maxPos:     { label: '仓位%',       range: [5, 100, 5], unit: '%' },
   beTh:       { label: '保本%',       range: [0, 5, 0.1], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 75, 5], unit: '%' },
@@ -814,6 +822,8 @@ function optimizeParam() {
     maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
     beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.2 : v)() / 100,
+    entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2) / 100,
+    trailPct: (parseFloat(document.getElementById('p_trail_pct').value) || 1.5) / 100,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
@@ -833,6 +843,8 @@ function optimizeParam() {
       if (paramKey === 'minPct') pp.minPct = v / 100;
       else if (paramKey === 'maxPos') pp.maxPos = v / 100;
       else if (paramKey === 'lookback') pp.lookback = v;
+      else if (paramKey === 'entryStop') pp.entryStop = v / 100;
+      else if (paramKey === 'trailPct') pp.trailPct = v / 100;
       else if (paramKey === 'beTh') pp.beTh = v / 100;
       else if (paramKey === 'lockPct') pp.lockPct = v / 100;
       else if (paramKey === 'skipCount') pp.skipCount = v;
