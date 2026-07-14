@@ -584,7 +584,7 @@ function runBacktest() {
   // Pre-compute analysis for every candle for dynamic hover
   window._analysisCache = [];
   for (let i = 0; i < data.length; i++) {
-    window._analysisCache[i] = genAnalysis(data, fullData, params, nextDirPred, trades || core.trades, i);
+    window._analysisCache[i] = genAnalysis(data, fullData, params, nextDirPred, core.trades, i);
   }
   const _lastAnalysis = window._analysisCache[data.length - 1];
   const { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP } = core;
