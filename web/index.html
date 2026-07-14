@@ -392,12 +392,14 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
         const _emaSlope = _emaChg !== null ? Math.abs(_emaChg) : 0;
         const _trailPct = TRAIL_PCT * (1 + _emaSlope / 0.05);
         if (pos.direction === 'long') {
-          let stop = prevClose * (1 - _trailPct);
-          if (pos.beActive) { const pp = pos.peakPx - pos.entryPx; stop = Math.max(stop, pos.entryPx + pp * LOCK_PCT); }
+          let stop;
+          if (pos.beActive) { const pp = pos.peakPx - pos.entryPx; stop = pos.entryPx + pp * LOCK_PCT; }
+          else { stop = prevClose * (1 - _trailPct); }
           if (lo < stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop > pos.entryPx ? '追踪止盈' : '止损'); }
         } else {
-          let stop = prevClose * (1 + _trailPct);
-          if (pos.beActive) { const pp = pos.entryPx - pos.peakPx; stop = Math.min(stop, pos.entryPx - pp * LOCK_PCT); }
+          let stop;
+          if (pos.beActive) { const pp = pos.entryPx - pos.peakPx; stop = pos.entryPx - pp * LOCK_PCT; }
+          else { stop = prevClose * (1 + _trailPct); }
           if (hi > stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop < pos.entryPx ? '追踪止盈' : '止损'); }
         }
       }
@@ -468,10 +470,12 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
       const _emaChg = emaChange(mpHist, LBK);
       const _emaSlope = _emaChg !== null ? Math.abs(_emaChg) : 0;
       const _trailPct = TRAIL_PCT * (1 + _emaSlope / 0.05);
-      let _s = pos.direction === 'long' ? prevClose * (1 - _trailPct) : prevClose * (1 + _trailPct);
+      let _s;
       if (pos.beActive) {
         const _pp = pos.direction === 'long' ? pos.peakPx - pos.entryPx : pos.entryPx - pos.peakPx;
-        _s = pos.direction === 'long' ? Math.max(_s, pos.entryPx + _pp * LOCK_PCT) : Math.min(_s, pos.entryPx - _pp * LOCK_PCT);
+        _s = pos.direction === 'long' ? pos.entryPx + _pp * LOCK_PCT : pos.entryPx - _pp * LOCK_PCT;
+      } else {
+        _s = pos.direction === 'long' ? prevClose * (1 - _trailPct) : prevClose * (1 + _trailPct);
       }
       stopCurve.push({ d, stop: _s, breakLevel: _breakLevel });
     } else {
@@ -894,7 +898,7 @@ function optimizeParam() {
         <th class="num">' + meta.label + '</th><th class="num">最终权益</th><th class="num">收益</th><th class="num">笔数</th><th class="num">胜率</th><th class="num">盈亏比</th><th class="num">回撤</th><th class="num">均PnL</th>\
       </tr>' + rows + '</table></div>';
     status.textContent = '优化完成 | ' + values.length + '个值 | 最优 ' + meta.label + '=' + best.v + suffix + ' → ' + fmt(best.endEq);
-    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip' };
+    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryStop:'p_entry_stop', trailPct:'p_trail_pct', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip' };
     const el = document.getElementById(idMap[paramKey]);
     if (meta.unit) el.value = best.v.toFixed(1);
     else el.value = best.v;
