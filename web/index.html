@@ -110,7 +110,8 @@ tr:hover td { background: #1a2a3a; }
       <option value="lookback">Lookback</option>
       <option value="minPct">Min%</option>
       <option value="entryStop">入场止损%</option>
-      <option value="trailPct">追踪%</option>
+      <option value="atrPeriod">ATR周期</option>
+      <option value="atrMult">ATR倍数</option>
       <option value="beTh">保本%</option>
       <option value="lockPct">锁定%</option>
       <option value="maxPos">仓位%</option>
@@ -122,12 +123,13 @@ tr:hover td { background: #1a2a3a; }
 
   <div class="params" id="paramBar">
     <div class="param-group"><label>Lookback:</label><input type="number" id="p_lookback" value="5" min="5" max="60"></div>
-    <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" value="0.5" min="0" max="10" step="0.1" class="wide"></div>
+    <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" value="0.1" min="0" max="10" step="0.1" class="wide"></div>
     <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" value="90" min="5" max="100" class="wide"></div>
     <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" value="15" min="5" max="50" class="wide"></div>
     <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="0" min="0" max="10" step="0.1" class="wide"></div>
       <div class="param-group"><label>入场止损%:</label><input type="number" id="p_entry_stop" value="2" min="0" max="20" step="0.1" class="wide"></div>
-      <div class="param-group"><label>追踪%:</label><input type="number" id="p_trail_pct" value="1.5" min="0" max="10" step="0.1" class="wide"></div>
+      <div class="param-group"><label>ATR周期:</label><input type="number" id="p_atr_period" value="14" min="5" max="60" step="1" class="wide"></div>
+      <div class="param-group"><label>ATR倍数:</label><input type="number" id="p_atr_mult" value="3" min="0.5" max="10" step="0.5" class="wide"></div>
       <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="75" min="0" max="100" step="5" class="wide"></div>
       <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
       <div class="param-group"><label>动量天:</label><input type="number" id="p_mom" value="3" min="1" max="30" step="1" class="wide"></div>
@@ -361,7 +363,7 @@ function computeNextDirPred(fullData, params) {
   return preds;
 }
 function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
-  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryStop: ENTRY_STOP, trailPct: TRAIL_PCT, lockPct: LOCK_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP, momDays } = params;
+  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryStop: ENTRY_STOP, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP, momDays } = params;
   const preStart = Math.max(0, firstIdx - LBK);
   let eq = CAP, peakEq = CAP, maxDd = 0, pos = null;
   const mpHist = [], priceHist = [], trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
@@ -371,6 +373,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
   let prevMp = firstIdx > 0 ? fullData[firstIdx - 1].mp : data[0].mp;
   let prevBec = null, prevBep = null, prevIvs = null;
   for (let i = preStart; i < firstIdx; i++) { mpHist.push(fullData[i].mp); priceHist.push(fullData[i].c); }
+  const fullAtr = calcATR(fullData, ATR_PERIOD);
 
   for (let _di = 0; _di < data.length; _di++) {
     const row = data[_di];
@@ -388,18 +391,16 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
       }
 
       if (!exitPx) {
-        const _emaChg = emaChange(mpHist, LBK);
-        const _emaSlope = _emaChg !== null ? Math.abs(_emaChg) : 0;
-        const _trailPct = TRAIL_PCT * (1 + _emaSlope / 0.05);
+        const atrVal = fullAtr[_fullIdx];
         if (pos.direction === 'long') {
           let stop;
           if (pos.beActive) { const pp = pos.peakPx - pos.entryPx; stop = pos.entryPx + pp * LOCK_PCT; }
-          else { stop = prevClose * (1 - _trailPct); }
+          else { stop = isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT; }
           if (lo < stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop > pos.entryPx ? '追踪止盈' : '止损'); }
         } else {
           let stop;
           if (pos.beActive) { const pp = pos.entryPx - pos.peakPx; stop = pos.entryPx - pp * LOCK_PCT; }
-          else { stop = prevClose * (1 + _trailPct); }
+          else { stop = isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT; }
           if (hi > stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop < pos.entryPx ? '追踪止盈' : '止损'); }
         }
       }
@@ -467,15 +468,13 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
     }
     if (pos) {
       const _breakLevel = pos.direction === 'long' ? prevBep : prevBec;
-      const _emaChg = emaChange(mpHist, LBK);
-      const _emaSlope = _emaChg !== null ? Math.abs(_emaChg) : 0;
-      const _trailPct = TRAIL_PCT * (1 + _emaSlope / 0.05);
+      const atrVal = fullAtr[_fullIdx];
       let _s;
       if (pos.beActive) {
         const _pp = pos.direction === 'long' ? pos.peakPx - pos.entryPx : pos.entryPx - pos.peakPx;
         _s = pos.direction === 'long' ? pos.entryPx + _pp * LOCK_PCT : pos.entryPx - _pp * LOCK_PCT;
       } else {
-        _s = pos.direction === 'long' ? prevClose * (1 - _trailPct) : prevClose * (1 + _trailPct);
+        _s = pos.direction === 'long' ? (isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT) : (isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT);
       }
       stopCurve.push({ d, stop: _s, breakLevel: _breakLevel });
     } else {
@@ -538,12 +537,13 @@ function runBacktest() {
 
   const params = {
     lookback: parseInt(document.getElementById('p_lookback').value) || 5,
-    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.5) / 100,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
     maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
     beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.2 : v)() / 100,
     entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2) / 100,
-    trailPct: (parseFloat(document.getElementById('p_trail_pct').value) || 1.5) / 100,
+    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 14,
+    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 3,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
@@ -673,11 +673,14 @@ function setParamValues(p) {
   document.getElementById('p_max_pos').value = Math.round(p.maxPos*100);
   document.getElementById('p_margin').value = Math.round(p.margin*100);
   if (p.beTh !== undefined) document.getElementById('p_be_th').value = round1(p.beTh*100);
+  if (p.entryStop !== undefined) document.getElementById('p_entry_stop').value = round1(p.entryStop*100);
   document.getElementById('p_capital').value = Math.round(p.capital);
   if (p.capLimit !== undefined) document.getElementById('p_cap_limit').value = Math.round(p.capLimit / 10000);
   if (p.lockPct !== undefined) document.getElementById('p_lock_pct').value = Math.round(p.lockPct * 100);
   if (p.skipCount !== undefined) document.getElementById('p_skip').value = p.skipCount;
   if (p.momDays !== undefined) document.getElementById('p_mom').value = p.momDays;
+  if (p.atrPeriod !== undefined) document.getElementById('p_atr_period').value = p.atrPeriod;
+  if (p.atrMult !== undefined) document.getElementById('p_atr_mult').value = p.atrMult;
 }
 
 function toggleManual() {
@@ -699,12 +702,13 @@ function runMonteCarlo() {
   const firstIdx = fullData.findIndex(r => r.d === data[0].d);
   const params = {
     lookback: parseInt(document.getElementById('p_lookback').value) || 5,
-    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.5) / 100,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
     maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
     beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.2 : v)() / 100,
     entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2) / 100,
-    trailPct: (parseFloat(document.getElementById('p_trail_pct').value) || 1.5) / 100,
+    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 14,
+    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 3,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
@@ -794,7 +798,8 @@ const OPT_PARAMS = {
   lookback:   { label: 'Lookback',    range: [5, 60, 1] },
   minPct:     { label: 'Min%',        range: [0.1, 5, 0.1], unit: '%' },
   entryStop:  { label: '入场止损%',   range: [0.5, 5, 0.1], unit: '%' },
-  trailPct:   { label: '追踪%',       range: [0.5, 5, 0.1], unit: '%' },
+  atrPeriod:  { label: 'ATR周期',     range: [5, 60, 1] },
+  atrMult:    { label: 'ATR倍数',     range: [0.5, 10, 0.5] },
   maxPos:     { label: '仓位%',       range: [5, 100, 5], unit: '%' },
   beTh:       { label: '保本%',       range: [0, 5, 0.1], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 75, 5], unit: '%' },
@@ -822,12 +827,13 @@ function optimizeParam() {
 
   const p = {
     lookback: parseInt(document.getElementById('p_lookback').value) || 5,
-    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.5) / 100,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) || 0.1) / 100,
     maxPos: (parseFloat(document.getElementById('p_max_pos').value) || 90) / 100,
     margin: (parseFloat(document.getElementById('p_margin').value) || 15) / 100,
     beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? 0.2 : v)() / 100,
     entryStop: (parseFloat(document.getElementById('p_entry_stop').value) || 2) / 100,
-    trailPct: (parseFloat(document.getElementById('p_trail_pct').value) || 1.5) / 100,
+    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || 14,
+    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || 3,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || 75) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || 100000,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || 0) * 10000,
@@ -848,7 +854,8 @@ function optimizeParam() {
       else if (paramKey === 'maxPos') pp.maxPos = v / 100;
       else if (paramKey === 'lookback') pp.lookback = v;
       else if (paramKey === 'entryStop') pp.entryStop = v / 100;
-      else if (paramKey === 'trailPct') pp.trailPct = v / 100;
+      else if (paramKey === 'atrPeriod') pp.atrPeriod = v;
+      else if (paramKey === 'atrMult') pp.atrMult = v;
       else if (paramKey === 'beTh') pp.beTh = v / 100;
       else if (paramKey === 'lockPct') pp.lockPct = v / 100;
       else if (paramKey === 'skipCount') pp.skipCount = v;
@@ -898,7 +905,7 @@ function optimizeParam() {
         <th class="num">' + meta.label + '</th><th class="num">最终权益</th><th class="num">收益</th><th class="num">笔数</th><th class="num">胜率</th><th class="num">盈亏比</th><th class="num">回撤</th><th class="num">均PnL</th>\
       </tr>' + rows + '</table></div>';
     status.textContent = '优化完成 | ' + values.length + '个值 | 最优 ' + meta.label + '=' + best.v + suffix + ' → ' + fmt(best.endEq);
-    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryStop:'p_entry_stop', trailPct:'p_trail_pct', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip' };
+    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryStop:'p_entry_stop', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip' };
     const el = document.getElementById(idMap[paramKey]);
     if (meta.unit) el.value = best.v.toFixed(1);
     else el.value = best.v;
