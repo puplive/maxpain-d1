@@ -166,7 +166,7 @@ export default {
         });
       }
       return new Response(JSON.stringify({ params: row }), {
-        headers: { ...corsHeaders, ...cacheHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
