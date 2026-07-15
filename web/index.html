@@ -2239,8 +2239,9 @@ function drawEquityCurve(eqCurve, cap) {
 window.onload = async function() {
   const ok = await loadAllData();
   if (ok) {
-    setParamValues(defaultParams);
-    const d = ALL_DATA[document.getElementById('symbol').value];
+    const sym = document.getElementById('symbol').value;
+    if (!await loadParams(sym)) setParamValues(defaultParams);
+    const d = ALL_DATA[sym];
     if (d) {
       document.getElementById('p_start').value = d[0].d;
       document.getElementById('p_end').value = new Date().toISOString().slice(0, 10);
