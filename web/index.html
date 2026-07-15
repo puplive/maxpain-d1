@@ -871,6 +871,9 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx) {
   var capInfo = params.capLimit > 0 ? ' | 封顶' + fmt(params.capLimit) : '';
   status.textContent = '完成 | 数据: ' + data[0].d + ' ~ ' + data[data.length-1].d + ' | ' + trades.length + '笔交易' + capInfo;
   btn.disabled = false;
+  console.log('[DEBUG] stopCurve:', JSON.stringify(stopCurve.map(s=>({stop:s.stop,bl:s.breakLevel}))));
+  console.log('[DEBUG] trades:', JSON.stringify(trades.map(t=>({d:t.entry+'~'+t.exit,dir:t.dir,pnl:t.pnl,reason:t.reason}))));
+  console.log('[DEBUG] data range:', data[0].d, '~', data[data.length-1].d, 'n=', data.length, 'fullData len=', fullData.length);
   setTimeout(function() {
     drawChart(data, trades, params, stopCurve, nextDirPred);
     drawEquityCurve(eqCurve, CAP);
