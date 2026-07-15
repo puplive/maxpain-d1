@@ -871,7 +871,10 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx) {
   var capInfo = params.capLimit > 0 ? ' | 封顶' + fmt(params.capLimit) : '';
   status.textContent = '完成 | 数据: ' + data[0].d + ' ~ ' + data[data.length-1].d + ' | ' + trades.length + '笔交易' + capInfo;
   btn.disabled = false;
-  setTimeout(function() { drawChart(data, trades, params, stopCurve, nextDirPred); }, 0);
+  setTimeout(function() {
+    drawChart(data, trades, params, stopCurve, nextDirPred);
+    drawEquityCurve(eqCurve, CAP);
+  }, 0);
 }
 
 function dirText(d) { return d === 'long' ? '多' : '空'; }
