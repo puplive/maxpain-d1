@@ -155,8 +155,8 @@ tr:hover td { background: #1a2a3a; }
 </div>
 
 <script>
-// const API_BASE = 'data/';
-const API_BASE = 'https://api.starrysay.com';
+const API_BASE = 'data/';
+const API_BASE_WORKER = 'https://api.starrysay.com';
 const SYM_CFG = {
   // CZCE
   TA: { name: 'PTA',     mult: 5 },
@@ -945,7 +945,7 @@ async function saveParams() {
       start_date: document.getElementById('p_start').value || null,
       end_date: document.getElementById('p_end').value || null,
     };
-    const resp = await fetch(API_BASE + 'api/params', {
+    const resp = await fetch(API_BASE_WORKER + '/api/params', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(p),
@@ -958,7 +958,7 @@ async function saveParams() {
 
 async function loadParams(sym) {
   try {
-    const resp = await fetch(API_BASE + 'api/params?symbol=' + encodeURIComponent(sym));
+    const resp = await fetch(API_BASE_WORKER + '/api/params?symbol=' + encodeURIComponent(sym));
     const r = await resp.json();
     if (r.params && r.params.lookback != null) {
       setParamValues({
