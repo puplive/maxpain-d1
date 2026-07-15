@@ -512,7 +512,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred) {
     prevBec = bec; prevBep = bep; prevIvs = ivs;
     eqCurve.push({ d, eq });
   }
-  return { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP };
+  return { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos: pos };
 }
 
 function runBacktest() {
@@ -587,7 +587,7 @@ function runBacktest() {
     window._analysisCache[i] = genAnalysis(data, fullData, params, nextDirPred, core.trades, i);
   }
   const _lastAnalysis = window._analysisCache[data.length - 1];
-  const { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP } = core;
+  const { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos } = core;
 
   // 明日方向准确率（1/3/5/10天）
   const dirAccH = { 1: { corr: 0, tot: 0 }, 3: { corr: 0, tot: 0 }, 5: { corr: 0, tot: 0 }, 10: { corr: 0, tot: 0 } };
@@ -871,11 +871,8 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx) {
   var capInfo = params.capLimit > 0 ? ' | 封顶' + fmt(params.capLimit) : '';
   status.textContent = '完成 | 数据: ' + data[0].d + ' ~ ' + data[data.length-1].d + ' | ' + trades.length + '笔交易' + capInfo;
   btn.disabled = false;
-  console.log('[DEBUG] stopCurve:', JSON.stringify(stopCurve.map(s=>({stop:s.stop,bl:s.breakLevel}))));
-  console.log('[DEBUG] trades:', JSON.stringify(trades.map(t=>({d:t.entry+'~'+t.exit,dir:t.dir,pnl:t.pnl,reason:t.reason}))));
-  console.log('[DEBUG] data range:', data[0].d, '~', data[data.length-1].d, 'n=', data.length, 'fullData len=', fullData.length);
   setTimeout(function() {
-    drawChart(data, trades, params, stopCurve, nextDirPred);
+    drawChart(data, trades, params, stopCurve, nextDirPred, openPos);
     drawEquityCurve(eqCurve, CAP);
   }, 0);
 }
@@ -1145,7 +1142,7 @@ function resetParams() {
   document.getElementById('p_cap_limit').value = 0;
 }
 
-function drawChart(data, trades, params, stopCurve, nextDirPred) {
+function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
   const infoEl = document.getElementById('chartInfo');
   const canvas = document.getElementById('chart');
   if (!canvas) return;
@@ -1285,6 +1282,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
         break;
       }
     }
+    if (!posHtml && openPos && row.d >= openPos.entryDate) {
+      const up = openPos.direction === 'long' ? row.c - openPos.entryPx : openPos.entryPx - row.c;
+      const pnl = up * openPos.qty * params.mult;
+      posHtml = '<div class="sig" style="background:#54a0ff15;border:1px solid #54a0ff33;margin-top:4px;"><b>持仓中</b> ' + dirText(openPos.direction) + ' ' + openPos.qty + '手 入场' + openPos.entryPx.toFixed(0) + ' 浮动' + (pnl>0?'+':'') + Math.round(pnl) + '</div>';
+    }
     infoEl.innerHTML = '\
       <div class="row"><span class="label">日期</span><span class="val">' + row.d + (state.pinned ? ' <span style="color:#e8c84a;font-size:10px;">[锁定]</span>' : '') + '</span></div>\
       <div class="row highlight"><span class="label">收盘</span><span class="val ' + cls(row.c - (idx>0?data[idx-1].c:row.c)) + '">' + row.c.toFixed(0) + ' ' + (idx>0?(row.c-data[idx-1].c>0?'+':'')+(row.c-data[idx-1].c).toFixed(0):'') + '</span></div>\
@@ -1317,6 +1319,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred) {
     const xIdx = data.findIndex(r => r.d === t.exit);
     if (eIdx >= 0) tradeMarkers.push({ idx: eIdx, type: 'entry', dir: t.dir, qty: t.qty, price: t.entryPx });
     if (xIdx >= 0) tradeMarkers.push({ idx: xIdx, type: 'exit', dir: t.dir, qty: t.qty, pnl: t.pnl, price: t.exitPx });
+  }
+  if (openPos) {
+    const oIdx = data.findIndex(r => r.d === openPos.entryDate);
+    if (oIdx >= 0) tradeMarkers.push({ idx: oIdx, type: 'entry', dir: openPos.direction, qty: openPos.qty, price: openPos.entryPx, openPos: true });
   }
   tradeMarkers.sort((a, b) => a.idx - b.idx || (a.type === 'entry' ? -1 : 1));
 
