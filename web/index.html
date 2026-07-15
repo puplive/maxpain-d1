@@ -958,7 +958,7 @@ async function saveParams() {
 
 async function loadParams(sym) {
   try {
-    const resp = await fetch(API_BASE_WORKER + '/api/params?symbol=' + encodeURIComponent(sym));
+    const resp = await fetch(API_BASE_WORKER + '/api/params?symbol=' + encodeURIComponent(sym) + '&_=' + Date.now());
     const r = await resp.json();
     if (r.params && r.params.lookback != null) {
       setParamValues({
