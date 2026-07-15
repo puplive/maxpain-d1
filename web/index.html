@@ -1258,7 +1258,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     const absSkew = Math.abs(parseFloat(oiSkew) / 100);
     const oiDir = absSkew < 0.3 ? (parseFloat(oiSkew) > 0 ? '涨' : '跌') : (parseFloat(oiSkew) > 0 ? '跌⚠' : '涨⚠');
     const vrDir = row.vr != null ? (row.vr > 1 ? '涨' : row.vr < 1 ? '跌' : '—') : '';
-    const subHist = data.slice(0, idx).map(r => r.mp);
+    const subHist = data.slice(0, idx + 1).map(r => r.mp);
     const { dir: trendDir } = emaDirection(subHist, params.lookback, params.minPct);
     const _proj = linearProjected(subHist, params.lookback);
     const _slopePct = _proj !== null ? (_proj / (subHist[subHist.length - 1] || 1) * 100).toFixed(1) : null;
