@@ -106,6 +106,7 @@ tr:hover td { background: #1a2a3a; }
     <button class="btn" id="runBtn" onclick="runBacktest()">运行回测</button>
     <button class="btn" onclick="resetParams()" style="background:#2d3436;">重置参数</button>
     <button class="btn" onclick="runMonteCarlo()" style="background:#e8c84a;color:#0f1923;">蒙特卡洛</button>
+    <button class="btn" id="saveBtn" onclick="saveParams()" style="background:#2ecc71;color:#0f1923;">保存参数</button>
     <select id="optParam" style="padding:6px 10px;border:1px solid #2d3436;border-radius:6px;background:#1a2a3a;color:#c8d6e5;font-size:12px;">
       <option value="lookback">Lookback</option>
       <option value="minPct">Min%</option>
@@ -304,6 +305,7 @@ async function switchSymbol() {
     document.getElementById('p_start').value = d[0].d;
     document.getElementById('p_end').value = new Date().toISOString().slice(0, 10);
   }
+  await loadParams(sym);
   runBacktest();
 }
 
@@ -916,6 +918,69 @@ function setParamValues(p) {
   if (p.momDays !== undefined) document.getElementById('p_mom').value = p.momDays;
   if (p.atrPeriod !== undefined) document.getElementById('p_atr_period').value = p.atrPeriod;
   if (p.atrMult !== undefined) document.getElementById('p_atr_mult').value = p.atrMult;
+}
+
+async function saveParams() {
+  const sym = document.getElementById('symbol').value;
+  const btn = document.getElementById('saveBtn');
+  const orig = btn.textContent;
+  btn.textContent = '保存中...'; btn.disabled = true;
+  try {
+    const p = {
+      symbol: sym,
+      lookback: parseInt(document.getElementById('p_lookback').value) || null,
+      min_pct: parseFloat(document.getElementById('p_min_pct').value) || null,
+      max_pos: parseFloat(document.getElementById('p_max_pos').value) || null,
+      margin: parseFloat(document.getElementById('p_margin').value) || null,
+      be_th: parseFloat(document.getElementById('p_be_th').value) || null,
+      entry_stop: parseFloat(document.getElementById('p_entry_stop').value) || null,
+      atr_period: parseInt(document.getElementById('p_atr_period').value) || null,
+      atr_mult: parseFloat(document.getElementById('p_atr_mult').value) || null,
+      lock_pct: parseFloat(document.getElementById('p_lock_pct').value) || null,
+      capital: parseFloat(document.getElementById('p_capital').value) || null,
+      cap_limit: parseFloat(document.getElementById('p_cap_limit').value) || 0,
+      skip_count: parseInt(document.getElementById('p_skip').value) || null,
+      mom_days: parseInt(document.getElementById('p_mom').value) || null,
+      start_date: document.getElementById('p_start').value || null,
+      end_date: document.getElementById('p_end').value || null,
+    };
+    const resp = await fetch(API_BASE + '/api/params', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p),
+    });
+    const r = await resp.json();
+    btn.textContent = r.ok ? '\u2705 \u5df2\u4fdd\u5b58' : '\u274c \u5931\u8d25';
+  } catch { btn.textContent = '\u274c \u5931\u8d25'; }
+  setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+}
+
+async function loadParams(sym) {
+  try {
+    const resp = await fetch(API_BASE + '/api/params?symbol=' + encodeURIComponent(sym));
+    const r = await resp.json();
+    if (r.params && r.params.lookback != null) {
+      setParamValues({
+        lookback: r.params.lookback,
+        minPct: r.params.min_pct,
+        maxPos: r.params.max_pos,
+        margin: r.params.margin,
+        beTh: r.params.be_th,
+        entryStop: r.params.entry_stop,
+        atrPeriod: r.params.atr_period,
+        atrMult: r.params.atr_mult,
+        lockPct: r.params.lock_pct,
+        capital: r.params.capital,
+        capLimit: r.params.cap_limit ? r.params.cap_limit * 10000 : 0,
+        skipCount: r.params.skip_count,
+        momDays: r.params.mom_days,
+      });
+      if (r.params.start_date) document.getElementById('p_start').value = r.params.start_date;
+      if (r.params.end_date) document.getElementById('p_end').value = r.params.end_date;
+      return true;
+    }
+  } catch { /* no saved params */ }
+  return false;
 }
 
 function toggleManual() {

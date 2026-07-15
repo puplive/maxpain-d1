@@ -151,6 +151,60 @@ export default {
       });
     }
 
+    // ── GET /api/params?symbol=TA ──
+    if (request.method === 'GET' && path === '/api/params') {
+      const symbol = (url.searchParams.get('symbol') || '').toUpperCase();
+      if (!symbol) {
+        return new Response(JSON.stringify({ error: '缺少 symbol 参数' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const row = await env.DB.prepare('SELECT * FROM backtest_params WHERE symbol = ?').bind(symbol).first();
+      if (!row) {
+        return new Response(JSON.stringify({ params: null }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ params: row }), {
+        headers: { ...corsHeaders, ...cacheHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ── POST /api/params ──
+    if (request.method === 'POST' && path === '/api/params') {
+      const body: {
+        symbol: string;
+        lookback?: number; min_pct?: number; max_pos?: number; margin?: number;
+        be_th?: number; entry_stop?: number; atr_period?: number; atr_mult?: number;
+        lock_pct?: number; capital?: number; cap_limit?: number;
+        skip_count?: number; mom_days?: number;
+        start_date?: string; end_date?: string;
+      } = await request.json();
+      const { symbol } = body;
+      if (!symbol) {
+        return new Response(JSON.stringify({ error: '缺少 symbol' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      await env.DB.prepare(
+        `INSERT OR REPLACE INTO backtest_params
+         (symbol, lookback, min_pct, max_pos, margin, be_th, entry_stop,
+          atr_period, atr_mult, lock_pct, capital, cap_limit, skip_count, mom_days,
+          start_date, end_date, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+      ).bind(
+        symbol.toUpperCase(),
+        body.lookback ?? null, body.min_pct ?? null, body.max_pos ?? null, body.margin ?? null,
+        body.be_th ?? null, body.entry_stop ?? null,
+        body.atr_period ?? null, body.atr_mult ?? null, body.lock_pct ?? null,
+        body.capital ?? null, body.cap_limit ?? null, body.skip_count ?? null, body.mom_days ?? null,
+        body.start_date ?? null, body.end_date ?? null
+      ).run();
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(JSON.stringify({ error: 'Not Found' }), {
       status: 404,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
