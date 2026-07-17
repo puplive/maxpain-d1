@@ -56,6 +56,7 @@ tr:hover td { background: #1a2a3a; }
 #chart { width: 100%; height: 380px; display: block; touch-action: none; }
 #subChart { width: 100%; height: 110px; display: block; margin-top: 2px; touch-action: none; }
 .chart-main { touch-action: none; }
+#oiChart { width: 100%; height: 90px; display: block; margin-top: 2px; touch-action: none; }
 .chart-info { flex: 0 0 180px; font-size: 12px; color: #c8d6e5; }
 .chart-info .row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #1a2a3a; }
 .chart-info .label { color: #576574; }
@@ -80,6 +81,7 @@ tr:hover td { background: #1a2a3a; }
   .chart-info .row { padding: 2px 0; }
   #chart { height: 260px; }
   #subChart { height: 80px; }
+  #oiChart { height: 60px; }
   .params { padding: 8px 10px; gap: 6px; }
   .param-group input { width: 48px; }
   .param-group input.wide { width: 64px; }
@@ -713,7 +715,7 @@ function runBacktest() {
       <div class="stat-card"><div class="value">' + fmt(s.avgPnl) + '</div><div class="label">均PnL</div></div>\
       <div class="stat-card"><div class="value" style="font-size:10px;line-height:1.4">' + dirAccText + '</div><div class="label">明日方向准确率</div></div>\
     </div>\
-    <div class="chart-wrap"><h2>K线 & 信号 <span class="line-toggles" style="font-size:11px;font-weight:normal;display:inline-flex;gap:8px;margin-left:12px;align-items:center;vertical-align:middle;"><span style="color:#576574;">显示:</span><label style="cursor:pointer;"><input type="checkbox" id="t_mp" checked onchange="toggleChartLine()"> <span style="color:#e8c84a">MP</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bec" checked onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_ema" onchange="toggleChartLine()"> <span style="color:#54a0ff">EMA</span></label></span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+    <div class="chart-wrap"><h2>K线 & 信号 <span class="line-toggles" style="font-size:11px;font-weight:normal;display:inline-flex;gap:8px;margin-left:12px;align-items:center;vertical-align:middle;"><span style="color:#576574;">显示:</span><label style="cursor:pointer;"><input type="checkbox" id="t_mp" checked onchange="toggleChartLine()"> <span style="color:#e8c84a">MP</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bec" checked onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_ema" onchange="toggleChartLine()"> <span style="color:#54a0ff">EMA</span></label></span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th></tr>' + yrHtml + '</table></div>\
@@ -1959,7 +1961,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       sctx.fillStyle = '#576574';
       sctx.font = '10px sans-serif';
       sctx.textAlign = 'right';
-      sctx.fillText('GEX>0=看涨  GEX<0=看跌', W - 8, legY + 13);
+      sctx.fillText('GEX>0=震荡  GEX<0=趋势', W - 8, legY + 13);
 
       if (state.hoverIdx >= start && state.hoverIdx < end) {
         const hx = toX(state.hoverIdx);
@@ -1992,6 +1994,72 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
           sctx.fillText('VR:' + vv.toFixed(2), hx + 4, hoverY);
         }
         sctx.restore();
+      }
+    }
+
+    // ── OI 分布图 ──
+    const oiCanvas = document.getElementById('oiChart');
+    if (oiCanvas) {
+      const oiW = W, oiH = 90;
+      oiCanvas.width = oiW * dpr;
+      oiCanvas.height = oiH * dpr;
+      oiCanvas.style.width = oiW + 'px';
+      oiCanvas.style.height = oiH + 'px';
+      const ox = oiCanvas.getContext('2d');
+      ox.scale(dpr, dpr);
+      ox.fillStyle = '#0a1628';
+      ox.fillRect(0, 0, oiW, oiH);
+      const hi = state.hoverIdx;
+      if (hi >= 0 && hi < n) {
+        const r = data[hi];
+        const ocStr = r.oc_chain;
+        if (ocStr) {
+          let chain;
+          try { chain = JSON.parse(ocStr); } catch(e) { chain = null; }
+          if (chain && chain.length > 0) {
+            const px = r.c;
+            let maxOi = 0;
+            chain.forEach(it => { if (it.co > maxOi) maxOi = it.co; if (it.po > maxOi) maxOi = it.po; });
+            const opad = { top: 8, bottom: 20, left: 8, right: 8 };
+            const ocw = oiW - opad.left - opad.right;
+            const och = oiH - opad.top - opad.bottom;
+            const midY = opad.top + och / 2;
+            const minS = chain[0].s, maxS = chain[chain.length - 1].s, sRange = maxS - minS || 1;
+            const s2x = (s) => opad.left + (s - minS) / sRange * ocw;
+            // 基线
+            ox.strokeStyle = '#2d3436'; ox.lineWidth = 1;
+            ox.beginPath(); ox.moveTo(opad.left, midY); ox.lineTo(oiW - opad.right, midY); ox.stroke();
+            // 现价线
+            ox.strokeStyle = '#e8c84a'; ox.lineWidth = 1; ox.setLineDash([3, 3]);
+            const pxx = s2x(px);
+            ox.beginPath(); ox.moveTo(pxx, opad.top); ox.lineTo(pxx, opad.top + och); ox.stroke();
+            ox.setLineDash([]);
+            // 柱子
+            const barW = Math.max(2, ocw / chain.length * 0.6);
+            chain.forEach(it => {
+              const bx = s2x(it.s);
+              if (it.co > 0) {
+                const bh = (it.co / maxOi) * (och / 2);
+                ox.fillStyle = 'rgba(92,216,90,0.55)';
+                ox.fillRect(bx - barW/2, midY - bh, barW, bh);
+              }
+              if (it.po > 0) {
+                const bh = (it.po / maxOi) * (och / 2);
+                ox.fillStyle = 'rgba(255,107,107,0.55)';
+                ox.fillRect(bx - barW/2, midY, barW, bh);
+              }
+            });
+            // 行权价标签
+            ox.fillStyle = '#576574'; ox.font = '9px sans-serif'; ox.textAlign = 'center';
+            const sStep = Math.max(1, Math.floor(chain.length / 10));
+            for (let i = 0; i < chain.length; i += sStep) {
+              ox.fillText(chain[i].s, s2x(chain[i].s), oiH - 6);
+            }
+            // 右下角标注
+            ox.textAlign = 'right'; ox.fillStyle = '#576574'; ox.font = '9px sans-serif';
+            ox.fillText('现价 ' + px, oiW - 8, oiH - 6);
+          }
+        }
       }
     }
   }
@@ -2132,6 +2200,34 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         else if (relX >= 80 && relX < 160) subVis.skew = !subVis.skew;
         else if (relX >= 160 && relX < 240) subVis.vr = !subVis.vr;
         else return;
+        render();
+      }
+    });
+  }
+
+  // OI 图悬停
+  const oiEl = document.getElementById('oiChart');
+  if (oiEl) {
+    oiEl.addEventListener('touchstart', function(e) { e.preventDefault(); }, { passive: false });
+    oiEl.addEventListener('touchmove', function(e) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const br = oiEl.getBoundingClientRect();
+      const sx = touch.clientX - br.left;
+      const idx = Math.round(state.start + (sx - pad.left) / state.barW);
+      if (idx !== state.hoverIdx) {
+        state.hoverIdx = idx;
+        updateInfo(idx);
+        render();
+      }
+    }, { passive: false });
+    oiEl.addEventListener('mousemove', function(e) {
+      const br = oiEl.getBoundingClientRect();
+      const mx = e.clientX - br.left;
+      const idx = Math.round(state.start + (mx - pad.left) / state.barW);
+      if (idx !== state.hoverIdx) {
+        state.hoverIdx = idx;
+        updateInfo(idx);
         render();
       }
     });

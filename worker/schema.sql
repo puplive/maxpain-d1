@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS daily_data (
   dte INTEGER,
   nc REAL,
   oc REAL,
+  oc_chain TEXT,
   updated_at TEXT DEFAULT (datetime('now')),
   PRIMARY KEY (symbol, date)
 );

@@ -402,6 +402,16 @@ def process_one(sym, fut, opt, date=None, mult=10):
                       if float(r.get('今收盘', 0)) > 0}
         gex = calc_gex(o, px, mult, fut_prices, date, calendar)
 
+        # OI chain: [{s: strike, co: call_oi, po: put_oi}, ...]
+        chain_list = []
+        for s, grp in o.groupby('strike'):
+            co_oi = int(grp[grp['type'] == 'C']['oi'].sum())
+            po_oi = int(grp[grp['type'] == 'P']['oi'].sum())
+            if co_oi > 0 or po_oi > 0:
+                chain_list.append({'s': int(s), 'co': co_oi, 'po': po_oi})
+        chain_list.sort(key=lambda x: x['s'])
+        oc_chain = json.dumps(chain_list, separators=(',', ':'))
+
         # oc: 期权对应标的期货的收盘价（按期权持仓量最大的标的合约）
         oc_val = None
         opt_underlying = o['合约代码'].str.extract(r'^([A-Z]+\d{3})[CP]')[0]
@@ -413,7 +423,8 @@ def process_one(sym, fut, opt, date=None, mult=10):
 
         result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2), 'oc': oc_val,
                         'h': row['h'], 'l': row['l'],
-                        'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex}
+                        'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep,
+                        'vr': vr, 'ivs': ivs, 'gex': gex, 'oc_chain': oc_chain}
     return result
 
 
