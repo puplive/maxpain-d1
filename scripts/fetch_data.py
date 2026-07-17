@@ -250,11 +250,16 @@ def _get_expiry_czce(calendar, contract_code):
     trade_dates = calendar.get(exp_ym, [])
     if not trade_dates:
         return None
-    cutoff = date(yr, mo, 15)
-    before = [d for d in trade_dates if datetime.strptime(d, '%Y-%m-%d').date() <= cutoff]
-    if len(before) < 3:
+    if special:
+        # CJ/PX: 全部交易日 → 倒数第3个
+        pool = trade_dates
+    else:
+        # 常规: 第15个日历日之前(含)
+        cutoff = date(yr, mo, 15)
+        pool = [d for d in trade_dates if datetime.strptime(d, '%Y-%m-%d').date() <= cutoff]
+    if len(pool) < 3:
         return None
-    return before[-3]
+    return pool[-3]
 
 
 def _get_expiry_dce(calendar, contract_code):

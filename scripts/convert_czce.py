@@ -86,19 +86,20 @@ def _czce_expiry(calendar, contract_code):
         else:
             mo -= 1
     exp_ym = f'{yr:04d}-{mo:02d}'
-    # Get trading dates in expiry month
     trade_dates = calendar.get(exp_ym, [])
     if not trade_dates:
         return 30
-    # Rule: 第15个日历日之前(含)的倒数第3个交易日
-    cutoff = date(yr, mo, 15)
-    # Filter trading dates <= cutoff
-    before = [d for d in trade_dates if datetime.strptime(d, '%Y-%m-%d').date() <= cutoff]
-    if len(before) < 3:
+    if special:
+        # CJ/PX: 交割月前二个月全部交易日 → 倒数第3个
+        pool = trade_dates
+    else:
+        # 常规: 第15个日历日之前(含)的交易日
+        cutoff = date(yr, mo, 15)
+        pool = [d for d in trade_dates
+                if datetime.strptime(d, '%Y-%m-%d').date() <= cutoff]
+    if len(pool) < 3:
         return 30
-    # 倒数第3个 = 3rd from end
-    expiry = before[-3]
-    return expiry
+    return pool[-3]
 
 
 def calc_max_pain(opt_df):
