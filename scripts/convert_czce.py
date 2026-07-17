@@ -38,25 +38,67 @@ def parse_opt_code(code: str):
     return None
 
 
-def _opt_expiry(contract_code: str, trade_date_str: str) -> float:
-    """Estimate T (years) for option using its contract code"""
-    from datetime import datetime, date
+def _build_calendar(fut):
+    """构建交易日历: {YYYY-MM: [date1, date2, ...]}
+    优先从AKShare获取全年交易日(含未来月份)，再以期货实际数据补充
+    """
+    cal = {}
+    try:
+        import akshare as ak
+        df = ak.tool_trade_date_hist_sina()
+        for d in pd.to_datetime(df['trade_date']).dt.strftime('%Y-%m-%d'):
+            ym = d[:7]
+            cal.setdefault(ym, []).append(d)
+    except Exception:
+        pass
+    for d in sorted(fut['date'].unique()):
+        ym = d[:7]
+        if d not in cal.setdefault(ym, []):
+            cal[ym].append(d)
+    return cal
+
+
+def _czce_expiry(calendar, contract_code):
+    """CZCE 到期日：交割月前一个月第15个日历日之前(含)的倒数第3个交易日
+    特殊品种(CJ,PX)：交割月前二个月最后一个日历日之前(含)的倒数第3个交易日
+    """
     m = re.search(r'[A-Z]+(\d{3})$', str(contract_code))
     if not m:
-        return 30 / 365
+        return 30
+    sym = re.match(r'^[A-Z]+', str(contract_code))
+    sym = sym.group(0) if sym else ''
     ym = m.group(1)
-    ref_yr = int(trade_date_str[:4])
-    cy = (ref_yr // 10) * 10 + int(ym[0])
+    yr = int(ym[0]) + 2020
     mo = int(ym[1:3])
-    # Options expire ~15th of month before contract month
-    if mo == 1:
-        mo = 12
-        cy -= 1
+    special = sym.upper() in ('CJ', 'PX')
+    if special:
+        # 交割月前二个月
+        if mo <= 2:
+            mo += 10
+            yr -= 1
+        else:
+            mo -= 2
     else:
-        mo -= 1
-    expiry = date(cy, mo, 15)
-    td = datetime.strptime(trade_date_str, '%Y-%m-%d').date()
-    return max((expiry - td).days / 365, 7 / 365)
+        # 交割月前一个月
+        if mo == 1:
+            mo = 12
+            yr -= 1
+        else:
+            mo -= 1
+    exp_ym = f'{yr:04d}-{mo:02d}'
+    # Get trading dates in expiry month
+    trade_dates = calendar.get(exp_ym, [])
+    if not trade_dates:
+        return 30
+    # Rule: 第15个日历日之前(含)的倒数第3个交易日
+    cutoff = date(yr, mo, 15)
+    # Filter trading dates <= cutoff
+    before = [d for d in trade_dates if datetime.strptime(d, '%Y-%m-%d').date() <= cutoff]
+    if len(before) < 3:
+        return 30
+    # 倒数第3个 = 3rd from end
+    expiry = before[-3]
+    return expiry
 
 
 def calc_max_pain(opt_df):
@@ -77,12 +119,39 @@ def calc_max_pain(opt_df):
     return int(best_s)
 
 
-def calc_gex(opt_df, main_px, mult, fut_prices, trade_date):
+def _calc_T(contract_code, trade_date_str, calendar):
+    """Compute T (years) using exact expiry from calendar
+    日历来不到时(未来月份)回退到交割月前一个月的15号近似
+    """
+    from datetime import datetime, date
+    expiry_str = _czce_expiry(calendar, contract_code)
+    if not isinstance(expiry_str, (int, float)):
+        td = datetime.strptime(trade_date_str, '%Y-%m-%d').date()
+        ex = datetime.strptime(expiry_str, '%Y-%m-%d').date()
+        return max((ex - td).days / 365, 7 / 365)
+    # Fallback: 未来月份无日历 → 近似15号
+    m = re.search(r'[A-Z]+(\d{3})$', str(contract_code))
+    if m:
+        ym = m.group(1)
+        ref_yr = int(trade_date_str[:4])
+        cy = (ref_yr // 10) * 10 + int(ym[0])
+        mo = int(ym[1:3])
+        if mo == 1:
+            mo = 12; cy -= 1
+        else:
+            mo -= 1
+        expiry = date(cy, mo, 15)
+        td = datetime.strptime(trade_date_str, '%Y-%m-%d').date()
+        return max((expiry - td).days / 365, 7 / 365)
+    return 30 / 365
+
+
+def calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar):
     """计算净 Gamma Exposure (GEX) = Σ call_GEX - Σ put_GEX
     每张期权使用其对应合约月份的期货价格，T 用实际剩余天数
     """
+    from datetime import datetime, date
     total = 0.0
-    T_def = 30 / 365
     for _, row in opt_df.iterrows():
         iv = row.get('iv', 0)
         oi = row.get('oi', 0)
@@ -93,14 +162,14 @@ def calc_gex(opt_df, main_px, mult, fut_prices, trade_date):
         opt_code = str(row.get('合约代码', ''))
         m = re.match(r'^([A-Z]+\d{3})[CP]', opt_code)
         px = main_px
-        T = T_def
+        T = 30 / 365
         if m:
             contract_code = m.group(1)
             px = fut_prices.get(contract_code)
             if px is None or px <= 0:
                 px = main_px
             else:
-                T = _opt_expiry(contract_code, trade_date)
+                T = _calc_T(contract_code, trade_date, calendar)
         if px <= 0:
             continue
         sqrt_T = np.sqrt(T)
@@ -292,6 +361,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
                 return {}
             print(f'    {sym}: --date {ym} ({len(fut_dates)} 天)')
 
+    calendar = _build_calendar(fut)
     result = {}
     for date, row in sorted(fut_dates.items()):
         if date not in opt_by_date:
@@ -315,7 +385,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
         fut_prices = {r['合约代码']: float(r.get('今收盘', 0))
                       for _, r in fut[fut['date'] == date].iterrows()
                       if float(r.get('今收盘', 0)) > 0}
-        gex = calc_gex(o, px, mult, fut_prices, date)
+        gex = calc_gex(o, px, mult, fut_prices, date, calendar)
 
         # oc: 期权对应标的期货的收盘价（按期权持仓量最大的标的合约）
         oc_val = None

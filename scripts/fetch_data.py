@@ -216,6 +216,99 @@ def _load_trade_days() -> set[str] | None:
         return None
 
 
+def _build_trade_calendar(trade_days):
+    """从交易日历构建 {YYYY-MM: [date1, date2, ...]}"""
+    cal = {}
+    for d in sorted(trade_days):
+        ym = d[:7]
+        cal.setdefault(ym, []).append(d)
+    return cal
+
+
+def _get_expiry_czce(calendar, contract_code):
+    """CZCE 到期日：交割月前一个月第15个日历日之前(含)的倒数第3个交易日"""
+    m = re.search(r'[A-Z]+(\d{3})$', str(contract_code))
+    if not m:
+        return None
+    sym = re.match(r'^[A-Z]+', str(contract_code))
+    sym = sym.group(0) if sym else ''
+    ym = m.group(1)
+    yr = int(ym[0]) + 2020
+    mo = int(ym[1:3])
+    special = sym.upper() in ('CJ', 'PX')
+    if special:
+        if mo <= 2:
+            mo += 10; yr -= 1
+        else:
+            mo -= 2
+    else:
+        if mo == 1:
+            mo = 12; yr -= 1
+        else:
+            mo -= 1
+    exp_ym = f'{yr:04d}-{mo:02d}'
+    trade_dates = calendar.get(exp_ym, [])
+    if not trade_dates:
+        return None
+    cutoff = date(yr, mo, 15)
+    before = [d for d in trade_dates if datetime.strptime(d, '%Y-%m-%d').date() <= cutoff]
+    if len(before) < 3:
+        return None
+    return before[-3]
+
+
+def _get_expiry_dce(calendar, contract_code):
+    """DCE 到期日：交割月前一个月的第12个交易日"""
+    m = re.search(r'[a-z]+(\d{4})$', str(contract_code))
+    if not m:
+        return None
+    sym = re.match(r'^[a-z]+', str(contract_code))
+    sym = sym.group(0).upper() if sym else ''
+    ym = m.group(1)
+    yr = 2000 + int(ym[:2])
+    mo = int(ym[2:4])
+    if sym in ('C', 'M'):
+        if mo <= 2:
+            mo += 10; yr -= 1
+        else:
+            mo -= 2
+    else:
+        if mo == 1:
+            mo = 12; yr -= 1
+        else:
+            mo -= 1
+    exp_ym = f'{yr:04d}-{mo:02d}'
+    trade_dates = calendar.get(exp_ym, [])
+    if len(trade_dates) < 12:
+        return None
+    return trade_dates[11]
+
+
+def _get_expiry_shfe(calendar, contract_code):
+    """SHFE 到期日：交割月前一个月的倒数第5个交易日
+    SC (原油/能源中心)：交割月前一个月的倒数第13个交易日
+    """
+    m = re.search(r'[A-Z]+(\d{4})$', str(contract_code))
+    if not m:
+        return None
+    sym = re.match(r'^[A-Z]+', str(contract_code))
+    sym = sym.group(0).upper() if sym else ''
+    ym = m.group(1)
+    yr = 2000 + int(ym[:2])
+    mo = int(ym[2:4])
+    if mo == 1:
+        mo = 12; yr -= 1
+    else:
+        mo -= 1
+    exp_ym = f'{yr:04d}-{mo:02d}'
+    trade_dates = calendar.get(exp_ym, [])
+    if not trade_dates:
+        return None
+    n = 13 if sym in ('SC',) else 5
+    if len(trade_dates) < n:
+        return None
+    return trade_dates[-n]
+
 
 def _fetch_one_option(sym: str, oname: str, exchange: str, trade_date: str, day: str) -> tuple[str, pd.DataFrame]:
     """拉取并处理单个品种的期权数据（根据交易所分发到不同 AKShare 函数）"""
@@ -296,13 +389,12 @@ def calc_be(opt_df: pd.DataFrame, px: float, is_call: bool) -> float | None:
     return round((low + high) / 2, 2)
 
 
-def _calc_gex(opt_df, main_px, mult, fut_prices, trade_date):
+def _calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar=None):
     """计算净 Gamma Exposure (GEX) = Σ call_GEX - Σ put_GEX
     每张期权使用其对应合约月份的期货价格，T 用实际剩余天数
     """
     from datetime import datetime, date
     total = 0.0
-    T_def = 30 / 365
     for _, row in opt_df.iterrows():
         iv = row.get('iv', 0)
         oi = row.get('oi', 0)
@@ -313,7 +405,7 @@ def _calc_gex(opt_df, main_px, mult, fut_prices, trade_date):
         opt_code = str(row.get('合约代码', ''))
         m = re.match(r'^[A-Z]+(\d+)([CP])(\d+)$', opt_code)
         px = main_px
-        T = T_def
+        T = 30 / 365
         if m:
             contract_ym = m.group(1)
             # Find matching futures price by symbol
@@ -323,8 +415,30 @@ def _calc_gex(opt_df, main_px, mult, fut_prices, trade_date):
                     break
             if px is None or px <= 0:
                 px = main_px
+            elif calendar:
+                # 日历到期日计算
+                expiry_str = None
+                if len(contract_ym) == 3:
+                    ref_yr = int(trade_date[:4])
+                    cy = (ref_yr // 10) * 10 + int(contract_ym[0])
+                    mo = int(contract_ym[1:3])
+                    code_3 = re.match(r'^([A-Z]+)', opt_code)
+                    code_3 = code_3.group(1) if code_3 else ''
+                    # CZCE expiry
+                    expiry_str = _get_expiry_czce(calendar, code_3 + contract_ym)
+                elif len(contract_ym) == 4:
+                    code_4 = re.match(r'^([A-Z]+)', opt_code)
+                    code_4 = code_4.group(1) if code_4 else ''
+                    # Try SHFE first, fallback to DCE
+                    expiry_str = _get_expiry_shfe(calendar, code_4 + contract_ym)
+                    if expiry_str is None:
+                        expiry_str = _get_expiry_dce(calendar, code_4.lower() + contract_ym)
+                if expiry_str:
+                    td = datetime.strptime(trade_date, '%Y-%m-%d').date()
+                    ex = datetime.strptime(expiry_str, '%Y-%m-%d').date()
+                    T = max((ex - td).days / 365, 7 / 365)
             else:
-                # Estimate T
+                # 无日历时使用近似估计
                 ref_yr = int(trade_date[:4])
                 if len(contract_ym) == 3:
                     cy = (ref_yr // 10) * 10 + int(contract_ym[0])
@@ -334,7 +448,6 @@ def _calc_gex(opt_df, main_px, mult, fut_prices, trade_date):
                     mo = int(contract_ym[2:4])
                     if cy < ref_yr - 2: cy += 100
                 else:
-                    T = T_def
                     sqrt_T = np.sqrt(T)
                     d1 = (np.log(px / K) + 0.5 * iv**2 * T) / (iv * sqrt_T)
                     pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
@@ -417,6 +530,8 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
             return ('timeout', {})
 
     # 计算
+    trade_days = _load_trade_days()
+    calendar = _build_trade_calendar(trade_days) if trade_days else None
     entries = {}
     for sym in symbols:
         if sym not in cfg:
@@ -447,7 +562,7 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
         civ = opt[(opt['type'] == 'C') & (opt['delta'].between(0.20, 0.30))]['iv'].mean()
         piv = opt[(opt['type'] == 'P') & (opt['delta'].between(-0.30, -0.20))]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
-        gex = _calc_gex(opt, px, cfg[sym]['mult'], {r['symbol']: float(r['close']) for _, r in day_fut.iterrows() if float(r.get('close', 0)) > 0}, d)
+        gex = _calc_gex(opt, px, cfg[sym]['mult'], {r['symbol']: float(r['close']) for _, r in day_fut.iterrows() if float(r.get('close', 0)) > 0}, d, calendar)
         entries[sym] = {
             'd': d, 'o': round(float(fr['open']), 2), 'c': round(px, 2),
             'h': round(float(fr['high']), 2), 'l': round(float(fr['low']), 2),
