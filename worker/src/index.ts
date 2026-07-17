@@ -22,6 +22,8 @@ interface DailyRow {
   gex: number | null;
   expiry: string;
   dte: number;
+  nc: number | null;
+  oc: number | null;
 }
 
 /** 将 DB 行转成前端兼容的短字段名 */
@@ -42,6 +44,8 @@ function toFrontend(row: DailyRow) {
     gex: row.gex,
     expiry: row.expiry,
     dte: row.dte,
+    nc: row.nc,
+    oc: row.oc,
   };
 }
 
@@ -72,7 +76,7 @@ export default {
         });
       }
       const { results } = await env.DB.prepare(
-        'SELECT date,open,close,high,low,mp,co,po,bec,bep,vr,ivs,gex,expiry,dte FROM daily_data WHERE symbol = ? ORDER BY date'
+        'SELECT date,open,close,high,low,mp,co,po,bec,bep,vr,ivs,gex,expiry,dte,nc,oc FROM daily_data WHERE symbol = ? ORDER BY date'
       ).bind(symbol).all<DailyRow>();
       const data = (results || []).map(toFrontend);
       return new Response(JSON.stringify({ data }), {
@@ -97,6 +101,7 @@ export default {
         vr?: number | null; ivs?: number | null;
         gex?: number | null;
         expiry?: string; dte?: number;
+        nc?: number | null; oc?: number | null;
       }> } = await request.json();
 
       const { symbol, data } = body;
@@ -109,8 +114,8 @@ export default {
 
       const stmt = env.DB.prepare(
         `INSERT OR REPLACE INTO daily_data
-         (symbol, date, open, close, high, low, mp, co, po, bec, bep, vr, ivs, gex, expiry, dte)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (symbol, date, open, close, high, low, mp, co, po, bec, bep, vr, ivs, gex, expiry, dte, nc, oc)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
 
       const batch = data.map((r) =>
@@ -120,7 +125,8 @@ export default {
           r.bec ?? null, r.bep ?? null,
           r.vr ?? null, r.ivs ?? null,
           r.gex ?? null,
-          r.expiry ?? '', r.dte ?? 0
+          r.expiry ?? '', r.dte ?? 0,
+          r.nc ?? null, r.oc ?? null
         )
       );
 

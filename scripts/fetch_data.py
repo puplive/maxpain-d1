@@ -296,11 +296,13 @@ def calc_be(opt_df: pd.DataFrame, px: float, is_call: bool) -> float | None:
     return round((low + high) / 2, 2)
 
 
-def _calc_gex(opt_df, px, mult):
-    """计算净 Gamma Exposure (GEX) = Σ call_GEX - Σ put_GEX"""
+def _calc_gex(opt_df, main_px, mult, fut_prices, trade_date):
+    """计算净 Gamma Exposure (GEX) = Σ call_GEX - Σ put_GEX
+    每张期权使用其对应合约月份的期货价格，T 用实际剩余天数
+    """
+    from datetime import datetime, date
     total = 0.0
-    T = 30 / 365
-    sqrt_T = np.sqrt(T)
+    T_def = 30 / 365
     for _, row in opt_df.iterrows():
         iv = row.get('iv', 0)
         oi = row.get('oi', 0)
@@ -308,6 +310,48 @@ def _calc_gex(opt_df, px, mult):
         cp = row.get('type', 'C')
         if pd.isna(iv) or iv <= 1e-6 or oi <= 0 or K <= 0:
             continue
+        opt_code = str(row.get('合约代码', ''))
+        m = re.match(r'^[A-Z]+(\d+)([CP])(\d+)$', opt_code)
+        px = main_px
+        T = T_def
+        if m:
+            contract_ym = m.group(1)
+            # Find matching futures price by symbol
+            for f_sym, f_px in fut_prices.items():
+                if f_sym.endswith(contract_ym):
+                    px = f_px
+                    break
+            if px is None or px <= 0:
+                px = main_px
+            else:
+                # Estimate T
+                ref_yr = int(trade_date[:4])
+                if len(contract_ym) == 3:
+                    cy = (ref_yr // 10) * 10 + int(contract_ym[0])
+                    mo = int(contract_ym[1:3])
+                elif len(contract_ym) == 4:
+                    cy = 2000 + int(contract_ym[:2])
+                    mo = int(contract_ym[2:4])
+                    if cy < ref_yr - 2: cy += 100
+                else:
+                    T = T_def
+                    sqrt_T = np.sqrt(T)
+                    d1 = (np.log(px / K) + 0.5 * iv**2 * T) / (iv * sqrt_T)
+                    pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
+                    gamma = pdf / (px * iv * sqrt_T)
+                    g = gamma * oi * mult * px * px * 0.01
+                    total += g if cp == 'C' else -g
+                    continue
+                if mo == 1:
+                    mo = 12; cy -= 1
+                else:
+                    mo -= 1
+                expiry = date(cy, mo, 15)
+                td = datetime.strptime(trade_date, '%Y-%m-%d').date()
+                T = max((expiry - td).days / 365, 7 / 365)
+        if px <= 0:
+            continue
+        sqrt_T = np.sqrt(T)
         d1 = (np.log(px / K) + 0.5 * iv**2 * T) / (iv * sqrt_T)
         pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
         gamma = pdf / (px * iv * sqrt_T)
@@ -403,7 +447,7 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
         civ = opt[(opt['type'] == 'C') & (opt['delta'].between(0.20, 0.30))]['iv'].mean()
         piv = opt[(opt['type'] == 'P') & (opt['delta'].between(-0.30, -0.20))]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
-        gex = _calc_gex(opt, px, cfg[sym]['mult'])
+        gex = _calc_gex(opt, px, cfg[sym]['mult'], {r['symbol']: float(r['close']) for _, r in day_fut.iterrows() if float(r.get('close', 0)) > 0}, d)
         entries[sym] = {
             'd': d, 'o': round(float(fr['open']), 2), 'c': round(px, 2),
             'h': round(float(fr['high']), 2), 'l': round(float(fr['low']), 2),

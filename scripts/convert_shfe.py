@@ -39,6 +39,27 @@ def parse_opt_code(code):
     return None
 
 
+def _opt_expiry_shfe(contract_code: str, trade_date_str: str) -> float:
+    """Estimate T (years) for SHFE option using its contract code"""
+    from datetime import datetime, date
+    m = re.search(r'[A-Z]+(\d{4})$', str(contract_code))
+    if not m:
+        return 30 / 365
+    ym = m.group(1)
+    yr = 2000 + int(ym[:2])
+    mo = int(ym[2:4])
+    ref_yr = int(trade_date_str[:4])
+    if yr < ref_yr - 2:
+        yr += 100
+    if mo == 1:
+        mo = 12; yr -= 1
+    else:
+        mo -= 1
+    expiry = date(yr, mo, 15)
+    td = datetime.strptime(trade_date_str, '%Y-%m-%d').date()
+    return max((expiry - td).days / 365, 7 / 365)
+
+
 def calc_max_pain(opt_df):
     if opt_df.empty: return 0
     strikes = sorted(opt_df['strike'].unique())
@@ -53,11 +74,12 @@ def calc_max_pain(opt_df):
     return int(best_s)
 
 
-def calc_gex(opt_df, px, mult):
-    """计算净 Gamma Exposure (GEX) = Σ call_GEX - Σ put_GEX"""
+def calc_gex(opt_df, main_px, mult, fut_prices, trade_date):
+    """计算净 Gamma Exposure (GEX) = Σ call_GEX - Σ put_GEX
+    每张期权使用其对应合约月份的期货价格，T 用实际剩余天数
+    """
     total = 0.0
-    T = 30 / 365
-    sqrt_T = np.sqrt(T)
+    T_def = 30 / 365
     for _, row in opt_df.iterrows():
         iv = row.get('iv', 0)
         oi = row.get('oi', 0)
@@ -65,6 +87,20 @@ def calc_gex(opt_df, px, mult):
         cp = row.get('type', 'C')
         if pd.isna(iv) or iv <= 1e-6 or oi <= 0 or K <= 0:
             continue
+        opt_code = str(row.get('合约', ''))
+        m = re.search(r'^([A-Z]{1,2}\d{4})[CP]', opt_code)
+        px = main_px
+        T = T_def
+        if m:
+            contract_code = m.group(1)
+            px = fut_prices.get(contract_code)
+            if px is None or px <= 0:
+                px = main_px
+            else:
+                T = _opt_expiry_shfe(contract_code, trade_date)
+        if px <= 0:
+            continue
+        sqrt_T = np.sqrt(T)
         d1 = (np.log(px / K) + 0.5 * iv**2 * T) / (iv * sqrt_T)
         pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
         gamma = pdf / (px * iv * sqrt_T)
@@ -230,7 +266,10 @@ def process_one(sym, fut, opt, mult=10):
         civ = o[(o['type'] == 'C') & (o['delta'].between(0.20, 0.30))]['iv'].mean()
         piv = o[(o['type'] == 'P') & (o['delta'].between(-0.30, -0.20))]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
-        gex = calc_gex(o, px, mult)
+        fut_prices = {r['合约']: float(r.get('收盘价', 0))
+                      for _, r in fut[fut['date'] == date].iterrows()
+                      if float(r.get('收盘价', 0)) > 0}
+        gex = calc_gex(o, px, mult, fut_prices, date)
 
         # oc: 期权对应标的期货的收盘价（按期权持仓量最大的标的合约）
         oc_val = None

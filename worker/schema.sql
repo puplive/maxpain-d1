@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS daily_data (
   gex REAL,
   expiry TEXT,
   dte INTEGER,
+  nc REAL,
+  oc REAL,
   updated_at TEXT DEFAULT (datetime('now')),
   PRIMARY KEY (symbol, date)
 );
