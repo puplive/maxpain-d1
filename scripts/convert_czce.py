@@ -38,19 +38,32 @@ def parse_opt_code(code: str):
     return None
 
 
+_CAL_CACHE = None
+
+
+def _load_akshare_calendar():
+    """全局缓存：只调一次 AKShare 交易日历"""
+    global _CAL_CACHE
+    if _CAL_CACHE is not None:
+        return _CAL_CACHE
+    try:
+        import akshare as ak
+        df = ak.tool_trade_date_hist_sina()
+        cal = {}
+        for d in pd.to_datetime(df['trade_date']).dt.strftime('%Y-%m-%d'):
+            ym = d[:7]
+            cal.setdefault(ym, []).append(d)
+        _CAL_CACHE = cal
+    except Exception:
+        _CAL_CACHE = {}
+    return _CAL_CACHE
+
+
 def _build_calendar(fut):
     """构建交易日历: {YYYY-MM: [date1, date2, ...]}
     优先从AKShare获取全年交易日(含未来月份)，再以期货实际数据补充
     """
-    cal = {}
-    try:
-        import akshare as ak
-        df = ak.tool_trade_date_hist_sina()
-        for d in pd.to_datetime(df['trade_date']).dt.strftime('%Y-%m-%d'):
-            ym = d[:7]
-            cal.setdefault(ym, []).append(d)
-    except Exception:
-        pass
+    cal = dict(_load_akshare_calendar())
     for d in sorted(fut['date'].unique()):
         ym = d[:7]
         if d not in cal.setdefault(ym, []):
@@ -62,6 +75,7 @@ def _czce_expiry(calendar, contract_code):
     """CZCE 到期日：交割月前一个月第15个日历日之前(含)的倒数第3个交易日
     特殊品种(CJ,PX)：交割月前二个月最后一个日历日之前(含)的倒数第3个交易日
     """
+    from datetime import date, datetime
     m = re.search(r'[A-Z]+(\d{3})$', str(contract_code))
     if not m:
         return 30

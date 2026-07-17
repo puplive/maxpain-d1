@@ -39,19 +39,32 @@ def parse_opt_code(code):
     return None
 
 
+_CAL_CACHE = None
+
+
+def _load_akshare_calendar():
+    """全局缓存：只调一次 AKShare 交易日历"""
+    global _CAL_CACHE
+    if _CAL_CACHE is not None:
+        return _CAL_CACHE
+    try:
+        import akshare as ak
+        df = ak.tool_trade_date_hist_sina()
+        cal = {}
+        for d in pd.to_datetime(df['trade_date']).dt.strftime('%Y-%m-%d'):
+            ym = d[:7]
+            cal.setdefault(ym, []).append(d)
+        _CAL_CACHE = cal
+    except Exception:
+        _CAL_CACHE = {}
+    return _CAL_CACHE
+
+
 def _build_calendar(fut):
     """构建交易日历: {YYYY-MM: [date1, date2, ...]}
     优先从AKShare获取全年交易日(含未来月份)，再以期货实际数据补充
     """
-    cal = {}
-    try:
-        import akshare as ak
-        df = ak.tool_trade_date_hist_sina()
-        for d in pd.to_datetime(df['trade_date']).dt.strftime('%Y-%m-%d'):
-            ym = d[:7]
-            cal.setdefault(ym, []).append(d)
-    except Exception:
-        pass
+    cal = dict(_load_akshare_calendar())
     for d in sorted(fut['date'].unique()):
         ym = d[:7]
         if d not in cal.setdefault(ym, []):
