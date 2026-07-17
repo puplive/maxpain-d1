@@ -715,7 +715,7 @@ function runBacktest() {
       <div class="stat-card"><div class="value">' + fmt(s.avgPnl) + '</div><div class="label">均PnL</div></div>\
       <div class="stat-card"><div class="value" style="font-size:10px;line-height:1.4">' + dirAccText + '</div><div class="label">明日方向准确率</div></div>\
     </div>\
-    <div class="chart-wrap"><h2>K线 & 信号 <span class="line-toggles" style="font-size:11px;font-weight:normal;display:inline-flex;gap:8px;margin-left:12px;align-items:center;vertical-align:middle;"><span style="color:#576574;">显示:</span><label style="cursor:pointer;"><input type="checkbox" id="t_mp" checked onchange="toggleChartLine()"> <span style="color:#e8c84a">MP</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bec" checked onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_ema" onchange="toggleChartLine()"> <span style="color:#54a0ff">EMA</span></label></span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+    <div class="chart-wrap"><h2>K线 & 信号 <span class="line-toggles" style="font-size:11px;font-weight:normal;display:inline-flex;gap:8px;margin-left:12px;align-items:center;vertical-align:middle;"><span style="color:#576574;">显示:</span><label style="cursor:pointer;"><input type="checkbox" id="t_mp" checked onchange="toggleChartLine()"> <span style="color:#e8c84a">MP</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bec" checked onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_ema" onchange="toggleChartLine()"> <span style="color:#54a0ff">EMA</span></label></span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint">绿色柱=看涨OI&nbsp;&nbsp;红色柱=看跌OI&nbsp;&nbsp;黄线=现价&nbsp;&nbsp;最高柱=资金集中区</div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th></tr>' + yrHtml + '</table></div>\
@@ -2000,6 +2000,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     // ── OI 分布图 ──
     const oiCanvas = document.getElementById('oiChart');
     if (oiCanvas) {
+      const oiHint = document.getElementById('oiHint');
+      if (oiHint) oiHint.style.display = 'none';
       const oiW = W, oiH = 90;
       oiCanvas.width = oiW * dpr;
       oiCanvas.height = oiH * dpr;
@@ -2014,6 +2016,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         const r = data[hi];
         const ocStr = r.oc_chain;
         if (ocStr) {
+          if (oiHint) oiHint.style.display = 'block';
           let chain;
           try { chain = JSON.parse(ocStr); } catch(e) { chain = null; }
           if (chain && chain.length > 0) {
@@ -2058,7 +2061,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
             // 右下角标注
             ox.textAlign = 'right'; ox.fillStyle = '#576574'; ox.font = '9px sans-serif';
             ox.fillText('现价 ' + px, oiW - 8, oiH - 6);
+          } else {
+            if (oiHint) oiHint.style.display = 'none';
           }
+        } else {
+          if (oiHint) oiHint.style.display = 'none';
         }
       }
     }
