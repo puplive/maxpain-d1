@@ -1773,6 +1773,39 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       ctx.restore();
     }
 
+    // 期权到期日标记
+    if (document.getElementById('t_ema').checked === undefined || true) {
+      const expiryPositions = [];
+      const seenExpiry = new Set();
+      for (let i = start; i < end && i < n; i++) {
+        if (data[i].expiry && data[i].expiry === data[i].d) {
+          if (!seenExpiry.has(data[i].expiry)) {
+            seenExpiry.add(data[i].expiry);
+            expiryPositions.push({ idx: i });
+          }
+        }
+      }
+      expiryPositions.forEach(({ idx }) => {
+        const x = toX(idx);
+        ctx.save();
+        ctx.strokeStyle = '#e8c84a';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([6, 4]);
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, pad.top);
+        ctx.lineTo(x, pad.top + ch);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#e8c84a';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('到期', x, pad.top + 12);
+        ctx.restore();
+      });
+    }
+
     const lastVis = Math.min(end - 1, n - 1);
     ctx.fillStyle = '#e8c84a';
     ctx.font = '11px sans-serif';
@@ -1992,6 +2025,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         if (subVis.vr) {
           sctx.fillStyle = '#ff9f43';
           sctx.fillText('VR:' + vv.toFixed(2), hx + 4, hoverY);
+          hoverY += 12;
+        }
+        if (data[hi].dte != null && data[hi].expiry) {
+          sctx.fillStyle = '#8395a7';
+          sctx.fillText('到期: ' + data[hi].dte + '天', hx + 4, hoverY);
         }
         sctx.restore();
       }
