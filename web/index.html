@@ -1247,7 +1247,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
   const subCanvas = document.getElementById('subChart');
   var _subGex, _subSkewD, _subMinG, _subMaxG, _subMinS, _subMaxS;
   var _subVr, _subMinV, _subMaxV;
-  const subVis = { gex: true, skew: false, vr: false };
+  var _subIv, _subMinIv, _subMaxIv;
+  const subVis = { gex: true, skew: false, vr: false, iv: false };
   if (subCanvas) {
     subCanvas.width = W * dpr;
     subCanvas.height = 110 * dpr;
@@ -1259,25 +1260,31 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     _subGex = new Float64Array(n);
     _subSkewD = new Float64Array(n);
     _subVr = new Float64Array(n);
+    _subIv = new Float64Array(n);
     var _prevSk = null;
     _subMinG = Infinity; _subMaxG = -Infinity;
     _subMinS = Infinity; _subMaxS = -Infinity;
     _subMinV = Infinity; _subMaxV = -Infinity;
+    _subMinIv = Infinity; _subMaxIv = -Infinity;
     for (let i = 0; i < n; i++) {
       const r = data[i];
       const g = r.gex != null ? r.gex : 0;
       const sk = (r.co - r.po) / (r.co + r.po + 1e-10);
       const sd = _prevSk !== null ? sk - _prevSk : 0;
       const v = r.vr != null ? r.vr : 1;
+      const ivv = r.ivs != null ? r.ivs : 0;
       _subGex[i] = g;
       _subSkewD[i] = sd;
       _subVr[i] = v;
+      _subIv[i] = ivv;
       if (g < _subMinG) _subMinG = g;
       if (g > _subMaxG) _subMaxG = g;
       if (sd < _subMinS) _subMinS = sd;
       if (sd > _subMaxS) _subMaxS = sd;
       if (v < _subMinV) _subMinV = v;
       if (v > _subMaxV) _subMaxV = v;
+      if (ivv < _subMinIv) _subMinIv = ivv;
+      if (ivv > _subMaxIv) _subMaxIv = ivv;
       _prevSk = sk;
     }
     const gr = _subMaxG - _subMinG || 1;
@@ -1286,6 +1293,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     _subMinS -= sr * 0.1; _subMaxS += sr * 0.1;
     const vr = _subMaxV - _subMinV || 1;
     _subMinV -= vr * 0.1; _subMaxV += vr * 0.1;
+    const ivr = _subMaxIv - _subMinIv || 1;
+    _subMinIv -= ivr * 0.1; _subMaxIv += ivr * 0.1;
   }
 
   const pad = { top: 20, bottom: 36, left: 60, right: 20 };
@@ -1823,8 +1832,9 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       const sch = 110 - spad.top - spad.bottom;
       const s2y = (v, mn, mx) => spad.top + sch - (v - mn) / (mx - mn) * sch;
 
-      // 按可视范围重算 GEX/OI/VR scale，避免远端极端值压扁
+      // 按可视范围重算 GEX/OI/VR/IV scale，避免远端极端值压扁
       let vMinG = Infinity, vMaxG = -Infinity, vMinS = Infinity, vMaxS = -Infinity, vMinV = Infinity, vMaxV = -Infinity;
+      let vMinIv = Infinity, vMaxIv = -Infinity;
       for (let i = start; i < end && i < n; i++) {
         const g = _subGex[i];
         if (g !== 0) { if (g < vMinG) vMinG = g; if (g > vMaxG) vMaxG = g; }
@@ -1832,12 +1842,15 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         if (sd !== 0) { if (sd < vMinS) vMinS = sd; if (sd > vMaxS) vMaxS = sd; }
         const vv = _subVr[i];
         if (vv !== 0) { if (vv < vMinV) vMinV = vv; if (vv > vMaxV) vMaxV = vv; }
+        const ivv = _subIv[i];
+        if (ivv !== 0) { if (ivv < vMinIv) vMinIv = ivv; if (ivv > vMaxIv) vMaxIv = ivv; }
       }
       if (vMinG === Infinity || vMinG === vMaxG) { vMinG = _subMinG; vMaxG = _subMaxG; }
       else { const gr = vMaxG - vMinG || 1; vMinG -= gr * 0.1; vMaxG += gr * 0.1; }
       if (vMinS === Infinity || vMinS === vMaxS) { vMinS = _subMinS; vMaxS = _subMaxS; }
       else { const sr = vMaxS - vMinS || 1; vMinS -= sr * 0.1; vMaxS += sr * 0.1; }
       if (vMinV === Infinity || vMinV === vMaxV) { vMinV = _subMinV; vMaxV = _subMaxV; }
+      if (vMinIv === Infinity || vMinIv === vMaxIv) { vMinIv = _subMinIv; vMaxIv = _subMaxIv; }
 
       sctx.fillStyle = '#09131c';
       sctx.fillRect(0, 0, W, 110);
@@ -1895,6 +1908,16 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         }
       }
 
+      if (subVis.iv) {
+        sctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+          const v = vMinIv + (vMaxIv - vMinIv) / 4 * i;
+          const y = spad.top + (sch / 4) * (4 - i);
+          sctx.fillStyle = '#00d2d3';
+          sctx.fillText((v * 100).toFixed(1) + '%', W - 24, y + 3);
+        }
+      }
+
       if (subVis.gex) {
         for (let i = start; i < end && i < n; i++) {
           const g = _subGex[i];
@@ -1940,6 +1963,23 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         sctx.setLineDash([]);
       }
 
+      if (subVis.iv) {
+        sctx.strokeStyle = '#00d2d3';
+        sctx.lineWidth = 1;
+        sctx.setLineDash([4, 3]);
+        sctx.beginPath();
+        started = false;
+        for (let i = start; i < end && i < n; i++) {
+          const x = toX(i);
+          const y = s2y(_subIv[i], vMinIv, vMaxIv);
+          if (_subIv[i] === 0 && !started) continue;
+          if (_subIv[i] === 0) { started = false; continue; }
+          if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
+        }
+        sctx.stroke();
+        sctx.setLineDash([]);
+      }
+
       sctx.font = '10px sans-serif';
       const legY = spad.top + 3;
       function drawLegItem(x, color, label, key) {
@@ -1961,8 +2001,9 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         sctx.fillText(label, x + 14, legY + 13);
       }
       drawLegItem(pad.left + 4, '#a55eea', 'GEX', 'gex');
-      drawLegItem(pad.left + 84, '#48dbfb', 'OI偏度差', 'skew');
-      drawLegItem(pad.left + 164, '#ff9f43', '成交量比', 'vr');
+      drawLegItem(pad.left + 64, '#48dbfb', 'OI偏度差', 'skew');
+      drawLegItem(pad.left + 124, '#ff9f43', '成交量比', 'vr');
+      drawLegItem(pad.left + 184, '#00d2d3', 'IV偏度', 'iv');
       sctx.fillStyle = '#576574';
       sctx.font = '10px sans-serif';
       sctx.textAlign = 'right';
@@ -1981,6 +2022,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         const gv = _subGex[hi];
         const sv = _subSkewD[hi] * 100;
         const vv = _subVr[hi];
+        const ivv = _subIv[hi];
         sctx.font = '10px sans-serif';
         sctx.textAlign = 'left';
         let hoverY = spad.top + 14;
@@ -1997,6 +2039,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         if (subVis.vr) {
           sctx.fillStyle = '#ff9f43';
           sctx.fillText('VR:' + vv.toFixed(2), hx + 4, hoverY);
+          hoverY += 12;
+        }
+        if (subVis.iv) {
+          sctx.fillStyle = '#00d2d3';
+          sctx.fillText('IV偏度: ' + (ivv >= 0 ? '+' : '') + (ivv * 100).toFixed(2) + '%', hx + 4, hoverY);
           hoverY += 12;
         }
         if (data[hi].dte != null && data[hi].expiry) {
@@ -2233,9 +2280,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       const spad = { top: 12, bottom: 14, left: 60, right: 72 };
       if (cy >= spad.top + 1 && cy <= spad.top + 22) {
         const relX = cx - (pad.left + 4);
-        if (relX >= 0 && relX < 80) subVis.gex = !subVis.gex;
-        else if (relX >= 80 && relX < 160) subVis.skew = !subVis.skew;
-        else if (relX >= 160 && relX < 240) subVis.vr = !subVis.vr;
+        if (relX >= 0 && relX < 60) subVis.gex = !subVis.gex;
+        else if (relX >= 60 && relX < 120) subVis.skew = !subVis.skew;
+        else if (relX >= 120 && relX < 180) subVis.vr = !subVis.vr;
+        else if (relX >= 180 && relX < 240) subVis.iv = !subVis.iv;
         else return;
         render();
       }
