@@ -403,7 +403,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
         gex = calc_gex(o, px, mult, fut_prices, date, calendar)
 
         # 最近到期日
-        from datetime import datetime
+        from datetime import datetime, date as dt_date
         nearest_expiry = None
         nearest_dte = 0
         seen_codes = set()
@@ -419,6 +419,21 @@ def process_one(sym, fut, opt, date=None, mult=10):
                 if isinstance(expiry_str, str):
                     if nearest_expiry is None or expiry_str < nearest_expiry:
                         nearest_expiry = expiry_str
+                else:
+                    # 日历来不到时使用近似（合约月前一个月15号）
+                    m2 = re.search(r'[A-Z]+(\d{3})$', str(code))
+                    if m2:
+                        ym2 = m2.group(1)
+                        ref_yr2 = int(date[:4])
+                        cy2 = (ref_yr2 // 10) * 10 + int(ym2[0])
+                        mo2 = int(ym2[1:3])
+                        if mo2 == 1:
+                            mo2 = 12; cy2 -= 1
+                        else:
+                            mo2 -= 1
+                        approx = f'{cy2:04d}-{mo2:02d}-15'
+                        if nearest_expiry is None or approx < nearest_expiry:
+                            nearest_expiry = approx
         if nearest_expiry:
             td = datetime.strptime(date, '%Y-%m-%d').date()
             ex = datetime.strptime(nearest_expiry, '%Y-%m-%d').date()

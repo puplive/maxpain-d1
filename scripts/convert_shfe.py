@@ -357,6 +357,23 @@ def process_one(sym, fut, opt, mult=10):
                 if isinstance(expiry_str, str):
                     if nearest_expiry is None or expiry_str < nearest_expiry:
                         nearest_expiry = expiry_str
+                else:
+                    # 日历来不到时使用近似（合约月前一个月15号）
+                    m2 = re.search(r'[A-Z]+(\d{4})$', str(code))
+                    if m2:
+                        ym2 = m2.group(1)
+                        yr2 = 2000 + int(ym2[:2])
+                        mo2 = int(ym2[2:4])
+                        ref_yr2 = int(date[:4])
+                        if yr2 < ref_yr2 - 2:
+                            yr2 += 100
+                        if mo2 == 1:
+                            mo2 = 12; yr2 -= 1
+                        else:
+                            mo2 -= 1
+                        approx = f'{yr2:04d}-{mo2:02d}-15'
+                        if nearest_expiry is None or approx < nearest_expiry:
+                            nearest_expiry = approx
         if nearest_expiry:
             td = datetime.strptime(date, '%Y-%m-%d').date()
             ex = datetime.strptime(nearest_expiry, '%Y-%m-%d').date()

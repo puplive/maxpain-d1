@@ -594,8 +594,26 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
                     if expiry_str:
                         if nearest_expiry is None or expiry_str < nearest_expiry:
                             nearest_expiry = expiry_str
+                    elif calendar:
+                        # 日历来不到时使用近似（合约月前一个月15号）
+                        ref_yr2 = int(d[:4])
+                        if len(contract_ym) == 3:
+                            cy2 = (ref_yr2 // 10) * 10 + int(contract_ym[0])
+                            mo2 = int(contract_ym[1:3])
+                        else:
+                            cy2 = 2000 + int(contract_ym[:2])
+                            mo2 = int(contract_ym[2:4])
+                            if cy2 < ref_yr2 - 2:
+                                cy2 += 100
+                        if mo2 == 1:
+                            mo2 = 12; cy2 -= 1
+                        else:
+                            mo2 -= 1
+                        approx = f'{cy2:04d}-{mo2:02d}-15'
+                        if nearest_expiry is None or approx < nearest_expiry:
+                            nearest_expiry = approx
             if nearest_expiry:
-                from datetime import datetime, date
+                from datetime import datetime
                 td = datetime.strptime(d, '%Y-%m-%d').date()
                 ex = datetime.strptime(nearest_expiry, '%Y-%m-%d').date()
                 nearest_dte = (ex - td).days
