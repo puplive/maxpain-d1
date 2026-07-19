@@ -568,12 +568,45 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
         piv = opt[(opt['type'] == 'P') & (opt['delta'].between(-0.30, -0.20))]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
         gex = _calc_gex(opt, px, cfg[sym]['mult'], {r['symbol']: float(r['close']) for _, r in day_fut.iterrows() if float(r.get('close', 0)) > 0}, d, calendar)
+
+        # 最近到期日
+        nearest_expiry = None
+        nearest_dte = 0
+        if calendar:
+            seen_contracts = set()
+            for _, opt_row in opt.iterrows():
+                opt_code = str(opt_row.get('合约代码', ''))
+                m = re.match(r'^[A-Z]+(\d+)([CP])(\d+)$', opt_code)
+                if m:
+                    contract_ym = m.group(1)
+                    prefix = re.match(r'^([A-Z]+)', opt_code).group(1)
+                    key = prefix + contract_ym
+                    if key in seen_contracts:
+                        continue
+                    seen_contracts.add(key)
+                    expiry_str = None
+                    if len(contract_ym) == 3:
+                        expiry_str = _get_expiry_czce(calendar, key)
+                    elif len(contract_ym) == 4:
+                        expiry_str = _get_expiry_shfe(calendar, key)
+                        if expiry_str is None:
+                            expiry_str = _get_expiry_dce(calendar, prefix.lower() + contract_ym)
+                    if expiry_str:
+                        if nearest_expiry is None or expiry_str < nearest_expiry:
+                            nearest_expiry = expiry_str
+            if nearest_expiry:
+                from datetime import datetime, date
+                td = datetime.strptime(d, '%Y-%m-%d').date()
+                ex = datetime.strptime(nearest_expiry, '%Y-%m-%d').date()
+                nearest_dte = (ex - td).days
+
         entries[sym] = {
             'd': d, 'o': round(float(fr['open']), 2), 'c': round(px, 2),
             'h': round(float(fr['high']), 2), 'l': round(float(fr['low']), 2),
             'nc': round(px, 2), 'oc': None,
             'mp': mp, 'co': co, 'po': po,
             'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex,
+            'expiry': nearest_expiry, 'dte': nearest_dte,
         }
 
     return ('ok' if entries else 'empty', entries)

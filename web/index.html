@@ -1659,6 +1659,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       const upColor = row.c >= prevClose;
       const color = upColor ? '#5cd85a' : '#ff6b6b';
 
+      if (data[i].expiry && data[i].expiry === data[i].d) {
+        ctx.fillStyle = 'rgba(232,200,74,0.12)';
+        ctx.fillRect(x - state.barW * 2, pad.top, state.barW * 4, ch);
+      }
+
       if (i === state.hoverIdx) {
         ctx.fillStyle = '#ffffff08';
         ctx.fillRect(x - state.barW / 2, pad.top, state.barW, ch);
@@ -1771,39 +1776,6 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       const lY = bearish ? beY - gap - 5 : beY + gap + 11;
       ctx.fillText(bearish ? '下跌' : '上涨', x, lY);
       ctx.restore();
-    }
-
-    // 期权到期日标记
-    if (document.getElementById('t_ema').checked === undefined || true) {
-      const expiryPositions = [];
-      const seenExpiry = new Set();
-      for (let i = start; i < end && i < n; i++) {
-        if (data[i].expiry && data[i].expiry === data[i].d) {
-          if (!seenExpiry.has(data[i].expiry)) {
-            seenExpiry.add(data[i].expiry);
-            expiryPositions.push({ idx: i });
-          }
-        }
-      }
-      expiryPositions.forEach(({ idx }) => {
-        const x = toX(idx);
-        ctx.save();
-        ctx.strokeStyle = '#e8c84a';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([6, 4]);
-        ctx.globalAlpha = 0.5;
-        ctx.beginPath();
-        ctx.moveTo(x, pad.top);
-        ctx.lineTo(x, pad.top + ch);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = '#e8c84a';
-        ctx.font = '10px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('到期', x, pad.top + 12);
-        ctx.restore();
-      });
     }
 
     const lastVis = Math.min(end - 1, n - 1);

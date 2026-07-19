@@ -336,6 +336,28 @@ def process_symbol(sym, prefix, year, date=None):
                       if float(r['close']) > 0}
         gex = calc_gex(opt, px, DCE_MULT.get(sym, 10), fut_prices, dt, calendar)
 
+        # 最近到期日
+        from datetime import datetime, date
+        nearest_expiry = None
+        nearest_dte = 0
+        seen_codes = set()
+        for _, opt_row in opt.iterrows():
+            opt_name = str(opt_row.get('合约名称', ''))
+            m = re.search(r'^(.+?)-', opt_name)
+            if m:
+                code = m.group(1)
+                if code in seen_codes:
+                    continue
+                seen_codes.add(code)
+                expiry_str = _dce_expiry(calendar, code)
+                if isinstance(expiry_str, str):
+                    if nearest_expiry is None or expiry_str < nearest_expiry:
+                        nearest_expiry = expiry_str
+        if nearest_expiry:
+            td = datetime.strptime(dt, '%Y-%m-%d').date()
+            ex = datetime.strptime(nearest_expiry, '%Y-%m-%d').date()
+            nearest_dte = (ex - td).days
+
         # OI chain: [{s: strike, co: call_oi, po: put_oi}, ...]
         chain_list = []
         for s, grp in opt.groupby('strike'):
@@ -362,6 +384,7 @@ def process_symbol(sym, prefix, year, date=None):
             'mp': mp, 'co': co, 'po': po,
             'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex,
             'oc_chain': oc_chain,
+            'expiry': nearest_expiry, 'dte': nearest_dte,
         }
 
     return result

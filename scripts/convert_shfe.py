@@ -340,6 +340,28 @@ def process_one(sym, fut, opt, mult=10):
                       if float(r.get('收盘价', 0)) > 0}
         gex = calc_gex(o, px, mult, fut_prices, date, calendar)
 
+        # 最近到期日
+        from datetime import datetime
+        nearest_expiry = None
+        nearest_dte = 0
+        seen_codes = set()
+        for _, opt_row in o.iterrows():
+            opt_code = str(opt_row.get('合约', ''))
+            m = re.search(r'^([A-Z]{1,2}\d{4})[CP]', opt_code)
+            if m:
+                code = m.group(1)
+                if code in seen_codes:
+                    continue
+                seen_codes.add(code)
+                expiry_str = _shfe_expiry(calendar, code)
+                if isinstance(expiry_str, str):
+                    if nearest_expiry is None or expiry_str < nearest_expiry:
+                        nearest_expiry = expiry_str
+        if nearest_expiry:
+            td = datetime.strptime(date, '%Y-%m-%d').date()
+            ex = datetime.strptime(nearest_expiry, '%Y-%m-%d').date()
+            nearest_dte = (ex - td).days
+
         # OI chain: [{s: strike, co: call_oi, po: put_oi}, ...]
         chain_list = []
         for s, grp in o.groupby('strike'):
@@ -362,7 +384,8 @@ def process_one(sym, fut, opt, mult=10):
         result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2),
                         'h': row['h'], 'l': row['l'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep,
-                        'vr': vr, 'ivs': ivs, 'gex': gex, 'oc': oc_val, 'oc_chain': oc_chain}
+                        'vr': vr, 'ivs': ivs, 'gex': gex, 'oc': oc_val, 'oc_chain': oc_chain,
+                        'expiry': nearest_expiry, 'dte': nearest_dte}
     return result
 
 
