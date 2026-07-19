@@ -101,7 +101,7 @@ def _shfe_expiry(calendar, contract_code):
 
 def _calc_T_shfe(contract_code, trade_date_str, calendar):
     """Compute T (years) for SHFE using exact expiry
-    日历来不到时(未来月份)回退到交割月前一个月的15号近似
+    2027+月份无日历数据时回退到15号近似
     """
     from datetime import datetime, date
     expiry_str = _shfe_expiry(calendar, contract_code)
@@ -109,7 +109,7 @@ def _calc_T_shfe(contract_code, trade_date_str, calendar):
         td = datetime.strptime(trade_date_str, '%Y-%m-%d').date()
         ex = datetime.strptime(expiry_str, '%Y-%m-%d').date()
         return max((ex - td).days / 365, 7 / 365)
-    # Fallback: 未来月份无日历 → 近似15号
+    # Fallback: 2027+无日历 → 近似15号
     m = re.search(r'[A-Z]+(\d{4})$', str(contract_code))
     if m:
         ym = m.group(1)
@@ -122,7 +122,7 @@ def _calc_T_shfe(contract_code, trade_date_str, calendar):
             mo = 12; yr -= 1
         else:
             mo -= 1
-        expiry = date(yr, mo, 15)
+        expiry = date(yr, mo, 15)  # 2027+月份回退到15号近似
         td = datetime.strptime(trade_date_str, '%Y-%m-%d').date()
         return max((expiry - td).days / 365, 7 / 365)
     return 30 / 365
@@ -358,7 +358,7 @@ def process_one(sym, fut, opt, mult=10):
                     if nearest_expiry is None or expiry_str < nearest_expiry:
                         nearest_expiry = expiry_str
                 else:
-                    # 日历来不到时使用近似（合约月前一个月15号）
+                    # AKShare只有当年日历，2027+无法精确计算，回退到15号近似
                     m2 = re.search(r'[A-Z]+(\d{4})$', str(code))
                     if m2:
                         ym2 = m2.group(1)
@@ -371,7 +371,7 @@ def process_one(sym, fut, opt, mult=10):
                             mo2 = 12; yr2 -= 1
                         else:
                             mo2 -= 1
-                        approx = f'{yr2:04d}-{mo2:02d}-15'
+                        approx = f'{yr2:04d}-{mo2:02d}-15'  # 2027+月份回退到15号近似
                         if nearest_expiry is None or approx < nearest_expiry:
                             nearest_expiry = approx
         if nearest_expiry:

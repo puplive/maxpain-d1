@@ -1248,6 +1248,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
   var _subGex, _subSkewD, _subMinG, _subMaxG, _subMinS, _subMaxS;
   var _subVr, _subMinV, _subMaxV;
   var _subIv, _subMinIv, _subMaxIv;
+  var _oiChain = null, _oiHoverIdx = -1;
   const subVis = { gex: true, skew: false, vr: false, iv: false };
   if (subCanvas) {
     subCanvas.width = W * dpr;
@@ -1388,6 +1389,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       <div class="row"><span class="label">涨跌幅</span><span class="val ' + (idx>0?cls(row.c-data[idx-1].c):'') + '">' + (idx>0?(row.c-data[idx-1].c>0?'+':'')+(row.c-data[idx-1].c).toFixed(0):'—') + ' / ' + (idx>0?((row.c-data[idx-1].c)/data[idx-1].c*100).toFixed(2):'—') + '%</span></div>\
       <div class="row"><span class="label">最高/最低</span><span class="val">' + row.h.toFixed(0) + ' / ' + row.l.toFixed(0) + '</span></div>\
       <div class="row"><span class="label">近月连续</span><span class="val" style="color:#a29bfe">' + (row.nc != null ? row.nc.toFixed(0) : '-') + '</span></div>\
+      <div class="row"><span class="label">到期日/天数</span><span class="val" style="color:#8395a7;font-size:11px">' + (row.expiry ? row.expiry + ' ' + row.dte + '天' : '-') + '</span></div>\
       <div class="row"><span class="label">期权期货</span><span class="val" style="color:#f368e0">' + (row.oc != null ? row.oc.toFixed(0) : '-') + '</span></div>\
       <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">Max Pain</span><span class="val" style="color:#e8c84a">' + row.mp + ' ' + (idx>0?(row.mp-data[idx-1].mp>0?'+':'')+(row.mp-data[idx-1].mp)+'':'') + '</span></div>\
       <div class="row"><span class="label">MP趋势</span><span class="val">' + trendText + '</span></div>\
@@ -2046,10 +2048,6 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
           sctx.fillText('IV偏度: ' + (ivv >= 0 ? '+' : '') + (ivv * 100).toFixed(2) + '%', hx + 4, hoverY);
           hoverY += 12;
         }
-        if (data[hi].dte != null && data[hi].expiry) {
-          sctx.fillStyle = '#8395a7';
-          sctx.fillText('到期: ' + data[hi].dte + '天', hx + 4, hoverY);
-        }
         sctx.restore();
       }
     }
@@ -2075,6 +2073,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         if (ocStr) {
           let chain;
           try { chain = JSON.parse(ocStr); } catch(e) { chain = null; }
+          _oiChain = chain;
           if (chain && chain.length > 0) {
             const px = r.c;
             // 资金集中区：call+put OI 最大的行权价
@@ -2138,15 +2137,47 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
             // 右下角标注
             ox.textAlign = 'right'; ox.fillStyle = '#576574'; ox.font = '9px sans-serif';
             ox.fillText('现价 ' + px, oiW - 8, oiH - 6);
+            // OI 图悬停提示：行权价与持仓量
+            if (_oiHoverIdx >= 0 && _oiHoverIdx < chain.length) {
+              const hc = chain[_oiHoverIdx];
+              const hx2 = s2x(hc.s);
+              ox.save();
+              // 高亮竖线
+              ox.strokeStyle = 'rgba(255,255,255,0.15)';
+              ox.lineWidth = 1;
+              ox.setLineDash([2, 2]);
+              ox.beginPath(); ox.moveTo(hx2, opad.top); ox.lineTo(hx2, opad.top + och); ox.stroke();
+              ox.setLineDash([]);
+              // 提示标签
+              const lbl = hc.s + '  Call:' + hc.co.toLocaleString() + '  Put:' + hc.po.toLocaleString() + '  合计:' + (hc.co+hc.po).toLocaleString();
+              ox.font = '10px sans-serif';
+              const tw = ox.measureText(lbl).width;
+              let lx = hx2 - tw/2 - 6;
+              if (lx < 2) lx = 2;
+              if (lx + tw + 12 > oiW - 2) lx = oiW - tw - 14;
+              ox.fillStyle = 'rgba(10,22,40,0.85)';
+              ox.fillRect(lx, 2, tw + 12, 18);
+              ox.strokeStyle = '#576574';
+              ox.lineWidth = 1;
+              ox.strokeRect(lx, 2, tw + 12, 18);
+              ox.fillStyle = '#fff';
+              ox.textAlign = 'left';
+              ox.fillText(lbl, lx + 6, 14);
+              ox.restore();
+            }
           } else {
+            _oiChain = null; _oiHoverIdx = -1;
             if (oiHint) oiHint.style.display = 'none';
           }
         } else {
+          _oiChain = null; _oiHoverIdx = -1;
           if (oiHint) oiHint.style.display = 'none';
         }
-      }
+      } else {
+        _oiChain = null; _oiHoverIdx = -1;
     }
   }
+}
 
   function getDataX(clientX) {
     const br = canvas.getBoundingClientRect();
@@ -2195,8 +2226,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
   });
 
   canvas.onmouseleave = function() {
-    state.hoverIdx = -1;
-    if (!state.pinned) render();
+    // 移到子图/外部不清除选中，保留上次悬停位置
   };
 
   canvas.onwheel = (e) => {
@@ -2232,10 +2262,12 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       const dx = getDataX(touch.clientX) - state.dragStartX;
       state.start = Math.max(0, Math.min(n - getVisibleCount() + 60, state.dragStartIdx - dx / state.barW));
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
-      const idx = getBarIdx(touch.clientX);
-      if (idx !== state.hoverIdx) {
-        state.hoverIdx = idx;
-        updateInfo(idx);
+      if (!state.pinned) {
+        const idx = getBarIdx(touch.clientX);
+        if (idx !== state.hoverIdx) {
+          state.hoverIdx = idx;
+          updateInfo(idx);
+        }
       }
     } else if (e.touches.length === 2 && state.pinchDist > 0) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -2263,6 +2295,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     subCanvas.addEventListener('touchstart', function(e) { e.preventDefault(); }, { passive: false });
     subCanvas.addEventListener('touchmove', function(e) {
       e.preventDefault();
+      if (state.pinned) return;
       const touch = e.touches[0];
       const br = subCanvas.getBoundingClientRect();
       const sx = touch.clientX - br.left;
@@ -2290,32 +2323,58 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     });
   }
 
-  // OI 图悬停
+  // OI 图悬停：显示行权价和持仓量
   const oiEl = document.getElementById('oiChart');
   if (oiEl) {
-    oiEl.addEventListener('touchstart', function(e) { e.preventDefault(); }, { passive: false });
+    let _oiMoved = false;
+    oiEl.addEventListener('touchstart', function(e) { e.preventDefault(); _oiMoved = false; }, { passive: false });
     oiEl.addEventListener('touchmove', function(e) {
       e.preventDefault();
+      if (state.pinned) return;
+      _oiMoved = true;
       const touch = e.touches[0];
       const br = oiEl.getBoundingClientRect();
       const sx = touch.clientX - br.left;
-      const idx = Math.round(state.start + (sx - pad.left) / state.barW);
-      if (idx !== state.hoverIdx) {
-        state.hoverIdx = idx;
-        updateInfo(idx);
-        render();
-      }
+      _oiHoverAt(sx);
     }, { passive: false });
+    oiEl.addEventListener('touchend', function(e) {
+      if (!_oiMoved && !state.pinned) {
+        // 轻点 OI 图：切换主图锁定
+        state.pinned = !state.pinned;
+        state.pinnedIdx = state.pinned ? state.hoverIdx : -1;
+      }
+      render();
+    });
     oiEl.addEventListener('mousemove', function(e) {
+      if (state.pinned) return;
       const br = oiEl.getBoundingClientRect();
       const mx = e.clientX - br.left;
-      const idx = Math.round(state.start + (mx - pad.left) / state.barW);
-      if (idx !== state.hoverIdx) {
-        state.hoverIdx = idx;
-        updateInfo(idx);
+      _oiHoverAt(mx);
+    });
+    oiEl.addEventListener('mouseleave', function() {
+      if (_oiHoverIdx >= 0) {
+        _oiHoverIdx = -1;
         render();
       }
     });
+  }
+
+  function _oiHoverAt(mx) {
+    const oiw = W;
+    const opad2 = { top: 8, bottom: 20, left: 8, right: 8 };
+    const ocw = oiw - opad2.left - opad2.right;
+    if (!_oiChain || _oiChain.length < 2) return;
+    const minS2 = _oiChain[0].s, maxS2 = _oiChain[_oiChain.length - 1].s, sRange2 = maxS2 - minS2 || 1;
+    const strike = minS2 + (mx - opad2.left) / ocw * sRange2;
+    let best = 0, bestDist = Infinity;
+    for (let i = 0; i < _oiChain.length; i++) {
+      const d = Math.abs(_oiChain[i].s - strike);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    if (best !== _oiHoverIdx) {
+      _oiHoverIdx = best;
+      render();
+    }
   }
 
   window._chartRender = render;

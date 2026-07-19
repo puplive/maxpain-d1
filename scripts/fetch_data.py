@@ -443,7 +443,7 @@ def _calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar=None):
                     ex = datetime.strptime(expiry_str, '%Y-%m-%d').date()
                     T = max((ex - td).days / 365, 7 / 365)
             else:
-                # 无日历时使用近似估计
+                # 2027+无日历时回退到15号近似
                 ref_yr = int(trade_date[:4])
                 if len(contract_ym) == 3:
                     cy = (ref_yr // 10) * 10 + int(contract_ym[0])
@@ -464,7 +464,7 @@ def _calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar=None):
                     mo = 12; cy -= 1
                 else:
                     mo -= 1
-                expiry = date(cy, mo, 15)
+                expiry = date(cy, mo, 15)  # 2027+月份回退到15号近似
                 td = datetime.strptime(trade_date, '%Y-%m-%d').date()
                 T = max((expiry - td).days / 365, 7 / 365)
         if px <= 0:
@@ -595,7 +595,7 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
                         if nearest_expiry is None or expiry_str < nearest_expiry:
                             nearest_expiry = expiry_str
                     elif calendar:
-                        # 日历来不到时使用近似（合约月前一个月15号）
+                        # AKShare只有当年日历，2027+无法精确计算，回退到15号近似
                         ref_yr2 = int(d[:4])
                         if len(contract_ym) == 3:
                             cy2 = (ref_yr2 // 10) * 10 + int(contract_ym[0])
@@ -609,7 +609,7 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
                             mo2 = 12; cy2 -= 1
                         else:
                             mo2 -= 1
-                        approx = f'{cy2:04d}-{mo2:02d}-15'
+                        approx = f'{cy2:04d}-{mo2:02d}-15'  # 2027+月份回退到15号近似
                         if nearest_expiry is None or approx < nearest_expiry:
                             nearest_expiry = approx
             if nearest_expiry:
