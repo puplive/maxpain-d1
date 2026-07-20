@@ -1251,7 +1251,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
   var _subFutVol, _subMinFv, _subMaxFv;
   var _subFutOi, _subMinFoi, _subMaxFoi;
   var _oiChain = null, _oiHoverIdx = -1;
-  const subVis = { gex: true, skew: false, vr: false, iv: false, futVol: true, futOi: true };
+  const subVis = { gex: true, skew: false, vr: false, iv: false, futVol: false, futOi: false };
   if (subCanvas) {
     subCanvas.width = W * dpr;
     subCanvas.height = 110 * dpr;
@@ -2386,6 +2386,25 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       if (idx !== state.hoverIdx) {
         state.hoverIdx = idx;
         updateInfo(idx);
+        render();
+      }
+    }, { passive: false });
+    subCanvas.addEventListener('touchend', function(e) {
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      const br = subCanvas.getBoundingClientRect();
+      const cx = touch.clientX - br.left;
+      const cy = touch.clientY - br.top;
+      const spad = { top: 12, bottom: 14, left: 60, right: 72 };
+      if (cy >= spad.top + 1 && cy <= spad.top + 22) {
+        const relX = cx - (pad.left + 4);
+        if (relX >= 0 && relX < 60) subVis.gex = !subVis.gex;
+        else if (relX >= 60 && relX < 120) subVis.skew = !subVis.skew;
+        else if (relX >= 120 && relX < 180) subVis.vr = !subVis.vr;
+        else if (relX >= 180 && relX < 240) subVis.iv = !subVis.iv;
+        else if (relX >= 240 && relX < 300) subVis.futVol = !subVis.futVol;
+        else if (relX >= 300 && relX < 360) subVis.futOi = !subVis.futOi;
+        else return;
         render();
       }
     }, { passive: false });
