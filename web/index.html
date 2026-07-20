@@ -1293,6 +1293,14 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       _subIv[i] = ivv;
       _subFutVol[i] = r.fut_vol != null ? r.fut_vol : 0;
       _subFutOi[i] = r.fut_oi != null ? r.fut_oi : 0;
+      // ATR(14)
+      if (i === 0) {
+        _subAtr[i] = r.h - r.l;
+      } else {
+        const pc = data[i-1].c;
+        const tr = Math.max(r.h - r.l, Math.abs(r.h - pc), Math.abs(r.l - pc));
+        _subAtr[i] = (_subAtr[i-1] * 13 + tr) / 14;
+      }
       if (g < _subMinG) _subMinG = g;
       if (g > _subMaxG) _subMaxG = g;
       if (sd < _subMinS) _subMinS = sd;
@@ -1306,6 +1314,9 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       if (fv > _subMaxFv) _subMaxFv = fv;
       if (_subSkew[i] < _subMinSk) _subMinSk = _subSkew[i];
       if (_subSkew[i] > _subMaxSk) _subMaxSk = _subSkew[i];
+      const atr = _subAtr[i];
+      if (atr < _subMinAtr) _subMinAtr = atr;
+      if (atr > _subMaxAtr) _subMaxAtr = atr;
       const foi = _subFutOi[i];
       if (foi < _subMinFoi) _subMinFoi = foi;
       if (foi > _subMaxFoi) _subMaxFoi = foi;
@@ -1325,6 +1336,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     _subMinSk -= skr * 0.1; _subMaxSk += skr * 0.1;
     const foir = _subMaxFoi - _subMinFoi || 1;
     _subMinFoi -= foir * 0.1; _subMaxFoi += foir * 0.1;
+    const atrR = _subMaxAtr - _subMinAtr || 1;
+    _subMinAtr -= atrR * 0.1; _subMaxAtr += atrR * 0.1;
   }
 
   const pad = { top: 20, bottom: 36, left: 60, right: 20 };
@@ -1882,6 +1895,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         if (skv !== 0) { if (skv < vMinSk) vMinSk = skv; if (skv > vMaxSk) vMaxSk = skv; }
         const foi = _subFutOi[i];
         if (foi !== 0) { if (foi < vMinFoi) vMinFoi = foi; if (foi > vMaxFoi) vMaxFoi = foi; }
+          const atrv2 = _subAtr[i];
+          if (atrv2 !== 0) { if (atrv2 < vMinAtr) vMinAtr = atrv2; if (atrv2 > vMaxAtr) vMaxAtr = atrv2; }
       }
       if (vMinG === Infinity || vMinG === vMaxG) { vMinG = _subMinG; vMaxG = _subMaxG; }
       else { const gr = vMaxG - vMinG || 1; vMinG -= gr * 0.1; vMaxG += gr * 0.1; }
@@ -1895,6 +1910,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       else { const skvr = vMaxSk - vMinSk || 1; vMinSk -= skvr * 0.1; vMaxSk += skvr * 0.1; }
       if (vMinFoi === Infinity || vMinFoi === vMaxFoi) { vMinFoi = _subMinFoi; vMaxFoi = _subMaxFoi; }
       else { const foir = vMaxFoi - vMinFoi || 1; vMinFoi -= foir * 0.1; vMaxFoi += foir * 0.1; }
+      if (vMinAtr === Infinity || vMinAtr === vMaxAtr) { vMinAtr = _subMinAtr; vMaxAtr = _subMaxAtr; }
+      else { const atrR2 = vMaxAtr - vMinAtr || 1; vMinAtr -= atrR2 * 0.1; vMaxAtr += atrR2 * 0.1; }
 
       sctx.fillStyle = '#09131c';
       sctx.fillRect(0, 0, W, 110);
@@ -1970,6 +1987,17 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
           const v = vMinSk + (vMaxSk - vMinSk) / 4 * i;
           const y = spad.top + (sch / 4) * (4 - i);
           sctx.fillText((v * 100).toFixed(1) + '%', pad.left - 4, y + 3);
+        }
+      }
+
+      if (subVis.atr) {
+        sctx.fillStyle = '#576574';
+        sctx.font = '10px sans-serif';
+        sctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+          const v = vMinAtr + (vMaxAtr - vMinAtr) / 4 * i;
+          const y = spad.top + (sch / 4) * (4 - i);
+          sctx.fillText(v.toFixed(1), pad.left - 4, y + 3);
         }
       }
 
