@@ -715,7 +715,7 @@ function runBacktest() {
       <div class="stat-card"><div class="value">' + fmt(s.avgPnl) + '</div><div class="label">均PnL</div></div>\
       <div class="stat-card"><div class="value" style="font-size:10px;line-height:1.4">' + dirAccText + '</div><div class="label">明日方向准确率</div></div>\
     </div>\
-    <div class="chart-wrap"><h2>K线 & 信号 <span class="line-toggles" style="font-size:11px;font-weight:normal;display:inline-flex;gap:8px;margin-left:12px;align-items:center;vertical-align:middle;"><span style="color:#576574;">显示:</span><label style="cursor:pointer;"><input type="checkbox" id="t_mp" checked onchange="toggleChartLine()"> <span style="color:#e8c84a">MP</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bec" checked onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_ema" onchange="toggleChartLine()"> <span style="color:#54a0ff">EMA</span></label></span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX>0 价格易震荡(做市商对冲), &lt;0 趋势易加速</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或对冲期货多头, &lt;0看跌持仓多/或对冲期货空头</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Put贵=恐慌, >0 Call贵=追涨</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期仓</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+    <div class="chart-wrap"><h2>K线 & 信号 <span class="line-toggles" style="font-size:11px;font-weight:normal;display:inline-flex;gap:8px;margin-left:12px;align-items:center;vertical-align:middle;"><span style="color:#576574;">显示:</span><label style="cursor:pointer;"><input type="checkbox" id="t_mp" checked onchange="toggleChartLine()"> <span style="color:#e8c84a">MP</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bec" checked onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label><label style="cursor:pointer;"><input type="checkbox" id="t_ema" onchange="toggleChartLine()"> <span style="color:#54a0ff">EMA</span></label></span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX>0 价格易震荡(做市商对冲), &lt;0 趋势易加速</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或对冲期货多头, &lt;0看跌持仓多/或对冲期货空头</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Put贵=恐慌, >0 Call贵=追涨</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期仓</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(14)</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th></tr>' + yrHtml + '</table></div>\
@@ -1251,8 +1251,9 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
   var _subFutVol, _subMinFv, _subMaxFv;
   var _subFutOi, _subMinFoi, _subMaxFoi;
   var _subSkew, _subMinSk, _subMaxSk;
+	  var _subAtr, _subMinAtr, _subMaxAtr;
   var _oiChain = null, _oiHoverIdx = -1;
-  const subVis = { gex: true, skew: false, vr: false, iv: false, futVol: false, futOi: false, skewVal: false };
+  const subVis = { gex: true, skew: false, vr: false, iv: false, futVol: false, futOi: false, skewVal: false, atr: false };
   if (subCanvas) {
     subCanvas.width = W * dpr;
     subCanvas.height = 110 * dpr;
@@ -1268,9 +1269,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     _subFutVol = new Float64Array(n);
     _subFutOi = new Float64Array(n);
     _subSkew = new Float64Array(n);
+	    _subAtr = new Float64Array(n);
     var _prevSk = null;
     _subMinG = Infinity; _subMaxG = -Infinity;
     _subMinSk = Infinity; _subMaxSk = -Infinity;
+	    _subMinAtr = Infinity; _subMaxAtr = -Infinity;
     _subMinS = Infinity; _subMaxS = -Infinity;
     _subMinV = Infinity; _subMaxV = -Infinity;
     _subMinIv = Infinity; _subMaxIv = -Infinity;
@@ -1863,7 +1866,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       // 按可视范围重算 GEX/OI/VR/IV scale，避免远端极端值压扁
       let vMinG = Infinity, vMaxG = -Infinity, vMinS = Infinity, vMaxS = -Infinity, vMinV = Infinity, vMaxV = -Infinity;
       let vMinIv = Infinity, vMaxIv = -Infinity;
-      let vMinFv = Infinity, vMaxFv = -Infinity, vMinFoi = Infinity, vMaxFoi = -Infinity; let vMinSk = Infinity, vMaxSk = -Infinity;
+      let vMinFv = Infinity, vMaxFv = -Infinity, vMinFoi = Infinity, vMaxFoi = -Infinity; let vMinSk = Infinity, vMaxSk = -Infinity; let vMinAtr = Infinity, vMaxAtr = -Infinity;
       for (let i = start; i < end && i < n; i++) {
         const g = _subGex[i];
         if (g !== 0) { if (g < vMinG) vMinG = g; if (g > vMaxG) vMaxG = g; }
@@ -2074,6 +2077,21 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         }
       }
 
+      if (subVis.atr) {
+        sctx.strokeStyle = '#e84393';
+        sctx.lineWidth = 1.5;
+        sctx.beginPath();
+        started = false;
+        for (let i = start; i < end && i < n; i++) {
+          const x = toX(i);
+          const y = s2y(_subAtr[i], vMinAtr, vMaxAtr);
+          if (_subAtr[i] === 0 && !started) continue;
+          if (_subAtr[i] === 0) { started = false; continue; }
+          if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
+        }
+        sctx.stroke();
+      }
+
       if (subVis.futOi) {
         sctx.strokeStyle = '#f368e0';
         sctx.lineWidth = 1.5;
@@ -2116,6 +2134,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       drawLegItem(pad.left + 204, '#2ecc71', 'IV偏度', 'iv');
       drawLegItem(pad.left + 254, '#54a0ff', '期量', 'futVol');
       drawLegItem(pad.left + 304, '#f368e0', '期仓', 'futOi');
+	      drawLegItem(pad.left + 354, '#e84393', 'ATR', 'atr');
       sctx.fillStyle = '#576574';
 
       if (state.hoverIdx >= start && state.hoverIdx < end) {
@@ -2135,6 +2154,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         const fvv = _subFutVol[hi];
         const foi = _subFutOi[hi];
         const skv = _subSkew[hi];
+	        const atrv3 = _subAtr[hi];
         sctx.font = '10px sans-serif';
         sctx.textAlign = 'left';
         let hoverY = spad.top + 14;
@@ -2159,7 +2179,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
           hoverY += 12;
         }
         if (subVis.skewVal) {
-          sctx.fillStyle = '#a55eea';
+          sctx.fillStyle = '#fdcb6e';
           sctx.fillText('OI偏度: ' + (skv >= 0 ? '+' : '') + (skv * 100).toFixed(1) + '%', hx + 4, hoverY);
           hoverY += 12;
         }
@@ -2171,6 +2191,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         if (subVis.futOi) {
           sctx.fillStyle = '#f368e0';
           sctx.fillText('期货持仓量: ' + foi.toLocaleString('zh-CN',{maximumFractionDigits:0}), hx + 4, hoverY);
+          hoverY += 12;
+        }
+        if (subVis.atr) {
+          sctx.fillStyle = '#e84393';
+          sctx.fillText('ATR(14): ' + atrv3.toFixed(1), hx + 4, hoverY);
           hoverY += 12;
         }
         sctx.restore();
