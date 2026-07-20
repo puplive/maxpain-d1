@@ -1248,8 +1248,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
   var _subGex, _subSkewD, _subMinG, _subMaxG, _subMinS, _subMaxS;
   var _subVr, _subMinV, _subMaxV;
   var _subIv, _subMinIv, _subMaxIv;
+  var _subFutVol, _subMinFv, _subMaxFv;
+  var _subFutOi, _subMinFoi, _subMaxFoi;
   var _oiChain = null, _oiHoverIdx = -1;
-  const subVis = { gex: true, skew: false, vr: false, iv: false };
+  const subVis = { gex: true, skew: false, vr: false, iv: false, futVol: true, futOi: true };
   if (subCanvas) {
     subCanvas.width = W * dpr;
     subCanvas.height = 110 * dpr;
@@ -1262,11 +1264,15 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     _subSkewD = new Float64Array(n);
     _subVr = new Float64Array(n);
     _subIv = new Float64Array(n);
+    _subFutVol = new Float64Array(n);
+    _subFutOi = new Float64Array(n);
     var _prevSk = null;
     _subMinG = Infinity; _subMaxG = -Infinity;
     _subMinS = Infinity; _subMaxS = -Infinity;
     _subMinV = Infinity; _subMaxV = -Infinity;
     _subMinIv = Infinity; _subMaxIv = -Infinity;
+    _subMinFv = Infinity; _subMaxFv = -Infinity;
+    _subMinFoi = Infinity; _subMaxFoi = -Infinity;
     for (let i = 0; i < n; i++) {
       const r = data[i];
       const g = r.gex != null ? r.gex : 0;
@@ -1278,6 +1284,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       _subSkewD[i] = sd;
       _subVr[i] = v;
       _subIv[i] = ivv;
+      _subFutVol[i] = r.fut_vol != null ? r.fut_vol : 0;
+      _subFutOi[i] = r.fut_oi != null ? r.fut_oi : 0;
       if (g < _subMinG) _subMinG = g;
       if (g > _subMaxG) _subMaxG = g;
       if (sd < _subMinS) _subMinS = sd;
@@ -1286,6 +1294,12 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       if (v > _subMaxV) _subMaxV = v;
       if (ivv < _subMinIv) _subMinIv = ivv;
       if (ivv > _subMaxIv) _subMaxIv = ivv;
+      const fv = _subFutVol[i];
+      if (fv < _subMinFv) _subMinFv = fv;
+      if (fv > _subMaxFv) _subMaxFv = fv;
+      const foi = _subFutOi[i];
+      if (foi < _subMinFoi) _subMinFoi = foi;
+      if (foi > _subMaxFoi) _subMaxFoi = foi;
       _prevSk = sk;
     }
     const gr = _subMaxG - _subMinG || 1;
@@ -1296,6 +1310,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     _subMinV -= vr * 0.1; _subMaxV += vr * 0.1;
     const ivr = _subMaxIv - _subMinIv || 1;
     _subMinIv -= ivr * 0.1; _subMaxIv += ivr * 0.1;
+    const fvr = _subMaxFv - _subMinFv || 1;
+    _subMinFv -= fvr * 0.1; _subMaxFv += fvr * 0.1;
+    const foir = _subMaxFoi - _subMinFoi || 1;
+    _subMinFoi -= foir * 0.1; _subMaxFoi += foir * 0.1;
   }
 
   const pad = { top: 20, bottom: 36, left: 60, right: 20 };
@@ -1837,6 +1855,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       // 按可视范围重算 GEX/OI/VR/IV scale，避免远端极端值压扁
       let vMinG = Infinity, vMaxG = -Infinity, vMinS = Infinity, vMaxS = -Infinity, vMinV = Infinity, vMaxV = -Infinity;
       let vMinIv = Infinity, vMaxIv = -Infinity;
+      let vMinFv = Infinity, vMaxFv = -Infinity, vMinFoi = Infinity, vMaxFoi = -Infinity;
       for (let i = start; i < end && i < n; i++) {
         const g = _subGex[i];
         if (g !== 0) { if (g < vMinG) vMinG = g; if (g > vMaxG) vMaxG = g; }
@@ -1846,6 +1865,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         if (vv !== 0) { if (vv < vMinV) vMinV = vv; if (vv > vMaxV) vMaxV = vv; }
         const ivv = _subIv[i];
         if (ivv !== 0) { if (ivv < vMinIv) vMinIv = ivv; if (ivv > vMaxIv) vMaxIv = ivv; }
+        const fv = _subFutVol[i];
+        if (fv !== 0) { if (fv < vMinFv) vMinFv = fv; if (fv > vMaxFv) vMaxFv = fv; }
+        const foi = _subFutOi[i];
+        if (foi !== 0) { if (foi < vMinFoi) vMinFoi = foi; if (foi > vMaxFoi) vMaxFoi = foi; }
       }
       if (vMinG === Infinity || vMinG === vMaxG) { vMinG = _subMinG; vMaxG = _subMaxG; }
       else { const gr = vMaxG - vMinG || 1; vMinG -= gr * 0.1; vMaxG += gr * 0.1; }
@@ -1853,6 +1876,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       else { const sr = vMaxS - vMinS || 1; vMinS -= sr * 0.1; vMaxS += sr * 0.1; }
       if (vMinV === Infinity || vMinV === vMaxV) { vMinV = _subMinV; vMaxV = _subMaxV; }
       if (vMinIv === Infinity || vMinIv === vMaxIv) { vMinIv = _subMinIv; vMaxIv = _subMaxIv; }
+      if (vMinFv === Infinity || vMinFv === vMaxFv) { vMinFv = _subMinFv; vMaxFv = _subMaxFv; }
+      else { const fvr = vMaxFv - vMinFv || 1; vMinFv -= fvr * 0.1; vMaxFv += fvr * 0.1; }
+      if (vMinFoi === Infinity || vMinFoi === vMaxFoi) { vMinFoi = _subMinFoi; vMaxFoi = _subMaxFoi; }
+      else { const foir = vMaxFoi - vMinFoi || 1; vMinFoi -= foir * 0.1; vMaxFoi += foir * 0.1; }
 
       sctx.fillStyle = '#09131c';
       sctx.fillRect(0, 0, W, 110);
@@ -1982,6 +2009,48 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         sctx.setLineDash([]);
       }
 
+      if (subVis.futVol) {
+        sctx.fillStyle = '#576574';
+        sctx.font = '10px sans-serif';
+        sctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+          const v = vMinFv + (vMaxFv - vMinFv) / 4 * i;
+          const y = spad.top + (sch / 4) * (4 - i);
+          let label;
+          if (Math.abs(v) >= 1e6) label = (v / 1e6).toFixed(1) + 'M';
+          else if (Math.abs(v) >= 1e3) label = (v / 1e3).toFixed(0) + 'K';
+          else label = v.toFixed(0);
+          sctx.fillText(label, pad.left - 4, y + 3);
+        }
+        for (let i = start; i < end && i < n; i++) {
+          const fv = _subFutVol[i];
+          if (fv === 0) continue;
+          const x = toX(i);
+          const y0 = s2y(0, vMinFv, vMaxFv);
+          const y1 = s2y(fv, vMinFv, vMaxFv);
+          const bw = Math.max(1, state.barW * 0.5);
+          sctx.fillStyle = '#54a0ff';
+          sctx.globalAlpha = 0.7;
+          sctx.fillRect(x - bw / 2, Math.min(y0, y1), bw, Math.abs(y1 - y0));
+          sctx.globalAlpha = 1;
+        }
+      }
+
+      if (subVis.futOi) {
+        sctx.strokeStyle = '#f368e0';
+        sctx.lineWidth = 1.5;
+        sctx.beginPath();
+        started = false;
+        for (let i = start; i < end && i < n; i++) {
+          const x = toX(i);
+          const y = s2y(_subFutOi[i], vMinFoi, vMaxFoi);
+          if (_subFutOi[i] === 0 && !started) continue;
+          if (_subFutOi[i] === 0) { started = false; continue; }
+          if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
+        }
+        sctx.stroke();
+      }
+
       sctx.font = '10px sans-serif';
       const legY = spad.top + 3;
       function drawLegItem(x, color, label, key) {
@@ -2006,6 +2075,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       drawLegItem(pad.left + 64, '#48dbfb', 'OI偏度差', 'skew');
       drawLegItem(pad.left + 124, '#ff9f43', '成交量比', 'vr');
       drawLegItem(pad.left + 184, '#00d2d3', 'IV偏度', 'iv');
+      drawLegItem(pad.left + 244, '#54a0ff', '期货成交量', 'futVol');
+      drawLegItem(pad.left + 304, '#f368e0', '期货持仓量', 'futOi');
       sctx.fillStyle = '#576574';
       sctx.font = '10px sans-serif';
       sctx.textAlign = 'right';
@@ -2025,6 +2096,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         const sv = _subSkewD[hi] * 100;
         const vv = _subVr[hi];
         const ivv = _subIv[hi];
+        const fvv = _subFutVol[hi];
+        const foi = _subFutOi[hi];
         sctx.font = '10px sans-serif';
         sctx.textAlign = 'left';
         let hoverY = spad.top + 14;
@@ -2046,6 +2119,16 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         if (subVis.iv) {
           sctx.fillStyle = '#00d2d3';
           sctx.fillText('IV偏度: ' + (ivv >= 0 ? '+' : '') + (ivv * 100).toFixed(2) + '%', hx + 4, hoverY);
+          hoverY += 12;
+        }
+        if (subVis.futVol) {
+          sctx.fillStyle = '#54a0ff';
+          sctx.fillText('期货成交量: ' + fvv.toLocaleString('zh-CN',{maximumFractionDigits:0}), hx + 4, hoverY);
+          hoverY += 12;
+        }
+        if (subVis.futOi) {
+          sctx.fillStyle = '#f368e0';
+          sctx.fillText('期货持仓量: ' + foi.toLocaleString('zh-CN',{maximumFractionDigits:0}), hx + 4, hoverY);
           hoverY += 12;
         }
         sctx.restore();
@@ -2317,6 +2400,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         else if (relX >= 60 && relX < 120) subVis.skew = !subVis.skew;
         else if (relX >= 120 && relX < 180) subVis.vr = !subVis.vr;
         else if (relX >= 180 && relX < 240) subVis.iv = !subVis.iv;
+        else if (relX >= 240 && relX < 300) subVis.futVol = !subVis.futVol;
+        else if (relX >= 300 && relX < 360) subVis.futOi = !subVis.futOi;
         else return;
         render();
       }

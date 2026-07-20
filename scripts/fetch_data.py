@@ -394,88 +394,98 @@ def calc_be(opt_df: pd.DataFrame, px: float, is_call: bool) -> float | None:
     return round((low + high) / 2, 2)
 
 
-def _calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar=None):
-    """计算净 Gamma Exposure (GEX) = Σ call_GEX - Σ put_GEX
-    每张期权使用其对应合约月份的期货价格，T 用实际剩余天数
-    """
+# GEX T/px 缓存: key=(合约码, 交易日期) → (T年, 期货价)
+_T_CACHE: dict[tuple[str, str], tuple[float, float]] = {}
+
+
+def _approx_T_fallback(ym: str, trade_date_str: str) -> float:
+    """2027+无日历时回退到15号近似"""
     from datetime import datetime, date
-    total = 0.0
-    for _, row in opt_df.iterrows():
-        iv = row.get('iv', 0)
-        oi = row.get('oi', 0)
-        K = row.get('strike', 0)
-        cp = row.get('type', 'C')
-        if pd.isna(iv) or iv <= 1e-6 or oi <= 0 or K <= 0:
-            continue
-        opt_code = str(row.get('合约代码', ''))
-        m = re.match(r'^[A-Z]+(\d+)([CP])(\d+)$', opt_code)
-        px = main_px
-        T = 30 / 365
-        if m:
-            contract_ym = m.group(1)
-            # Find matching futures price by symbol
+    ref_yr = int(trade_date_str[:4])
+    if len(ym) == 3:
+        cy = (ref_yr // 10) * 10 + int(ym[0])
+        mo = int(ym[1:3])
+    else:
+        cy = 2000 + int(ym[:2])
+        mo = int(ym[2:4])
+        if cy < ref_yr - 2:
+            cy += 100
+    if mo == 1:
+        mo = 12; cy -= 1
+    else:
+        mo -= 1
+    expiry = date(cy, mo, 15)
+    td = datetime.strptime(trade_date_str, '%Y-%m-%d').date()
+    return max((expiry - td).days / 365, 7 / 365)
+
+
+def _calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar=None):
+    """计算净 Gamma Exposure (GEX)，向量化 + 到期日缓存"""
+    from datetime import datetime, date
+
+    iv = pd.to_numeric(opt_df['iv'], errors='coerce')
+    oi = pd.to_numeric(opt_df['oi'], errors='coerce').fillna(0)
+    strike = pd.to_numeric(opt_df['strike'], errors='coerce')
+    cp = opt_df['type']
+
+    valid = iv.notna() & (iv > 1e-6) & (oi > 0) & strike.notna() & (strike > 0)
+    if not valid.any():
+        return 0.0
+
+    iv, oi, strike = iv[valid], oi[valid], strike[valid]
+    cp = cp[valid]
+    codes = opt_df.loc[valid, '合约代码'].astype(str)
+
+    n = len(iv)
+    T_arr = np.full(n, 30 / 365)
+    px_arr = np.full(n, main_px)
+
+    parsed = codes.str.extract(r'^([A-Z]+)(\d+)[CP]\d*$')
+    prefixes, contract_yms = parsed[0], parsed[1]
+
+    for pref, ym in parsed.dropna().drop_duplicates().itertuples(index=False):
+        ckey = (f"{pref}{ym}", trade_date)
+        if ckey in _T_CACHE:
+            t_val, p_val = _T_CACHE[ckey]
+        else:
+            p_val = main_px
             for f_sym, f_px in fut_prices.items():
-                if f_sym.endswith(contract_ym):
-                    px = f_px
+                if f_sym.endswith(ym):
+                    p_val = f_px
                     break
-            if px is None or px <= 0:
-                px = main_px
+            if p_val <= 0:
+                p_val = main_px
+                t_val = 30 / 365
             elif calendar:
-                # 日历到期日计算
-                expiry_str = None
-                if len(contract_ym) == 3:
-                    ref_yr = int(trade_date[:4])
-                    cy = (ref_yr // 10) * 10 + int(contract_ym[0])
-                    mo = int(contract_ym[1:3])
-                    code_3 = re.match(r'^([A-Z]+)', opt_code)
-                    code_3 = code_3.group(1) if code_3 else ''
-                    # CZCE expiry
-                    expiry_str = _get_expiry_czce(calendar, code_3 + contract_ym)
-                elif len(contract_ym) == 4:
-                    code_4 = re.match(r'^([A-Z]+)', opt_code)
-                    code_4 = code_4.group(1) if code_4 else ''
-                    # Try SHFE first, fallback to DCE
-                    expiry_str = _get_expiry_shfe(calendar, code_4 + contract_ym)
+                if len(ym) == 3:
+                    expiry_str = _get_expiry_czce(calendar, pref + ym)
+                else:
+                    expiry_str = _get_expiry_shfe(calendar, pref + ym)
                     if expiry_str is None:
-                        expiry_str = _get_expiry_dce(calendar, code_4.lower() + contract_ym)
+                        expiry_str = _get_expiry_dce(calendar, pref.lower() + ym)
                 if expiry_str:
                     td = datetime.strptime(trade_date, '%Y-%m-%d').date()
                     ex = datetime.strptime(expiry_str, '%Y-%m-%d').date()
-                    T = max((ex - td).days / 365, 7 / 365)
+                    t_val = max((ex - td).days / 365, 7 / 365)
+                else:
+                    t_val = _approx_T_fallback(ym, trade_date)
             else:
-                # 2027+无日历时回退到15号近似
-                ref_yr = int(trade_date[:4])
-                if len(contract_ym) == 3:
-                    cy = (ref_yr // 10) * 10 + int(contract_ym[0])
-                    mo = int(contract_ym[1:3])
-                elif len(contract_ym) == 4:
-                    cy = 2000 + int(contract_ym[:2])
-                    mo = int(contract_ym[2:4])
-                    if cy < ref_yr - 2: cy += 100
-                else:
-                    sqrt_T = np.sqrt(T)
-                    d1 = (np.log(px / K) + 0.5 * iv**2 * T) / (iv * sqrt_T)
-                    pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
-                    gamma = pdf / (px * iv * sqrt_T)
-                    g = gamma * oi * mult * px * px * 0.01
-                    total += g if cp == 'C' else -g
-                    continue
-                if mo == 1:
-                    mo = 12; cy -= 1
-                else:
-                    mo -= 1
-                expiry = date(cy, mo, 15)  # 2027+月份回退到15号近似
-                td = datetime.strptime(trade_date, '%Y-%m-%d').date()
-                T = max((expiry - td).days / 365, 7 / 365)
-        if px <= 0:
-            continue
-        sqrt_T = np.sqrt(T)
-        d1 = (np.log(px / K) + 0.5 * iv**2 * T) / (iv * sqrt_T)
-        pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
-        gamma = pdf / (px * iv * sqrt_T)
-        g = gamma * oi * mult * px * px * 0.01
-        total += g if cp == 'C' else -g
-    return round(total, 2)
+                t_val = _approx_T_fallback(ym, trade_date)
+            _T_CACHE[ckey] = (t_val, p_val)
+
+        mask = (prefixes == pref) & (contract_yms == ym)
+        T_arr[mask] = t_val
+        px_arr[mask] = p_val
+
+    # 向量化 gamma 计算
+    sqrt_T = np.sqrt(T_arr)
+    d1 = (np.log(px_arr / strike) + 0.5 * iv**2 * T_arr) / (iv * sqrt_T)
+    pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
+    gamma = pdf / (px_arr * iv * sqrt_T)
+    gex = gamma * oi * mult * px_arr * px_arr * 0.01
+    gex = gex * cp.map({'C': 1, 'P': -1})
+
+    return round(float(gex.sum()), 2)
 
 
 def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> tuple[str, dict]:
@@ -509,6 +519,8 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
             for c in ['open', 'high', 'low', 'close']:
                 fut[c] = pd.to_numeric(fut[c], errors='coerce')
             fut['volume'] = pd.to_numeric(fut['volume'], errors='coerce').fillna(0)
+            fut['open_interest'] = pd.to_numeric(fut['open_interest'], errors='coerce').fillna(0)
+            fut['turnover'] = pd.to_numeric(fut['turnover'], errors='coerce').fillna(0)
             per_exchange_futures[exc] = fut
         except Exception:
             continue
@@ -618,6 +630,28 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
                 ex = datetime.strptime(nearest_expiry, '%Y-%m-%d').date()
                 nearest_dte = (ex - td).days
 
+        # 期权成交量 (cv/pv 已算)
+        vol_call = cv
+        vol_put = pv
+        vol_total = round(cv + pv, 2)
+
+        # 总持仓量
+        oi_total = float(opt['oi'].sum())
+        call_oi_all = float(opt[opt['type'] == 'C']['oi'].sum())
+        put_oi_all = float(opt[opt['type'] == 'P']['oi'].sum())
+        oi_pcr = round(put_oi_all / call_oi_all, 2) if call_oi_all > 0 else None
+
+        # 最大持仓量行权价
+        strike_oi = opt.groupby('strike')['oi'].sum()
+        oi_max_strike = int(strike_oi.idxmax()) if not strike_oi.empty else None
+
+        # 平值 IV
+        if not opt.empty:
+            atm_idx = (opt['strike'] - px).abs().idxmin()
+            atm_iv = float(opt.loc[atm_idx, 'iv']) if pd.notna(opt.loc[atm_idx, 'iv']) else None
+        else:
+            atm_iv = None
+
         entries[sym] = {
             'd': d, 'o': round(float(fr['open']), 2), 'c': round(px, 2),
             'h': round(float(fr['high']), 2), 'l': round(float(fr['low']), 2),
@@ -625,6 +659,12 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
             'mp': mp, 'co': co, 'po': po,
             'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex,
             'expiry': nearest_expiry, 'dte': nearest_dte,
+            'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
+            'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,
+            'fut_vol': float(fr['volume']),
+            'fut_oi': float(fr['open_interest']),
+            'fut_turnover': float(fr['turnover']),
+            'atm_iv': atm_iv,
         }
 
     return ('ok' if entries else 'empty', entries)
@@ -836,6 +876,22 @@ def _load_db_symbols(worker_url: str, api_key: str, gh_token: str = '') -> list[
         return None
 
 
+def _get_global_latest_date(worker_url: str, api_key: str, gh_token: str = '') -> str | None:
+    """查 DB 所有品种的最新日期，返回整体最大日期"""
+    headers = {'Authorization': f'Bearer {api_key}'}
+    if gh_token:
+        headers['X-GitHub-Token'] = gh_token
+    req = Request(f'{worker_url}/api/stats', headers=headers, method='GET')
+    try:
+        with urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read())
+            dates = [s['last'] for s in result.get('stats', []) if s.get('last')]
+            return max(dates) if dates else None
+    except Exception as e:
+        print(f'  ⚠ 查 DB 最新日期失败: {e}', flush=True)
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', '-o', default='data.json')
@@ -850,6 +906,8 @@ def main():
                         help='API 密钥')
     parser.add_argument('--gh-token', default=os.getenv('GH_UPLOAD_TOKEN', ''),
                         help='GitHub Token')
+    parser.add_argument('--incremental', action='store_true',
+                        help='增量模式：查 DB 最新日期，只补后续数据')
     args = parser.parse_args()
 
     upload = args.worker_url and args.api_key
@@ -869,6 +927,18 @@ def main():
     else:
         syms = list(DEFAULT_SYMBOLS)
 
+    # 增量模式：查 DB 最新日期，只补后续数据
+    year_param = args.year
+    if args.incremental and upload:
+        latest = _get_global_latest_date(args.worker_url, args.api_key, args.gh_token)
+        if latest:
+            next_day = (datetime.strptime(latest, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y%m%d')
+            if next_day > datetime.now().strftime('%Y%m%d'):
+                print(f'DB 最新 {latest}，已是最新，跳过')
+                return
+            print(f'增量模式: DB 最新 {latest}，从 {next_day} 开始')
+            year_param = next_day
+
     # 自动任务：非交易日跳过
     if args.recent and not args.symbol:
         trade_days = _load_trade_days()
@@ -877,7 +947,7 @@ def main():
             print(f'{today_str} 非交易日，跳过')
             return
 
-    yr = _parse_year_range(args.year)
+    yr = _parse_year_range(year_param)
     print(f'处理品种: {", ".join(syms)} ({len(syms)} 个)')
     all_data = run(max_dates=args.max_dates, recent=args.recent,
                    year_start=yr[0] if yr else '', year_end=yr[1] if yr else '',

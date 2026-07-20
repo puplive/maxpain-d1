@@ -143,54 +143,78 @@ def _calc_T_dce(contract_code, trade_date_str, calendar):
 def calc_max_pain(opt_df):
     if opt_df.empty:
         return 0
-    strikes = sorted(opt_df['strike'].unique())
-    best_s, best_val = 0, float('inf')
-    for s in strikes:
-        val = 0.0
-        calls = opt_df[(opt_df['strike'] < s) & (opt_df['type'] == 'C')]
-        puts = opt_df[(opt_df['strike'] > s) & (opt_df['type'] == 'P')]
-        if not calls.empty:
-            val += ((s - calls['strike']) * calls['oi']).sum()
-        if not puts.empty:
-            val += ((puts['strike'] - s) * puts['oi']).sum()
+    strikes_arr = np.sort(opt_df['strike'].unique())
+    if len(strikes_arr) == 0:
+        return 0
+    type_arr = opt_df['type'].values
+    strike_arr = opt_df['strike'].values
+    oi_arr = opt_df['oi'].values
+
+    best_s = int(strikes_arr[0])
+    best_val = float('inf')
+    for s in strikes_arr:
+        call_mask = (strike_arr < s) & (type_arr == 'C')
+        put_mask = (strike_arr > s) & (type_arr == 'P')
+        val = float(((s - strike_arr[call_mask]) * oi_arr[call_mask]).sum() +
+                    ((strike_arr[put_mask] - s) * oi_arr[put_mask]).sum())
         if val < best_val:
-            best_val, best_s = val, s
-    return int(best_s)
+            best_val, best_s = val, int(s)
+    return best_s
+
+
+# GEX T/px 缓存
+_T_CACHE: dict[tuple[str, str], tuple[float, float]] = {}
 
 
 def calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar):
-    """计算净 Gamma Exposure (GEX) = Σ call_GEX - Σ put_GEX
-    每张期权使用其对应合约月份的期货价格，T 用实际剩余天数
-    """
+    """计算净 Gamma Exposure (GEX)，向量化 + 到期日缓存"""
     from datetime import datetime, date
-    total = 0.0
-    for _, row in opt_df.iterrows():
-        iv = row.get('iv', 0)
-        oi = row.get('oi', 0)
-        K = row.get('strike', 0)
-        cp = row.get('type', 'C')
-        if pd.isna(iv) or iv <= 1e-6 or oi <= 0 or K <= 0:
-            continue
-        opt_name = str(row.get('合约名称', ''))
-        m = re.search(r'^(.+?)-', opt_name)
-        px = main_px
-        T = 30 / 365
-        if m:
-            contract_code = m.group(1)
-            px = fut_prices.get(contract_code)
-            if px is None or px <= 0:
-                px = main_px
+
+    iv = pd.to_numeric(opt_df.get('iv', pd.Series(0)), errors='coerce')
+    oi = pd.to_numeric(opt_df.get('oi', pd.Series(0)), errors='coerce').fillna(0)
+    strike = pd.to_numeric(opt_df.get('strike', pd.Series(0)), errors='coerce')
+    cp = opt_df.get('type', pd.Series(''))
+
+    valid = iv.notna() & (iv > 1e-6) & (oi > 0) & strike.notna() & (strike > 0)
+    if not valid.any():
+        return 0.0
+
+    iv, oi, strike = iv[valid], oi[valid], strike[valid]
+    cp = cp[valid]
+    names = opt_df.loc[valid, '合约名称'].astype(str)
+
+    n = len(iv)
+    T_arr = np.full(n, 30 / 365)
+    px_arr = np.full(n, main_px)
+
+    contract_codes = names.str.extract(r'^(.+?)-', expand=False)
+
+    for ccode in contract_codes.dropna().unique():
+        ckey = (ccode, trade_date)
+        if ckey in _T_CACHE:
+            t_val, p_val = _T_CACHE[ckey]
+        else:
+            p_val = fut_prices.get(ccode, main_px)
+            if p_val is None or p_val <= 0:
+                p_val = main_px
+                t_val = 30 / 365
             else:
-                T = _calc_T_dce(contract_code, trade_date, calendar)
-        if px <= 0:
-            continue
-        sqrt_T = np.sqrt(T)
-        d1 = (np.log(px / K) + 0.5 * iv**2 * T) / (iv * sqrt_T)
-        pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
-        gamma = pdf / (px * iv * sqrt_T)
-        g = gamma * oi * mult * px * px * 0.01
-        total += g if cp == 'C' else -g
-    return round(total, 2)
+                t_val = _calc_T_dce(ccode, trade_date, calendar)
+            _T_CACHE[ckey] = (t_val, p_val)
+
+        mask = (contract_codes == ccode)
+        T_arr[mask] = t_val
+        px_arr[mask] = p_val
+
+    # 向量化 gamma 计算
+    sqrt_T = np.sqrt(T_arr)
+    d1 = (np.log(px_arr / strike) + 0.5 * iv**2 * T_arr) / (iv * sqrt_T)
+    pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
+    gamma = pdf / (px_arr * iv * sqrt_T)
+    gex = gamma * oi * mult * px_arr * px_arr * 0.01
+    gex = gex * cp.map({'C': 1, 'P': -1})
+
+    return round(float(gex.sum()), 2)
 
 
 def calc_be(opt_df, px, is_call):
@@ -219,6 +243,16 @@ def calc_be(opt_df, px, is_call):
     return round((low + high) / 2, 2)
 
 
+def _read_cached_xlsx(path):
+    """读 xlsx 并缓存为同目录 .pkl，后续秒读"""
+    pkl_path = path.with_suffix('.pkl')
+    if pkl_path.exists() and pkl_path.stat().st_mtime >= path.stat().st_mtime:
+        return pd.read_pickle(pkl_path)
+    df = pd.read_excel(path)
+    df.to_pickle(pkl_path)
+    return df
+
+
 def process_symbol(sym, prefix, year, date=None):
     """处理单个品种某一年"""
     ftr_year = f'allVarietyFtr{year}'
@@ -230,16 +264,18 @@ def process_symbol(sym, prefix, year, date=None):
     if not ftr_file.exists():
         return {}
 
-    # 读期货
-    fut = pd.read_excel(ftr_file)
+    # 读期货（带 pickle 缓存）
+    fut = _read_cached_xlsx(ftr_file)
     fut['date'] = pd.to_datetime(fut['交易日期'].astype(str), format='%Y%m%d').dt.strftime('%Y-%m-%d')
-    for c in ['成交量', '收盘价', '开盘价', '最高价', '最低价']:
+    for c in ['成交量', '收盘价', '开盘价', '最高价', '最低价', '持仓量', '成交额']:
         fut[c] = fut[c].astype(str).str.replace(',', '')
     fut['volume'] = pd.to_numeric(fut['成交量'], errors='coerce').fillna(0)
     fut['close'] = pd.to_numeric(fut['收盘价'], errors='coerce').fillna(0)
     fut['open'] = pd.to_numeric(fut['开盘价'], errors='coerce').fillna(0)
     fut['high'] = pd.to_numeric(fut['最高价'], errors='coerce').fillna(0)
     fut['low'] = pd.to_numeric(fut['最低价'], errors='coerce').fillna(0)
+    fut['open_interest'] = pd.to_numeric(fut['持仓量'], errors='coerce').fillna(0)
+    fut['turnover'] = pd.to_numeric(fut['成交额'], errors='coerce').fillna(0)
 
     # 解析合约月份，用于近月连续
     fut['contract_ym'] = fut['合约名称'].str.extract(r'(\d{4})$')[0]
@@ -266,7 +302,7 @@ def process_symbol(sym, prefix, year, date=None):
         return {}
 
     # 读期权
-    opt_all = pd.read_excel(opt_file)
+    opt_all = _read_cached_xlsx(opt_file)
     opt_all['date'] = pd.to_datetime(opt_all['交易日期'].astype(str), format='%Y%m%d').dt.strftime('%Y-%m-%d')
 
     parsed = opt_all['合约名称'].apply(parse_opt_code)
@@ -313,76 +349,88 @@ def process_symbol(sym, prefix, year, date=None):
         opt = opt_by_date[dt]
         px = float(row['close'])
 
+        # 一次过滤，重复用
+        calls = opt[opt['type'] == 'C']
+        puts = opt[opt['type'] == 'P']
         rng = 0.20
-        do_mp = opt[opt['strike'].between(px * (1 - rng), px * (1 + rng))]
-        mp = calc_max_pain(do_mp if len(do_mp) > 0 else opt)
+        near = opt[opt['strike'].between(px * (1 - rng), px * (1 + rng))]
 
-        co = float(opt[(opt['strike'] > px) & (opt['type'] == 'C')]['oi'].sum())
-        po = float(opt[(opt['strike'] < px) & (opt['type'] == 'P')]['oi'].sum())
+        mp = calc_max_pain(near if len(near) > 0 else opt)
 
-        do_be = opt[opt['strike'].between(px * (1 - rng), px * (1 + rng))]
-        bec = calc_be(do_be, px, True) if len(do_be) > 0 else None
-        bep = calc_be(do_be, px, False) if len(do_be) > 0 else None
+        co = float(calls[calls['strike'] > px]['oi'].sum())
+        po = float(puts[puts['strike'] < px]['oi'].sum())
 
-        cv = float(opt[opt['type'] == 'C']['opt_volume'].sum())
-        pv = float(opt[opt['type'] == 'P']['opt_volume'].sum())
+        bec = calc_be(near, px, True) if len(near) > 0 else None
+        bep = calc_be(near, px, False) if len(near) > 0 else None
+
+        cv = float(calls['opt_volume'].sum())
+        pv = float(puts['opt_volume'].sum())
         vr = round(cv / pv, 2) if pv > 0 else None
 
-        civ = opt[(opt['type'] == 'C') & (opt['delta'].between(0.20, 0.30))]['iv'].mean()
-        piv = opt[(opt['type'] == 'P') & (opt['delta'].between(-0.30, -0.20))]['iv'].mean()
+        civ = calls[calls['delta'].between(0.20, 0.30)]['iv'].mean()
+        piv = puts[puts['delta'].between(-0.30, -0.20)]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
-        fut_prices = {r['合约名称']: float(r['close'])
-                      for _, r in fut[fut['date'] == dt].iterrows()
-                      if float(r['close']) > 0}
+
+        day_fut = fut[fut['date'] == dt]
+        fut_prices = dict(zip(day_fut['合约名称'], day_fut['close']))
         gex = calc_gex(opt, px, DCE_MULT.get(sym, 10), fut_prices, dt, calendar)
 
-        # 最近到期日
+        # 期权成交量/持仓量
+        vol_call = cv
+        vol_put = pv
+        vol_total = round(cv + pv, 2)
+        oi_total = float(opt['oi'].sum())
+        call_oi_all = float(calls['oi'].sum())
+        put_oi_all = float(puts['oi'].sum())
+        oi_pcr = round(put_oi_all / call_oi_all, 2) if call_oi_all > 0 else None
+        strike_oi = opt.groupby('strike')['oi'].sum()
+        oi_max_strike = int(strike_oi.idxmax()) if not strike_oi.empty else None
+        if not opt.empty:
+            atm_idx = (opt['strike'] - px).abs().idxmin()
+            atm_iv = float(opt.loc[atm_idx, 'iv']) if pd.notna(opt.loc[atm_idx, 'iv']) else None
+        else:
+            atm_iv = None
+
+        # 最近到期日（用 regex 提取唯一合约码，避免 iterrows）
         from datetime import datetime
         nearest_expiry = None
         nearest_dte = 0
         seen_codes = set()
-        for _, opt_row in opt.iterrows():
-            opt_name = str(opt_row.get('合约名称', ''))
-            m = re.search(r'^(.+?)-', opt_name)
-            if m:
-                code = m.group(1)
-                if code in seen_codes:
-                    continue
-                seen_codes.add(code)
-                expiry_str = _dce_expiry(calendar, code)
-                if isinstance(expiry_str, str):
-                    if nearest_expiry is None or expiry_str < nearest_expiry:
-                        nearest_expiry = expiry_str
-                else:
-                    # AKShare只有当年日历，2027+无法精确计算，回退到15号近似
-                    m2 = re.search(r'[a-z]+(\d{4})$', str(code))
-                    if m2:
-                        ym2 = m2.group(1)
-                        yr2 = 2000 + int(ym2[:2])
-                        mo2 = int(ym2[2:4])
-                        ref_yr2 = int(dt[:4])
-                        if yr2 < ref_yr2 - 2:
-                            yr2 += 100
-                        if mo2 == 1:
-                            mo2 = 12; yr2 -= 1
-                        else:
-                            mo2 -= 1
-                        approx = f'{yr2:04d}-{mo2:02d}-15'  # 2027+月份回退到15号近似
-                        if nearest_expiry is None or approx < nearest_expiry:
-                            nearest_expiry = approx
+        for code in opt['合约名称'].str.extract(r'^(.+?)-', expand=False).dropna().unique():
+            if code in seen_codes:
+                continue
+            seen_codes.add(code)
+            expiry_str = _dce_expiry(calendar, code)
+            if isinstance(expiry_str, str):
+                if nearest_expiry is None or expiry_str < nearest_expiry:
+                    nearest_expiry = expiry_str
+            else:
+                # AKShare只有当年日历，2027+无法精确计算，回退到15号近似
+                m2 = re.search(r'[a-z]+(\d{4})$', str(code))
+                if m2:
+                    ym2 = m2.group(1)
+                    yr2 = 2000 + int(ym2[:2])
+                    mo2 = int(ym2[2:4])
+                    ref_yr2 = int(dt[:4])
+                    if yr2 < ref_yr2 - 2:
+                        yr2 += 100
+                    if mo2 == 1:
+                        mo2 = 12; yr2 -= 1
+                    else:
+                        mo2 -= 1
+                    approx = f'{yr2:04d}-{mo2:02d}-15'  # 2027+月份回退到15号近似
+                    if nearest_expiry is None or approx < nearest_expiry:
+                        nearest_expiry = approx
         if nearest_expiry:
             td = datetime.strptime(dt, '%Y-%m-%d').date()
             ex = datetime.strptime(nearest_expiry, '%Y-%m-%d').date()
             nearest_dte = (ex - td).days
 
         # OI chain: [{s: strike, co: call_oi, po: put_oi}, ...]
-        chain_list = []
-        for s, grp in opt.groupby('strike'):
-            co_oi = int(grp[grp['type'] == 'C']['oi'].sum())
-            po_oi = int(grp[grp['type'] == 'P']['oi'].sum())
-            if co_oi > 0 or po_oi > 0:
-                chain_list.append({'s': int(s), 'co': co_oi, 'po': po_oi})
-        chain_list.sort(key=lambda x: x['s'])
+        pt = opt.pivot_table(index='strike', columns='type', values='oi', aggfunc='sum', fill_value=0)
+        chain_list = [{'s': int(s), 'co': int(r['C']), 'po': int(r['P'])}
+                      for s, r in pt.iterrows()
+                      if r['C'] > 0 or r['P'] > 0]
         oc_chain = json.dumps(chain_list, separators=(',', ':'))
 
         # oc: 期权对应标的期货的收盘价（按期权持仓量最大的标的合约）
@@ -402,6 +450,12 @@ def process_symbol(sym, prefix, year, date=None):
             'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex,
             'oc_chain': oc_chain,
             'expiry': nearest_expiry, 'dte': nearest_dte,
+            'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
+            'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,
+            'fut_vol': float(row['volume']),
+            'fut_oi': float(row['open_interest']),
+            'fut_turnover': float(row['turnover']),
+            'atm_iv': atm_iv,
         }
 
     return result
@@ -451,14 +505,31 @@ def main():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     output = {}
-    for sym, prefix in DCE_SYMBOLS.items():
-        if args.symbol and sym != args.symbol.upper():
-            continue
-        entries = process_symbol(sym, prefix, year, date=date_filter)
-        if entries:
-            records = sorted(entries.values(), key=lambda r: r['d'])
-            output[sym] = records
-            print(f'  {sym}: {len(records)} 天')
+    tasks = [(sym, prefix) for sym, prefix in DCE_SYMBOLS.items()
+             if not args.symbol or sym == args.symbol.upper()]
+
+    if len(tasks) == 1:
+        # 单品种串行
+        for sym, prefix in tasks:
+            entries = process_symbol(sym, prefix, year, date=date_filter)
+            if entries:
+                records = sorted(entries.values(), key=lambda r: r['d'])
+                output[sym] = records
+                print(f'  {sym}: {len(records)} 天')
+    else:
+        n_workers = min(os.cpu_count() or 4, len(tasks))
+        print(f'并行处理 {len(tasks)} 个品种 (workers={n_workers})')
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        with ProcessPoolExecutor(max_workers=n_workers) as pool:
+            fut_map = {pool.submit(process_symbol, sym, prefix, year, date_filter): sym
+                       for sym, prefix in tasks}
+            for f in as_completed(fut_map):
+                sym = fut_map[f]
+                entries = f.result()
+                if entries:
+                    records = sorted(entries.values(), key=lambda r: r['d'])
+                    output[sym] = records
+                    print(f'  {sym}: {len(records)} 天')
 
     if output:
         out_path = DATA_DIR / f'{year}.json'

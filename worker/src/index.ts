@@ -25,6 +25,16 @@ interface DailyRow {
   nc: number | null;
   oc: number | null;
   oc_chain: string | null;
+  oi_total: number;
+  oi_pcr: number | null;
+  oi_max_strike: number | null;
+  vol_call: number;
+  vol_put: number;
+  vol_total: number;
+  fut_vol: number;
+  fut_oi: number;
+  fut_turnover: number;
+  atm_iv: number | null;
 }
 
 /** 将 DB 行转成前端兼容的短字段名 */
@@ -48,6 +58,16 @@ function toFrontend(row: DailyRow) {
     nc: row.nc,
     oc: row.oc,
     oc_chain: row.oc_chain,
+    oi_total: row.oi_total,
+    oi_pcr: row.oi_pcr,
+    oi_max_strike: row.oi_max_strike,
+    vol_call: row.vol_call,
+    vol_put: row.vol_put,
+    vol_total: row.vol_total,
+    fut_vol: row.fut_vol,
+    fut_oi: row.fut_oi,
+    fut_turnover: row.fut_turnover,
+    atm_iv: row.atm_iv,
   };
 }
 
@@ -78,7 +98,7 @@ export default {
         });
       }
       const { results } = await env.DB.prepare(
-        'SELECT date,open,close,high,low,mp,co,po,bec,bep,vr,ivs,gex,expiry,dte,nc,oc,oc_chain FROM daily_data WHERE symbol = ? ORDER BY date'
+        'SELECT date,open,close,high,low,mp,co,po,bec,bep,vr,ivs,gex,expiry,dte,nc,oc,oc_chain,oi_total,oi_pcr,oi_max_strike,vol_call,vol_put,vol_total,fut_vol,fut_oi,fut_turnover,atm_iv FROM daily_data WHERE symbol = ? ORDER BY date'
       ).bind(symbol).all<DailyRow>();
       const data = (results || []).map(toFrontend);
       return new Response(JSON.stringify({ data }), {
@@ -105,6 +125,10 @@ export default {
         expiry?: string; dte?: number;
         nc?: number | null; oc?: number | null;
         oc_chain?: string | null;
+        oi_total?: number; oi_pcr?: number | null; oi_max_strike?: number | null;
+        vol_call?: number; vol_put?: number; vol_total?: number;
+        fut_vol?: number; fut_oi?: number; fut_turnover?: number;
+        atm_iv?: number | null;
       }> } = await request.json();
 
       const { symbol, data } = body;
@@ -117,8 +141,10 @@ export default {
 
       const stmt = env.DB.prepare(
         `INSERT OR REPLACE INTO daily_data
-         (symbol, date, open, close, high, low, mp, co, po, bec, bep, vr, ivs, gex, expiry, dte, nc, oc, oc_chain)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (symbol, date, open, close, high, low, mp, co, po, bec, bep, vr, ivs, gex, expiry, dte, nc, oc, oc_chain,
+          oi_total, oi_pcr, oi_max_strike, vol_call, vol_put, vol_total, fut_vol, fut_oi, fut_turnover, atm_iv)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
 
       const batch = data.map((r) =>
@@ -130,7 +156,11 @@ export default {
           r.gex ?? null,
           r.expiry ?? '', r.dte ?? 0,
           r.nc ?? null, r.oc ?? null,
-          r.oc_chain ?? null
+          r.oc_chain ?? null,
+          r.oi_total ?? 0, r.oi_pcr ?? null, r.oi_max_strike ?? null,
+          r.vol_call ?? 0, r.vol_put ?? 0, r.vol_total ?? 0,
+          r.fut_vol ?? 0, r.fut_oi ?? 0, r.fut_turnover ?? 0,
+          r.atm_iv ?? null
         )
       );
 

@@ -18,6 +18,19 @@ CREATE TABLE IF NOT EXISTS daily_data (
   nc REAL,
   oc REAL,
   oc_chain TEXT,
+  -- 期权持仓量/成交量
+  oi_total REAL DEFAULT 0,
+  oi_pcr REAL,
+  oi_max_strike REAL,
+  vol_call REAL DEFAULT 0,
+  vol_put REAL DEFAULT 0,
+  vol_total REAL DEFAULT 0,
+  -- 期货
+  fut_vol REAL DEFAULT 0,
+  fut_oi REAL DEFAULT 0,
+  fut_turnover REAL DEFAULT 0,
+  -- 波动率
+  atm_iv REAL,
   updated_at TEXT DEFAULT (datetime('now')),
   PRIMARY KEY (symbol, date)
 );

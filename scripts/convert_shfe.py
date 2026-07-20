@@ -129,52 +129,80 @@ def _calc_T_shfe(contract_code, trade_date_str, calendar):
 
 
 def calc_max_pain(opt_df):
-    if opt_df.empty: return 0
-    strikes = sorted(opt_df['strike'].unique())
-    best_s, best_val = 0, float('inf')
-    for s in strikes:
-        calls = opt_df[(opt_df['strike'] < s) & (opt_df['type'] == 'C')]
-        puts = opt_df[(opt_df['strike'] > s) & (opt_df['type'] == 'P')]
-        val = 0.0
-        if not calls.empty: val += ((s - calls['strike']) * calls['oi']).sum()
-        if not puts.empty: val += ((puts['strike'] - s) * puts['oi']).sum()
-        if val < best_val: best_val, best_s = val, s
-    return int(best_s)
+    if opt_df.empty:
+        return 0
+    strikes_arr = np.sort(opt_df['strike'].unique())
+    if len(strikes_arr) == 0:
+        return 0
+    type_arr = opt_df['type'].values
+    strike_arr = opt_df['strike'].values
+    oi_arr = opt_df['oi'].values
+
+    best_s = int(strikes_arr[0])
+    best_val = float('inf')
+    for s in strikes_arr:
+        call_mask = (strike_arr < s) & (type_arr == 'C')
+        put_mask = (strike_arr > s) & (type_arr == 'P')
+        val = float(((s - strike_arr[call_mask]) * oi_arr[call_mask]).sum() +
+                    ((strike_arr[put_mask] - s) * oi_arr[put_mask]).sum())
+        if val < best_val:
+            best_val, best_s = val, int(s)
+    return best_s
+
+
+# GEX T/px 缓存
+_T_CACHE: dict[tuple[str, str], tuple[float, float]] = {}
 
 
 def calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar):
-    """计算净 Gamma Exposure (GEX) = Σ call_GEX - Σ put_GEX
-    每张期权使用其对应合约月份的期货价格，T 用实际剩余天数
-    """
+    """计算净 Gamma Exposure (GEX)，向量化 + 到期日缓存"""
     from datetime import datetime, date
-    total = 0.0
-    for _, row in opt_df.iterrows():
-        iv = row.get('iv', 0)
-        oi = row.get('oi', 0)
-        K = row.get('strike', 0)
-        cp = row.get('type', 'C')
-        if pd.isna(iv) or iv <= 1e-6 or oi <= 0 or K <= 0:
-            continue
-        opt_code = str(row.get('合约', ''))
-        m = re.search(r'^([A-Z]{1,2}\d{4})[CP]', opt_code)
-        px = main_px
-        T = 30 / 365
-        if m:
-            contract_code = m.group(1)
-            px = fut_prices.get(contract_code)
-            if px is None or px <= 0:
-                px = main_px
+
+    iv = pd.to_numeric(opt_df.get('iv', pd.Series(0)), errors='coerce')
+    oi = pd.to_numeric(opt_df.get('oi', pd.Series(0)), errors='coerce').fillna(0)
+    strike = pd.to_numeric(opt_df.get('strike', pd.Series(0)), errors='coerce')
+    cp = opt_df.get('type', pd.Series(''))
+
+    valid = iv.notna() & (iv > 1e-6) & (oi > 0) & strike.notna() & (strike > 0)
+    if not valid.any():
+        return 0.0
+
+    iv, oi, strike = iv[valid], oi[valid], strike[valid]
+    cp = cp[valid]
+    codes = opt_df.loc[valid, '合约'].astype(str)
+
+    n = len(iv)
+    T_arr = np.full(n, 30 / 365)
+    px_arr = np.full(n, main_px)
+
+    contract_codes = codes.str.extract(r'^([A-Z]{1,2}\d{4})[CP]', expand=False)
+
+    for ccode in contract_codes.dropna().unique():
+        ckey = (ccode, trade_date)
+        if ckey in _T_CACHE:
+            t_val, p_val = _T_CACHE[ckey]
+        else:
+            p_val = fut_prices.get(ccode, main_px)
+            if p_val is None or p_val <= 0:
+                p_val = main_px
+                t_val = 30 / 365
             else:
-                T = _calc_T_shfe(contract_code, trade_date, calendar)
-        if px <= 0:
-            continue
-        sqrt_T = np.sqrt(T)
-        d1 = (np.log(px / K) + 0.5 * iv**2 * T) / (iv * sqrt_T)
-        pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
-        gamma = pdf / (px * iv * sqrt_T)
-        g = gamma * oi * mult * px * px * 0.01
-        total += g if cp == 'C' else -g
-    return round(total, 2)
+                t_val = _calc_T_shfe(ccode, trade_date, calendar)
+            _T_CACHE[ckey] = (t_val, p_val)
+
+        mask = (contract_codes == ccode)
+        T_arr[mask] = t_val
+        px_arr[mask] = p_val
+
+    # 向量化 gamma 计算
+    sqrt_T = np.sqrt(T_arr)
+    d1 = (np.log(px_arr / strike) + 0.5 * iv**2 * T_arr) / (iv * sqrt_T)
+    pdf = np.exp(-0.5 * d1 * d1) / np.sqrt(2 * np.pi)
+    gamma = pdf / (px_arr * iv * sqrt_T)
+    gex = gamma * oi * mult * px_arr * px_arr * 0.01
+    gex = gex * cp.map({'C': 1, 'P': -1})
+
+    return round(float(gex.sum()), 2)
 
 
 def calc_be(opt_df, px, is_call):
@@ -199,7 +227,13 @@ def calc_be(opt_df, px, is_call):
 
 
 def _read_shfe_monthly(path):
-    df = pd.read_excel(path)
+    """读 SHFE 月度 xlsx，带 pickle 缓存"""
+    pkl_path = path.with_suffix('.pkl')
+    if pkl_path.exists() and pkl_path.stat().st_mtime >= path.stat().st_mtime:
+        df = pd.read_pickle(pkl_path)
+    else:
+        df = pd.read_excel(path)
+        df.to_pickle(pkl_path)
     for i in range(min(5, len(df))):
         if str(df.iloc[i, 0]).strip() == '合约':
             df.columns = [str(v).strip() for v in df.iloc[i].values]
@@ -236,7 +270,7 @@ def load_all_futures(year):
     if not all_df: return {}
     df = pd.concat(all_df, ignore_index=True)
     df['date'] = pd.to_datetime((df['交易日期'] if '交易日期' in df.columns else df['日期']).astype(str)).dt.strftime('%Y-%m-%d')
-    for c in ['开盘价','最高价','最低价','收盘价','成交量']:
+    for c in ['开盘价','最高价','最低价','收盘价','成交量','持仓量','成交金额(万元)']:
         if c in df.columns: df[c] = _clean_num(df[c])
 
     # 过滤掉期权合约（含 C/P 后缀的，如 SC2605C650）
@@ -302,7 +336,10 @@ def process_one(sym, fut, opt, mult=10):
         r = g.loc[idx]
         if r.get('收盘价', 0) > 0:
             fut_dates[date] = {'o': float(r.get('开盘价', 0)), 'c': float(r.get('收盘价', 0)),
-                               'h': float(r.get('最高价', 0)), 'l': float(r.get('最低价', 0))}
+                               'h': float(r.get('最高价', 0)), 'l': float(r.get('最低价', 0)),
+                               'fv': float(r.get('成交量', 0)),
+                               'foi': float(r.get('持仓量', 0)),
+                               'fto': float(r.get('成交金额(万元)', 0))}
         # 近月连续：取成交量>0且收盘价>0中交割月最早的
         close_col = '收盘价'
         if vol_col:
@@ -321,72 +358,84 @@ def process_one(sym, fut, opt, mult=10):
         if date not in opt_by_date: continue
         o = opt_by_date[date]
         px = row['c']
+
+        # 一次过滤，重复用
+        calls = o[o['type'] == 'C']
+        puts = o[o['type'] == 'P']
         rng = 0.20
-        do_mp = o[o['strike'].between(px*(1-rng), px*(1+rng))]
-        mp = calc_max_pain(do_mp if len(do_mp) > 0 else o)
-        co = float(o[(o['strike'] > px) & (o['type'] == 'C')]['oi'].sum())
-        po = float(o[(o['strike'] < px) & (o['type'] == 'P')]['oi'].sum())
-        do_be = o[o['strike'].between(px*(1-rng), px*(1+rng))]
-        bec = calc_be(do_be, px, True) if len(do_be) > 0 else None
-        bep = calc_be(do_be, px, False) if len(do_be) > 0 else None
-        cv = float(o[o['type'] == 'C']['volume'].sum())
-        pv = float(o[o['type'] == 'P']['volume'].sum())
+        near = o[o['strike'].between(px*(1-rng), px*(1+rng))]
+
+        mp = calc_max_pain(near if len(near) > 0 else o)
+        co = float(calls[calls['strike'] > px]['oi'].sum())
+        po = float(puts[puts['strike'] < px]['oi'].sum())
+        bec = calc_be(near, px, True) if len(near) > 0 else None
+        bep = calc_be(near, px, False) if len(near) > 0 else None
+        cv = float(calls['volume'].sum())
+        pv = float(puts['volume'].sum())
         vr = round(cv/pv, 2) if pv > 0 else None
-        civ = o[(o['type'] == 'C') & (o['delta'].between(0.20, 0.30))]['iv'].mean()
-        piv = o[(o['type'] == 'P') & (o['delta'].between(-0.30, -0.20))]['iv'].mean()
+        civ = calls[calls['delta'].between(0.20, 0.30)]['iv'].mean()
+        piv = puts[puts['delta'].between(-0.30, -0.20)]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
-        fut_prices = {r['合约']: float(r.get('收盘价', 0))
-                      for _, r in fut[fut['date'] == date].iterrows()
-                      if float(r.get('收盘价', 0)) > 0}
+        day_fut = fut[fut['date'] == date]
+        fut_prices = dict(zip(day_fut['合约'], day_fut['收盘价']))
         gex = calc_gex(o, px, mult, fut_prices, date, calendar)
 
-        # 最近到期日
+        # 期权成交量/持仓量
+        vol_call = cv
+        vol_put = pv
+        vol_total = round(cv + pv, 2)
+        oi_total = float(o['oi'].sum())
+        call_oi_all = float(calls['oi'].sum())
+        put_oi_all = float(puts['oi'].sum())
+        oi_pcr = round(put_oi_all / call_oi_all, 2) if call_oi_all > 0 else None
+        strike_oi = o.groupby('strike')['oi'].sum()
+        oi_max_strike = int(strike_oi.idxmax()) if not strike_oi.empty else None
+        if not o.empty:
+            atm_idx = (o['strike'] - px).abs().idxmin()
+            atm_iv = float(o.loc[atm_idx, 'iv']) if pd.notna(o.loc[atm_idx, 'iv']) else None
+        else:
+            atm_iv = None
+
+        # 最近到期日（用 regex 提取唯一合约码，避免 iterrows）
         from datetime import datetime
         nearest_expiry = None
         nearest_dte = 0
         seen_codes = set()
-        for _, opt_row in o.iterrows():
-            opt_code = str(opt_row.get('合约', ''))
-            m = re.search(r'^([A-Z]{1,2}\d{4})[CP]', opt_code)
-            if m:
-                code = m.group(1)
-                if code in seen_codes:
-                    continue
-                seen_codes.add(code)
-                expiry_str = _shfe_expiry(calendar, code)
-                if isinstance(expiry_str, str):
-                    if nearest_expiry is None or expiry_str < nearest_expiry:
-                        nearest_expiry = expiry_str
-                else:
-                    # AKShare只有当年日历，2027+无法精确计算，回退到15号近似
-                    m2 = re.search(r'[A-Z]+(\d{4})$', str(code))
-                    if m2:
-                        ym2 = m2.group(1)
-                        yr2 = 2000 + int(ym2[:2])
-                        mo2 = int(ym2[2:4])
-                        ref_yr2 = int(date[:4])
-                        if yr2 < ref_yr2 - 2:
-                            yr2 += 100
-                        if mo2 == 1:
-                            mo2 = 12; yr2 -= 1
-                        else:
-                            mo2 -= 1
-                        approx = f'{yr2:04d}-{mo2:02d}-15'  # 2027+月份回退到15号近似
-                        if nearest_expiry is None or approx < nearest_expiry:
-                            nearest_expiry = approx
+        for code in o['合约'].str.extract(r'^([A-Z]{1,2}\d{4})[CP]', expand=False).dropna().unique():
+            if code in seen_codes:
+                continue
+            seen_codes.add(code)
+            expiry_str = _shfe_expiry(calendar, code)
+            if isinstance(expiry_str, str):
+                if nearest_expiry is None or expiry_str < nearest_expiry:
+                    nearest_expiry = expiry_str
+            else:
+                # AKShare只有当年日历，2027+无法精确计算，回退到15号近似
+                m2 = re.search(r'[A-Z]+(\d{4})$', str(code))
+                if m2:
+                    ym2 = m2.group(1)
+                    yr2 = 2000 + int(ym2[:2])
+                    mo2 = int(ym2[2:4])
+                    ref_yr2 = int(date[:4])
+                    if yr2 < ref_yr2 - 2:
+                        yr2 += 100
+                    if mo2 == 1:
+                        mo2 = 12; yr2 -= 1
+                    else:
+                        mo2 -= 1
+                    approx = f'{yr2:04d}-{mo2:02d}-15'  # 2027+月份回退到15号近似
+                    if nearest_expiry is None or approx < nearest_expiry:
+                        nearest_expiry = approx
         if nearest_expiry:
             td = datetime.strptime(date, '%Y-%m-%d').date()
             ex = datetime.strptime(nearest_expiry, '%Y-%m-%d').date()
             nearest_dte = (ex - td).days
 
         # OI chain: [{s: strike, co: call_oi, po: put_oi}, ...]
-        chain_list = []
-        for s, grp in o.groupby('strike'):
-            co_oi = int(grp[grp['type'] == 'C']['oi'].sum())
-            po_oi = int(grp[grp['type'] == 'P']['oi'].sum())
-            if co_oi > 0 or po_oi > 0:
-                chain_list.append({'s': int(s), 'co': co_oi, 'po': po_oi})
-        chain_list.sort(key=lambda x: x['s'])
+        pt = o.pivot_table(index='strike', columns='type', values='oi', aggfunc='sum', fill_value=0)
+        chain_list = [{'s': int(s), 'co': int(r['C']), 'po': int(r['P'])}
+                      for s, r in pt.iterrows()
+                      if r['C'] > 0 or r['P'] > 0]
         oc_chain = json.dumps(chain_list, separators=(',', ':'))
 
         # oc: 期权对应标的期货的收盘价（按期权持仓量最大的标的合约）
@@ -402,7 +451,11 @@ def process_one(sym, fut, opt, mult=10):
                         'h': row['h'], 'l': row['l'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep,
                         'vr': vr, 'ivs': ivs, 'gex': gex, 'oc': oc_val, 'oc_chain': oc_chain,
-                        'expiry': nearest_expiry, 'dte': nearest_dte}
+                        'expiry': nearest_expiry, 'dte': nearest_dte,
+                        'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
+                        'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,
+                        'fut_vol': row['fv'], 'fut_oi': row['foi'], 'fut_turnover': row['fto'],
+                        'atm_iv': atm_iv}
     return result
 
 
