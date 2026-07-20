@@ -1233,7 +1233,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
   const canvas = document.getElementById('chart');
   if (!canvas) return;
   const rect = canvas.parentElement.getBoundingClientRect();
-  const W = rect.width - 24;
+  const W = rect.width;
   const H = 380;
   const dpr = window.devicePixelRatio || 1;
   canvas.width = W * dpr;
