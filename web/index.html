@@ -2472,6 +2472,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         else if (relX >= 200 && relX < 250) subVis.iv = !subVis.iv;
         else if (relX >= 250 && relX < 300) subVis.futVol = !subVis.futVol;
         else if (relX >= 300 && relX < 350) subVis.futOi = !subVis.futOi;
+        else if (relX >= 350 && relX < 400) subVis.atr = !subVis.atr;
         else return;
         render();
       }
@@ -2490,6 +2491,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         else if (relX >= 200 && relX < 250) subVis.iv = !subVis.iv;
         else if (relX >= 250 && relX < 300) subVis.futVol = !subVis.futVol;
         else if (relX >= 300 && relX < 350) subVis.futOi = !subVis.futOi;
+        else if (relX >= 350 && relX < 400) subVis.atr = !subVis.atr;
         else return;
         render();
       }
