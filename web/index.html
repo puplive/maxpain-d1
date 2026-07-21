@@ -2347,6 +2347,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
               if (it.s > px) pxLoss += (it.s - px) * it.po;
             });
             const fmtLoss = (v) => v >= 10000 ? (v/10000).toFixed(0) + '万' : v.toFixed(0);
+            let _ivSmile = false;
+            chain.forEach(it => { if ((it.civ != null && it.civ > 0) || (it.piv != null && it.piv > 0)) _ivSmile = true; });
             if (oiHint) {
               oiHint.style.display = 'block';
               oiHint.innerHTML = '<span style="color:#5cd85a">绿=看涨OI</span> <span style="color:#ff6b6b">红=看跌OI</span> <span style="color:#e8c84a">黄=现价' + px + '</span> <span style="color:#a29bfe">紫=痛点' + mp + '</span> 最高柱=' + peakS + ' (' + peakOi.toLocaleString() + '手) 预期收获权利金: 痛点' + fmtLoss(mpLoss) + ' 现价' + fmtLoss(pxLoss);
@@ -2369,8 +2371,6 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
                 oiHint.innerHTML += ' | <span style="color:#3498db">CallIV</span><span style="color:#e67e22"> PutIV</span> 曲线(IV微笑): 平值附近低=定价合理, 两边高=尾部风险定价; 左高右低=Put贵(恐慌/看跌), 右高左低=Call贵(追涨/看涨)';
               }
             }
-            let _ivSmile = false;
-            chain.forEach(it => { if ((it.civ != null && it.civ > 0) || (it.piv != null && it.piv > 0)) _ivSmile = true; });
             let maxOi = 0;
             chain.forEach(it => { if (it.co > maxOi) maxOi = it.co; if (it.po > maxOi) maxOi = it.po; });
             const opad = { top: 8, bottom: 20, left: 8, right: _ivSmile ? 28 : 8 };
@@ -2539,13 +2539,14 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
   };
 
   canvas.onmousemove = (e) => {
-    const idx = getBarIdx(e.clientX);
+    const rawIdx = getBarIdx(e.clientX);
     if (state.dragging) {
       state.didDrag = true;
       const dx = getDataX(e.clientX) - state.dragStartX;
       state.start = Math.max(0, Math.min(n - getVisibleCount() + 60, state.dragStartIdx - dx / state.barW));
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
     } else {
+      const idx = Math.max(0, Math.min(n - 1, rawIdx));
       if (!state.pinned && idx !== state.hoverIdx) {
         state.hoverIdx = idx;
         updateInfo(idx);
@@ -2633,44 +2634,42 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       const touch = e.touches[0];
       const br = subCanvas.getBoundingClientRect();
       const sx = touch.clientX - br.left;
-      const idx = Math.round(state.start + (sx - pad.left) / state.barW);
+      const idx = Math.max(0, Math.min(n - 1, Math.round(state.start + (sx - pad.left) / state.barW)));
       if (idx !== state.hoverIdx) {
         state.hoverIdx = idx;
         updateInfo(idx);
         render();
       }
     }, { passive: false });
-	    subCanvas.addEventListener('touchend', function(e) {
-	      e.preventDefault();
-	    }, { passive: false });
-	    subCanvas.addEventListener('click', function(e) {
-	      // legend toggles handled by HTML bar
-	    });
+    subCanvas.onmousemove = function(e) {
+      if (state.pinned) return;
+      const br = subCanvas.getBoundingClientRect();
+      const sx = e.clientX - br.left;
+      const idx = Math.max(0, Math.min(n - 1, Math.round(state.start + (sx - pad.left) / state.barW)));
+      if (idx !== state.hoverIdx) {
+        state.hoverIdx = idx;
+        updateInfo(idx);
+        render();
+      }
+    };
+    subCanvas.onclick = function() {
+      state.pinned = !state.pinned;
+      state.pinnedIdx = state.pinned ? state.hoverIdx : -1;
+      render();
+    };
   }
-  // OI 图悬停：显示行权价和持仓量
+  // OI 图悬停：显示行权价和持仓量（独立于 K 线维度，不切换 K 线）
   const oiEl = document.getElementById('oiChart');
   if (oiEl) {
-    let _oiMoved = false;
-    oiEl.addEventListener('touchstart', function(e) { e.preventDefault(); _oiMoved = false; }, { passive: false });
+    oiEl.addEventListener('touchstart', function(e) { e.preventDefault(); }, { passive: false });
     oiEl.addEventListener('touchmove', function(e) {
       e.preventDefault();
-      if (state.pinned) return;
-      _oiMoved = true;
       const touch = e.touches[0];
       const br = oiEl.getBoundingClientRect();
       const sx = touch.clientX - br.left;
       _oiHoverAt(sx);
     }, { passive: false });
-    oiEl.addEventListener('touchend', function(e) {
-      if (!_oiMoved && !state.pinned) {
-        // 轻点 OI 图：切换主图锁定
-        state.pinned = !state.pinned;
-        state.pinnedIdx = state.pinned ? state.hoverIdx : -1;
-      }
-      render();
-    });
     oiEl.addEventListener('mousemove', function(e) {
-      if (state.pinned) return;
       const br = oiEl.getBoundingClientRect();
       const mx = e.clientX - br.left;
       _oiHoverAt(mx);
