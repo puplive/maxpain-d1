@@ -56,7 +56,7 @@ tr:hover td { background: #1a2a3a; }
 #chart { width: 100%; height: 380px; display: block; touch-action: none; }
 #subChart { width: 100%; height: 110px; display: block; margin-top: 2px; touch-action: none; }
 .chart-main { touch-action: none; }
-#oiChart { width: 100%; height: 90px; display: block; margin-top: 2px; touch-action: none; }
+#oiChart { width: 100%; height: 90px; display: block; margin-top: 2px; touch-action: none; border: 2px solid red; }
 .chart-info { flex: 0 0 180px; font-size: 12px; color: #c8d6e5; }
 .chart-info .row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #1a2a3a; }
 .chart-info .label { color: #576574; }
@@ -1504,8 +1504,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       <div class="row"><span class="label">涨跌幅</span><span class="val ' + (idx>0?cls(row.c-data[idx-1].c):'') + '">' + (idx>0?(row.c-data[idx-1].c>0?'+':'')+(row.c-data[idx-1].c).toFixed(0):'—') + ' / ' + (idx>0?((row.c-data[idx-1].c)/data[idx-1].c*100).toFixed(2):'—') + '%</span></div>\
       <div class="row"><span class="label">最高/最低</span><span class="val">' + row.h.toFixed(0) + ' / ' + row.l.toFixed(0) + '</span></div>\
       <div class="row"><span class="label">近月连续</span><span class="val" style="color:#a29bfe">' + (row.nc != null ? row.nc.toFixed(0) : '-') + '</span></div>\
-      <div class="row"><span class="label">到期日/天数</span><span class="val" style="color:#8395a7;font-size:11px">' + (row.expiry ? row.expiry + ' ' + row.dte + '天' : '-') + '</span></div>\
       <div class="row"><span class="label">期权期货</span><span class="val" style="color:#f368e0">' + (row.oc != null ? row.oc.toFixed(0) : '-') + '</span></div>\
+      <div class="row"><span class="label">到期日/天数</span><span class="val" style="color:#8395a7;font-size:11px">' + (row.expiry ? row.expiry + ' ' + row.dte + '天' : '-') + '</span></div>\
       <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">Max Pain</span><span class="val" style="color:#e8c84a">' + row.mp + ' ' + (idx>0?(row.mp-data[idx-1].mp>0?'+':'')+(row.mp-data[idx-1].mp)+'':'') + '</span></div>\
       <div class="row"><span class="label">MP趋势</span><span class="val">' + trendText + '</span></div>\
       <div class="row"><span class="label">收盘斜率</span><span class="val" style="color:#576574;font-size:11px">' + (_closeSlope !== null ? _closeSlope + '%' : '-') + '</span></div>\
@@ -1515,7 +1515,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       <div class="row"><span class="label">COI/POI</span><span class="val" style="font-size:11px">' + Math.round(row.co).toLocaleString() + ' / ' + Math.round(row.po).toLocaleString() + '</span></div>\
       <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">OI偏度</span><span class="val ' + (oiSkew>0?'pos':'neg') + '">' + oiSkew + '% <span style="font-size:11px;' + (absSkew < 0.3 ? (parseFloat(oiSkew)>0?'color:#5cd85a':'color:#ff6b6b') : 'color:#e8c84a') + '">' + oiDir + '</span></span></div>\
       <div class="row"><span class="label">IV偏斜 / 量比</span><span class="val" style="font-size:11px"><span class="' + (row.ivs < 0 ? 'pos' : 'neg') + '">' + (row.ivs != null ? row.ivs.toFixed(1) : '-') + '</span> / ' + (row.vr != null ? row.vr.toFixed(2) : '-') + (vrDir ? '<span style="font-size:10px;' + (row.vr>1?'color:#5cd85a':'color:#ff6b6b') + '">' + vrDir + '</span>' : '') + '</span></div>\
-      <div class="row"><span class="label">GEX</span><span class="val ' + (row.gex>0?'pos':'neg') + '" style="font-size:11px">' + (row.gex != null ? row.gex.toLocaleString('zh-CN',{maximumFractionDigits:0}) : '-') + '</span></div>\
+      <div class="row" style="display:none"><span class="label">GEX</span><span class="val ' + (row.gex>0?'pos':'neg') + '" style="font-size:11px">' + (row.gex != null ? row.gex.toLocaleString('zh-CN',{maximumFractionDigits:0}) : '-') + '</span></div>\
       <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">明日方向</span><span class="val" style="font-size:13px">' + nextDirText + '</span></div>\
       ' + (stopCurve && stopCurve[idx] && (stopCurve[idx].stop !== null || stopCurve[idx].breakLevel != null) ? '<div class="row"><span class="label">止损/结构</span><span class="val" style="font-size:11px">' + (stopCurve[idx].stop !== null ? '<span style="color:#ff9f43">' + stopCurve[idx].stop.toFixed(0) + '</span>' : '-') + ' / ' + (stopCurve[idx].breakLevel != null ? '<span style="color:#a55eea">' + stopCurve[idx].breakLevel.toFixed(0) + '</span>' : '-') + '</span></div>' : '') + '\
       ' + beCrossHtml + sigHtml + posHtml + '\
@@ -2349,7 +2349,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
               oiHint.innerHTML = '<span style="color:#5cd85a">绿=看涨OI</span> <span style="color:#ff6b6b">红=看跌OI</span> <span style="color:#e8c84a">黄=现价' + px + '</span> <span style="color:#a29bfe">紫=痛点' + mp + '</span> 最高柱=' + peakS + ' (' + peakOi.toLocaleString() + '手) 痛点预期收获权利金' + (mpLoss >= 10000 ? (mpLoss/10000).toFixed(0) + '万' : mpLoss.toFixed(0));
               // MP置信度/集中度
               let _mcTxt = '';
-              if (mp >= minS && mp <= maxS) {
+              if (mp >= chain[0].s && mp <= chain[chain.length - 1].s) {
                 let tOi2 = 0, mpIdx = 0, minD2 = Infinity;
                 chain.forEach((it, idx) => {
                   tOi2 += it.co + it.po;
@@ -2404,6 +2404,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
               }
             });
             // IV 微笑曲线 (Call IV / Put IV)
+            try {
             if (_ivSmile) {
               let ivMin = 1, ivMax = 0;
               chain.forEach(it => {
@@ -2454,6 +2455,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
                 ox.fillText('PutIV', opad.left + 2, 20);
               }
             }
+            } catch(e) { console.error('IV smile error:', e); }
             // 行权价标签
             ox.fillStyle = '#576574'; ox.font = '9px sans-serif'; ox.textAlign = 'center';
             const sStep = Math.max(1, Math.floor(chain.length / 10));
