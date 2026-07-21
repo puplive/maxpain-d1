@@ -652,12 +652,42 @@ def _process_date(d: str, ds: str, symbols: list[str], cfg: dict[str, dict]) -> 
         else:
             atm_iv = None
 
+        # OI chain
+        pt_oi = opt.pivot_table(index='strike', columns='type', values='oi', aggfunc='sum', fill_value=0)
+        pt_iv = opt.pivot_table(index='strike', columns='type', values='iv', aggfunc='mean')
+        pt_vol = opt.pivot_table(index='strike', columns='type', values='volume', aggfunc='sum')
+        pt_close = opt.pivot_table(index='strike', columns='type', values='close', aggfunc='mean')
+        chain_list = []
+        for s in pt_oi.index:
+            n = int(s)
+            ro = pt_oi.loc[s]
+            co_v = int(ro.get('C', 0))
+            po_v = int(ro.get('P', 0))
+            if co_v <= 0 and po_v <= 0:
+                continue
+            item = {'s': n, 'co': co_v, 'po': po_v}
+            if s in pt_iv.index:
+                riv = pt_iv.loc[s]
+                if pd.notna(riv.get('C')) and riv['C'] > 0: item['civ'] = round(float(riv['C']), 4)
+                if pd.notna(riv.get('P')) and riv['P'] > 0: item['piv'] = round(float(riv['P']), 4)
+            if s in pt_vol.index:
+                rv = pt_vol.loc[s]
+                if rv.get('C', 0) > 0: item['cvol'] = int(rv['C'])
+                if rv.get('P', 0) > 0: item['pvol'] = int(rv['P'])
+            if s in pt_close.index:
+                rc = pt_close.loc[s]
+                if rc.get('C', 0) > 0: item['cclose'] = round(float(rc['C']), 2)
+                if rc.get('P', 0) > 0: item['pclose'] = round(float(rc['P']), 2)
+            chain_list.append(item)
+        oc_chain = json.dumps(chain_list, separators=(',', ':'))
+
         entries[sym] = {
             'd': d, 'o': round(float(fr['open']), 2), 'c': round(px, 2),
             'h': round(float(fr['high']), 2), 'l': round(float(fr['low']), 2),
             'nc': round(px, 2), 'oc': None,
             'mp': mp, 'co': co, 'po': po,
             'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex,
+            'oc_chain': oc_chain,
             'expiry': nearest_expiry, 'dte': nearest_dte,
             'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
             'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,

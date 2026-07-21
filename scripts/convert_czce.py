@@ -481,11 +481,33 @@ def process_one(sym, fut, opt, date=None, mult=10):
             ex = datetime.strptime(nearest_expiry, '%Y-%m-%d').date()
             nearest_dte = (ex - td).days
 
-        # OI chain: [{s: strike, co: call_oi, po: put_oi}, ...]
-        pt = o.pivot_table(index='strike', columns='type', values='oi', aggfunc='sum', fill_value=0)
-        chain_list = [{'s': int(s), 'co': int(r['C']), 'po': int(r['P'])}
-                      for s, r in pt.iterrows()
-                      if r['C'] > 0 or r['P'] > 0]
+        # OI chain: [{s,co,po,civ,piv,cvol,pvol,cclose,pclose}, ...]
+        pt_oi = o.pivot_table(index='strike', columns='type', values='oi', aggfunc='sum', fill_value=0)
+        pt_iv = o.pivot_table(index='strike', columns='type', values='iv', aggfunc='mean')
+        pt_vol = o.pivot_table(index='strike', columns='type', values='volume', aggfunc='sum')
+        pt_close = o.pivot_table(index='strike', columns='type', values='close', aggfunc='mean')
+        chain_list = []
+        for s in pt_oi.index:
+            n = int(s)
+            ro = pt_oi.loc[s]
+            co_v = int(ro.get('C', 0))
+            po_v = int(ro.get('P', 0))
+            if co_v <= 0 and po_v <= 0:
+                continue
+            item = {'s': n, 'co': co_v, 'po': po_v}
+            if s in pt_iv.index:
+                riv = pt_iv.loc[s]
+                if pd.notna(riv.get('C')) and riv['C'] > 0: item['civ'] = round(float(riv['C']), 4)
+                if pd.notna(riv.get('P')) and riv['P'] > 0: item['piv'] = round(float(riv['P']), 4)
+            if s in pt_vol.index:
+                rv = pt_vol.loc[s]
+                if rv.get('C', 0) > 0: item['cvol'] = int(rv['C'])
+                if rv.get('P', 0) > 0: item['pvol'] = int(rv['P'])
+            if s in pt_close.index:
+                rc = pt_close.loc[s]
+                if rc.get('C', 0) > 0: item['cclose'] = round(float(rc['C']), 2)
+                if rc.get('P', 0) > 0: item['pclose'] = round(float(rc['P']), 2)
+            chain_list.append(item)
         oc_chain = json.dumps(chain_list, separators=(',', ':'))
 
         # oc: 期权对应标的期货的收盘价（按期权持仓量最大的标的合约）
