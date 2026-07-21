@@ -2337,16 +2337,19 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
             // 资金集中区：call+put OI 最大的行权价
             let peakS = chain[0].s, peakOi = chain[0].co + chain[0].po;
             chain.forEach(it => { const tot = it.co + it.po; if (tot > peakOi) { peakOi = tot; peakS = it.s; } });
-            // 痛点预期亏损：价格落在MP时多头的总亏损
-            let mpLoss = 0;
+            // 预期亏损（=卖方收获权利金）：价格落在指定位置时买方的总内在价值
+            let mpLoss = 0, pxLoss = 0;
             const mp = r.mp;
             chain.forEach(it => {
               if (it.s < mp) mpLoss += (mp - it.s) * it.co;
               if (it.s > mp) mpLoss += (it.s - mp) * it.po;
+              if (it.s < px) pxLoss += (px - it.s) * it.co;
+              if (it.s > px) pxLoss += (it.s - px) * it.po;
             });
+            const fmtLoss = (v) => v >= 10000 ? (v/10000).toFixed(0) + '万' : v.toFixed(0);
             if (oiHint) {
               oiHint.style.display = 'block';
-              oiHint.innerHTML = '<span style="color:#5cd85a">绿=看涨OI</span> <span style="color:#ff6b6b">红=看跌OI</span> <span style="color:#e8c84a">黄=现价' + px + '</span> <span style="color:#a29bfe">紫=痛点' + mp + '</span> 最高柱=' + peakS + ' (' + peakOi.toLocaleString() + '手) 痛点预期收获权利金' + (mpLoss >= 10000 ? (mpLoss/10000).toFixed(0) + '万' : mpLoss.toFixed(0));
+              oiHint.innerHTML = '<span style="color:#5cd85a">绿=看涨OI</span> <span style="color:#ff6b6b">红=看跌OI</span> <span style="color:#e8c84a">黄=现价' + px + '</span> <span style="color:#a29bfe">紫=痛点' + mp + '</span> 最高柱=' + peakS + ' (' + peakOi.toLocaleString() + '手) 预期收获权利金: 痛点' + fmtLoss(mpLoss) + ' 现价' + fmtLoss(pxLoss);
               // MP置信度/集中度
               let _mcTxt = '';
               if (mp >= chain[0].s && mp <= chain[chain.length - 1].s) {
