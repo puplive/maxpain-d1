@@ -2362,6 +2362,9 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
                 _mcTxt = ' MP置信' + conf + '% 集中' + conc + 'x';
               }
               oiHint.innerHTML += _mcTxt;
+              if (_ivSmile) {
+                oiHint.innerHTML += ' | <span style="color:#3498db">CallIV</span><span style="color:#e67e22"> PutIV</span> 曲线(IV微笑): 平值附近低=定价合理, 两边高=尾部风险定价; 左高右低=Put贵(恐慌/看跌), 右高左低=Call贵(追涨/看涨)';
+              }
             }
             let _ivSmile = false;
             chain.forEach(it => { if ((it.civ != null && it.civ > 0) || (it.piv != null && it.piv > 0)) _ivSmile = true; });
