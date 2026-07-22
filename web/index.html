@@ -1988,15 +1988,17 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         sctx.beginPath(); sctx.moveTo(pad.left, y); sctx.lineTo(W - spad.right, y); sctx.stroke();
       }
 
-      const zy = s2y(0, vMinG, vMaxG);
-      if (zy >= spad.top && zy <= spad.top + sch) {
-        sctx.save();
-        sctx.setLineDash([3, 3]);
-        sctx.strokeStyle = '#2d3436';
-        sctx.lineWidth = 1;
-        sctx.beginPath(); sctx.moveTo(pad.left, zy); sctx.lineTo(W - spad.right, zy); sctx.stroke();
-        sctx.setLineDash([]);
-        sctx.restore();
+      if (subVis.gex) {
+        const zy = s2y(0, vMinG, vMaxG);
+        if (zy >= spad.top && zy <= spad.top + sch) {
+          sctx.save();
+          sctx.setLineDash([3, 3]);
+          sctx.strokeStyle = '#2d3436';
+          sctx.lineWidth = 1;
+          sctx.beginPath(); sctx.moveTo(pad.left, zy); sctx.lineTo(W - spad.right, zy); sctx.stroke();
+          sctx.setLineDash([]);
+          sctx.restore();
+        }
       }
 
       // IV偏度零轴参考线
