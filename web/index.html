@@ -365,7 +365,7 @@ function calcATR(data, period) {
   return atr;
 }
 function computeNextDirPred(fullData, params) {
-  const n = fullData.length, momDays = params.momDays || 3;
+  const n = fullData.length;
   const preds = new Array(n).fill(null);
   for (let i = 0; i < n; i++) {
     const mpHist = fullData.slice(0, i + 1).map(r => r.mp);
@@ -373,10 +373,6 @@ function computeNextDirPred(fullData, params) {
     let nd = null;
     if (td === 'up') nd = 'long';
     else if (td === 'down') nd = 'short';
-    if (nd && mpHist.length > momDays + 1) {
-      const cm = mpHist[mpHist.length - 1], pm = mpHist[mpHist.length - 1 - momDays];
-      if ((nd === 'long' && cm <= pm) || (nd === 'short' && cm >= pm)) nd = null;
-    }
     if (nd) {
       const r = fullData[i];
       if ((nd === 'long' && r.bec !== null && r.c >= r.bec) || (nd === 'short' && r.bep !== null && r.c <= r.bep)) nd = null;
@@ -784,6 +780,16 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx) {
   if (nd === 'long') projFactors.push('明日方向做多,系统有开仓信号');
   if (nd === 'short') projFactors.push('明日方向做空,系统有开仓信号');
   if (nd === null && trendDir) projFactors.push('明日方向无信号,系统不会新开仓');
+  if (nd) {
+    const momD = params.momDays || 3;
+    if (mpHist.length > momD + 1) {
+      const cm = mpHist[mpHist.length - 1], pm = mpHist[mpHist.length - 1 - momD];
+      if (nd === 'long' && cm <= pm) projFactors.push('MP近' + momD + '天未上升(前' + pm + '→今' + cm + '),做多信号被过滤');
+      if (nd === 'short' && cm >= pm) projFactors.push('MP近' + momD + '天未下降(前' + pm + '→今' + cm + '),做空信号被过滤');
+    }
+    if (nd === 'short' && r.bep != null && r.c <= r.bep) projFactors.push('价格' + r.c.toFixed(0) + '已跌破BEP(' + r.bep.toFixed(0) + '),做空信号被过滤');
+    if (nd === 'long' && r.bec != null && r.c >= r.bec) projFactors.push('价格' + r.c.toFixed(0) + '已突破BEC(' + r.bec.toFixed(0) + '),做多信号被过滤');
+  }
   if (oiDrop) projFactors.push('期权换月期间,MP数据不稳定,建议等待新链积累足够OI');
   if (r.bec != null && r.bep != null) {
     if (r.c < r.bep) projFactors.push('价格跌破看跌BE,短期可能加速下行');
