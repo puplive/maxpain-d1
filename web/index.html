@@ -2471,8 +2471,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
               ox.fillText(chain[i].s, s2x(chain[i].s), oiH - 6);
             }
             // 右下角标注
-            ox.textAlign = 'right'; ox.fillStyle = '#576574'; ox.font = '9px sans-serif';
-            ox.fillText('现价 ' + px, _ivSmile ? oiW - 30 : oiW - 8, oiH - 6);
+            // ox.textAlign = 'right'; ox.fillStyle = '#576574'; ox.font = '9px sans-serif';
+            // ox.fillText('现价 ' + px, _ivSmile ? oiW - 30 : oiW - 8, oiH - 6);
             // OI 图悬停提示：行权价与持仓量
             if (_oiHoverIdx >= 0 && _oiHoverIdx < chain.length) {
               const hc = chain[_oiHoverIdx];
