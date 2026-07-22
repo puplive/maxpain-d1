@@ -1090,8 +1090,8 @@ const OPT_PARAMS = {
   lookback:   { label: 'Lookback',    range: [5, 60, 1] },
   minPct:     { label: 'Min%',        range: [0.1, 5, 0.1], unit: '%' },
   entryStop:  { label: '入场止损%',   range: [0.5, 5, 0.1], unit: '%' },
-  atrPeriod:  { label: 'ATR周期',     range: [5, 60, 1] },
-  atrMult:    { label: 'ATR倍数',     range: [0.5, 10, 0.5] },
+  atrPeriod:  { label: 'ATR周期',     range: [5, 120, 1] },
+  atrMult:    { label: 'ATR倍数',     range: [0.5, 10, 0.1] },
   maxPos:     { label: '仓位%',       range: [5, 100, 5], unit: '%' },
   beTh:       { label: '保本%',       range: [0, 5, 0.1], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 75, 5], unit: '%' },
@@ -1966,6 +1966,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       else { const sr = vMaxS - vMinS || 1; vMinS -= sr * 0.1; vMaxS += sr * 0.1; }
       if (vMinV === Infinity || vMinV === vMaxV) { vMinV = _subMinV; vMaxV = _subMaxV; }
       if (vMinIv === Infinity || vMinIv === vMaxIv) { vMinIv = _subMinIv; vMaxIv = _subMaxIv; }
+      else { const ivr = vMaxIv - vMinIv || 1; vMinIv -= ivr * 0.1; vMaxIv += ivr * 0.1; }
       if (vMinFv === Infinity || vMinFv === vMaxFv) { vMinFv = _subMinFv; vMaxFv = _subMaxFv; }
       else { const fvr = vMaxFv - vMinFv || 1; vMinFv -= fvr * 0.1; vMaxFv += fvr * 0.1; }
       if (vMinSk === Infinity || vMinSk === vMaxSk) { vMinSk = _subMinSk; vMaxSk = _subMaxSk; }
@@ -1996,6 +1997,20 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         sctx.beginPath(); sctx.moveTo(pad.left, zy); sctx.lineTo(W - spad.right, zy); sctx.stroke();
         sctx.setLineDash([]);
         sctx.restore();
+      }
+
+      // IV偏度零轴参考线
+      if (subVis.iv && vMinIv <= 0 && vMaxIv >= 0) {
+        const izy = s2y(0, vMinIv, vMaxIv);
+        if (izy >= spad.top && izy <= spad.top + sch) {
+          sctx.save();
+          sctx.setLineDash([3, 3]);
+          sctx.strokeStyle = 'rgba(46,204,113,0.3)';
+          sctx.lineWidth = 1;
+          sctx.beginPath(); sctx.moveTo(pad.left, izy); sctx.lineTo(W - spad.right, izy); sctx.stroke();
+          sctx.setLineDash([]);
+          sctx.restore();
+        }
       }
 
       if (subVis.gex) {
