@@ -135,7 +135,6 @@ tr:hover td { background: #1a2a3a; }
       <div class="param-group"><label>ATR周期:</label><input type="number" id="p_atr_period" value="14" min="5" max="60" step="1" class="wide"></div>
       <div class="param-group"><label>ATR倍数:</label><input type="number" id="p_atr_mult" value="3" min="0.5" max="10" step="0.5" class="wide"></div>
       <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
-      <div class="param-group"><label>动量天:</label><input type="number" id="p_mom" value="3" min="1" max="30" step="1" class="wide"></div>
 
     <div class="param-group"><label>本金:</label><input type="number" id="p_capital" value="100000" min="10000" step="10000" class="wide"></div>
     <div class="param-group"><label>封顶(万):</label><input type="number" id="p_cap_limit" value="0" min="0" step="10" class="wide"></div>
@@ -228,7 +227,6 @@ let defaultParams = {
   capital: 100000,
   capLimit: 0,
   skipCount: 0,
-  momDays: 3,
 };
 
 async function loadData(symbol) {
@@ -389,7 +387,7 @@ function computeNextDirPred(fullData, params) {
 function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, btEnd) {
   btStart = btStart || 0;
   btEnd = btEnd || data.length;
-  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryStop: ENTRY_STOP, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP, momDays } = params;
+  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryStop: ENTRY_STOP, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
   const preStart = Math.max(0, firstIdx - LBK);
   let eq = CAP, peakEq = CAP, maxDd = 0, pos = null;
   const mpHist = [], priceHist = [], trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
@@ -592,7 +590,6 @@ function runBacktest() {
     capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
     skipCount: parseInt(document.getElementById('p_skip').value) || defaultParams.skipCount,
-    momDays: parseInt(document.getElementById('p_mom').value) || defaultParams.momDays,
   };
   params.mult = cfg.mult;
   const MULT = cfg.mult;
@@ -780,16 +777,6 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx) {
   if (nd === 'long') projFactors.push('明日方向做多,系统有开仓信号');
   if (nd === 'short') projFactors.push('明日方向做空,系统有开仓信号');
   if (nd === null && trendDir) projFactors.push('明日方向无信号,系统不会新开仓');
-  if (nd) {
-    const momD = params.momDays || 3;
-    if (mpHist.length > momD + 1) {
-      const cm = mpHist[mpHist.length - 1], pm = mpHist[mpHist.length - 1 - momD];
-      if (nd === 'long' && cm <= pm) projFactors.push('MP近' + momD + '天未上升(前' + pm + '→今' + cm + '),做多信号被过滤');
-      if (nd === 'short' && cm >= pm) projFactors.push('MP近' + momD + '天未下降(前' + pm + '→今' + cm + '),做空信号被过滤');
-    }
-    if (nd === 'short' && r.bep != null && r.c <= r.bep) projFactors.push('价格' + r.c.toFixed(0) + '已跌破BEP(' + r.bep.toFixed(0) + '),做空信号被过滤');
-    if (nd === 'long' && r.bec != null && r.c >= r.bec) projFactors.push('价格' + r.c.toFixed(0) + '已突破BEC(' + r.bec.toFixed(0) + '),做多信号被过滤');
-  }
   if (oiDrop) projFactors.push('期权换月期间,MP数据不稳定,建议等待新链积累足够OI');
   if (r.bec != null && r.bep != null) {
     if (r.c < r.bep) projFactors.push('价格跌破看跌BE,短期可能加速下行');
@@ -924,7 +911,6 @@ function setParamValues(p) {
   if (p.capLimit !== undefined) document.getElementById('p_cap_limit').value = Math.round(p.capLimit / 10000);
   if (p.lockPct !== undefined) document.getElementById('p_lock_pct').value = p.lockPct;
   if (p.skipCount !== undefined) document.getElementById('p_skip').value = p.skipCount;
-  if (p.momDays !== undefined) document.getElementById('p_mom').value = p.momDays;
   if (p.atrPeriod !== undefined) document.getElementById('p_atr_period').value = p.atrPeriod;
   if (p.atrMult !== undefined) document.getElementById('p_atr_mult').value = p.atrMult;
 }
@@ -949,7 +935,6 @@ async function saveParams() {
       capital: parseFloat(document.getElementById('p_capital').value) || null,
       cap_limit: parseFloat(document.getElementById('p_cap_limit').value) || 0,
       skip_count: parseInt(document.getElementById('p_skip').value) || null,
-      mom_days: parseInt(document.getElementById('p_mom').value) || null,
       start_date: document.getElementById('p_start').value || null,
       end_date: document.getElementById('p_end').value || null,
     };
@@ -982,7 +967,6 @@ async function loadParams(sym) {
         capital: r.params.capital,
         capLimit: r.params.cap_limit ? r.params.cap_limit * 10000 : 0,
         skipCount: r.params.skip_count,
-        momDays: r.params.mom_days,
       });
       if (r.params.start_date) document.getElementById('p_start').value = r.params.start_date;
       if (r.params.end_date) document.getElementById('p_end').value = r.params.end_date;
@@ -1022,7 +1006,6 @@ function runMonteCarlo() {
     capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
     skipCount: parseInt(document.getElementById('p_skip').value) || defaultParams.skipCount,
-    momDays: parseInt(document.getElementById('p_mom').value) || defaultParams.momDays,
   };
   params.mult = cfg.mult;
   const nextDirPred = computeNextDirPred(fullData, params);
@@ -1113,7 +1096,6 @@ const OPT_PARAMS = {
   beTh:       { label: '保本%',       range: [0, 5, 0.1], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 75, 5], unit: '%' },
   skipCount:  { label: '跳过次',      range: [0, 5, 1] },
-  momDays:    { label: '动量天',      range: [1, 30, 1] },
 };
 
 function optimizeParam() {
@@ -1147,7 +1129,6 @@ function optimizeParam() {
     capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
     skipCount: parseInt(document.getElementById('p_skip').value) || defaultParams.skipCount,
-    momDays: parseInt(document.getElementById('p_mom').value) || defaultParams.momDays,
     mult: cfg.mult,
   };
 
