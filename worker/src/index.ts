@@ -215,7 +215,7 @@ export default {
       const body: {
         symbol: string;
         lookback?: number; min_pct?: number; max_pos?: number; margin?: number;
-        be_th?: number; entry_stop?: number; atr_period?: number; atr_mult?: number;
+        be_th?: number; entry_stop?: number; entry_atr?: number; atr_period?: number; atr_mult?: number;
         lock_pct?: number; capital?: number; cap_limit?: number;
         skip_count?: number; mom_days?: number;
         start_date?: string; end_date?: string;
@@ -228,14 +228,14 @@ export default {
       }
       await env.DB.prepare(
         `INSERT OR REPLACE INTO backtest_params
-         (symbol, lookback, min_pct, max_pos, margin, be_th, entry_stop,
+         (symbol, lookback, min_pct, max_pos, margin, be_th, entry_stop, entry_atr,
           atr_period, atr_mult, lock_pct, capital, cap_limit, skip_count, mom_days,
           start_date, end_date, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
       ).bind(
         symbol.toUpperCase(),
         body.lookback ?? null, body.min_pct ?? null, body.max_pos ?? null, body.margin ?? null,
-        body.be_th ?? null, body.entry_stop ?? null,
+        body.be_th ?? null, body.entry_stop ?? null, body.entry_atr ?? null,
         body.atr_period ?? null, body.atr_mult ?? null, body.lock_pct ?? null,
         body.capital ?? null, body.cap_limit ?? null, body.skip_count ?? null, body.mom_days ?? null,
         body.start_date ?? null, body.end_date ?? null

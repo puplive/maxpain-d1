@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS backtest_params (
   margin REAL DEFAULT 15,
   be_th REAL DEFAULT 0.9,
   entry_stop REAL DEFAULT 2.5,
+  entry_atr REAL DEFAULT 1.0,
   atr_period INTEGER DEFAULT 28,
   atr_mult REAL DEFAULT 1.5,
   lock_pct REAL DEFAULT 50,

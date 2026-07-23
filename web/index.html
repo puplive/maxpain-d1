@@ -112,9 +112,9 @@ tr:hover td { background: #1a2a3a; }
     <select id="optParam" style="padding:6px 10px;border:1px solid #2d3436;border-radius:6px;background:#1a2a3a;color:#c8d6e5;font-size:12px;">
       <option value="lookback">Lookback</option>
       <option value="minPct">Min%</option>
-      <option value="entryAtrMult">入场ATR</option>
       <option value="atrPeriod">ATR周期</option>
-      <option value="atrMult">ATR倍数</option>
+      <option value="entryAtrMult">入场ATR%</option>
+      <option value="atrMult">追踪ATR%</option>
       <option value="beTh">保本%</option>
       <option value="lockPct">锁定%</option>
       <option value="maxPos">仓位%</option>
@@ -131,10 +131,10 @@ tr:hover td { background: #1a2a3a; }
     <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" value="15" min="5" max="50" class="wide"></div>
     <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="0.2" min="0" max="10" step="0.1" class="wide"></div>
     <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="75" min="0" max="100" step="5" class="wide"></div>
-    <div class="param-group"><label>入场ATR:</label><input type="number" id="p_entry_atr" value="1.0" min="0.1" max="5" step="0.1" class="wide"></div>
-      <div class="param-group"><label>ATR周期:</label><input type="number" id="p_atr_period" value="14" min="5" max="60" step="1" class="wide"></div>
-      <div class="param-group"><label>追踪ATR:</label><input type="number" id="p_atr_mult" value="3" min="0.5" max="10" step="0.5" class="wide"></div>
-      <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
+    <div class="param-group"><label>ATR周期:</label><input type="number" id="p_atr_period" value="14" min="5" max="60" step="1" class="wide"></div>
+    <div class="param-group"><label>入场ATR%:</label><input type="number" id="p_entry_atr" value="1.0" min="0.1" max="5" step="0.1" class="wide"></div>
+    <div class="param-group"><label>追踪ATR%:</label><input type="number" id="p_atr_mult" value="3" min="0.5" max="10" step="0.5" class="wide"></div>
+    <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
 
     <div class="param-group"><label>本金:</label><input type="number" id="p_capital" value="100000" min="10000" step="10000" class="wide"></div>
     <div class="param-group"><label>封顶(万):</label><input type="number" id="p_cap_limit" value="0" min="0" step="10" class="wide"></div>
