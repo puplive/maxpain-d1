@@ -1482,7 +1482,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     if (!posHtml && openPos && row.d >= openPos.entryDate) {
       const up = openPos.direction === 'long' ? row.c - openPos.entryPx : openPos.entryPx - row.c;
       const pnl = up * openPos.qty * params.mult;
-      posHtml = '<div class="sig" style="background:#54a0ff15;border:1px solid #54a0ff33;margin-top:4px;"><b>持仓中</b> ' + dirText(openPos.direction) + ' ' + openPos.qty + '手 入场' + openPos.entryPx.toFixed(0) + ' 浮动' + (pnl>0?'+':'') + Math.round(pnl) + '</div>';
+      posHtml = '<div class="sig" style="background:#54a0ff15;border:1px solid #54a0ff33;margin-top:4px;"><b>持仓中</b> ' + dirText(openPos.direction) + ' ' + openPos.qty + '手 入场' + openPos.entryPx.toFixed(0) + ' 止损' + openPos.entryStopLevel.toFixed(0) + ' 浮动' + (pnl>0?'+':'') + Math.round(pnl) + '</div>';
     }
     infoEl.innerHTML = '\
       <div class="row"><span class="label">日期</span><span class="val">' + row.d + (state.pinned ? ' <span style="color:#e8c84a;font-size:10px;">[锁定]</span>' : '') + '</span></div>\
