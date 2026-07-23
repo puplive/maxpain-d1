@@ -132,8 +132,8 @@ tr:hover td { background: #1a2a3a; }
     <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="0.2" min="0" max="10" step="0.1" class="wide"></div>
     <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="75" min="0" max="100" step="5" class="wide"></div>
     <div class="param-group"><label>ATR周期:</label><input type="number" id="p_atr_period" value="14" min="5" max="60" step="1" class="wide"></div>
-    <div class="param-group"><label>入场ATR%:</label><input type="number" id="p_entry_atr" value="1.0" min="0.1" max="5" step="0.1" class="wide"></div>
-    <div class="param-group"><label>追踪ATR%:</label><input type="number" id="p_atr_mult" value="3" min="0.5" max="10" step="0.5" class="wide"></div>
+    <div class="param-group"><label>入场ATR%:</label><input type="number" id="p_entry_atr" value="1.0" min="0.5" max="5" step="0.1" class="wide"></div>
+    <div class="param-group"><label>追踪ATR%:</label><input type="number" id="p_atr_mult" value="3" min="0.5" max="5" step="0.1" class="wide"></div>
     <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
 
     <div class="param-group"><label>本金:</label><input type="number" id="p_capital" value="100000" min="10000" step="10000" class="wide"></div>
@@ -415,7 +415,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
       }
 
       if (!exitPx) {
-        const atrVal = fullAtr[_fullIdx];
+        const atrVal = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
         if (pos.direction === 'long') {
           let stop;
           if (pos.beActive) { const pp = pos.peakPx - pos.entryPx; stop = pos.entryPx + pp * LOCK_PCT; }
@@ -464,7 +464,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
             const qty = Math.floor(alloc / dn);
             if (qty >= 1) {
               pos = { direction: td, entryPx: op, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: op, beActive: false, entryTrend: td === 'long' ? 'up' : 'down' };
-              const enAtr = fullAtr[_fullIdx];
+              const enAtr = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
               if (td === 'long') {
                 const stop2 = prevClose - (isNaN(enAtr) ? prevClose * 0.005 : enAtr * ENTRY_ATR);
                 if (lo < stop2) {
@@ -500,7 +500,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
     }
     if (pos) {
       const _breakLevel = pos.direction === 'long' ? prevBep : prevBec;
-      const atrVal = fullAtr[_fullIdx];
+      const atrVal = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
       let _s;
       if (pos.beActive) {
         const _pp = pos.direction === 'long' ? pos.peakPx - pos.entryPx : pos.entryPx - pos.peakPx;
@@ -1348,13 +1348,13 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         } catch(e) {}
       }
       _subMpConf[i] = _mc;
-      // ATR(14)
+      // ATR
       if (i === 0) {
         _subAtr[i] = r.h - r.l;
       } else {
         const pc = data[i-1].c;
         const tr = Math.max(r.h - r.l, Math.abs(r.h - pc), Math.abs(r.l - pc));
-        _subAtr[i] = (_subAtr[i-1] * 13 + tr) / 14;
+        _subAtr[i] = (_subAtr[i-1] * (params.atrPeriod - 1) + tr) / params.atrPeriod;
       }
       if (g < _subMinG) _subMinG = g;
       if (g > _subMaxG) _subMaxG = g;
