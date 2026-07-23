@@ -420,16 +420,14 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
           let stop;
           if (pos.beActive) { const pp = pos.peakPx - pos.entryPx; stop = pos.entryPx + pp * LOCK_PCT; }
           else {
-            const atrStop = isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT;
-            stop = Math.max(atrStop, pos.entryPx * (1 - 0.005));
+            stop = isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT;
           }
           if (lo < stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop > pos.entryPx ? '追踪止盈' : '止损'); }
         } else {
           let stop;
           if (pos.beActive) { const pp = pos.entryPx - pos.peakPx; stop = pos.entryPx - pp * LOCK_PCT; }
           else {
-            const atrStop = isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT;
-            stop = Math.min(atrStop, pos.entryPx * (1 + 0.005));
+            stop = isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT;
           }
           if (hi > stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop < pos.entryPx ? '追踪止盈' : '止损'); }
         }
@@ -509,9 +507,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
         const atrStop = pos.direction === 'long'
           ? (isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT)
           : (isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT);
-        _s = pos.direction === 'long'
-          ? Math.max(atrStop, pos.entryPx * (1 - 0.005))
-          : Math.min(atrStop, pos.entryPx * (1 + 0.005));
+        _s = atrStop;
       }
       stopCurve.push({ d, stop: _s, breakLevel: _breakLevel });
     } else {
