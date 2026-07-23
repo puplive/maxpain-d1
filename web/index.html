@@ -99,7 +99,7 @@ tr:hover td { background: #1a2a3a; }
 </div>
 
   <div class="refresh-bar" id="refreshBar">
-    <span id="dataStatus">加载数据中.....</span>
+    <span id="dataStatus">加载数据中...</span>
   </div>
 
   <div class="controls">
@@ -459,8 +459,8 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
             if (CAP_LIMIT > 0) alloc = Math.min(alloc, CAP_LIMIT);
             const qty = Math.floor(alloc / dn);
             if (qty >= 1) {
-              pos = { direction: td, entryPx: op, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: op, beActive: false, entryTrend: td === 'long' ? 'up' : 'down' };
               const enAtr = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
+              pos = { direction: td, entryPx: op, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: op, beActive: false, entryTrend: td === 'long' ? 'up' : 'down', entryStopLevel: td === 'long' ? op - (isNaN(enAtr) ? op * 0.005 : enAtr * ENTRY_ATR) : op + (isNaN(enAtr) ? op * 0.005 : enAtr * ENTRY_ATR) };
               if (td === 'long') {
                 const stop2 = op - (isNaN(enAtr) ? op * 0.005 : enAtr * ENTRY_ATR);
                 if (lo < stop2) {
