@@ -113,8 +113,8 @@ tr:hover td { background: #1a2a3a; }
       <option value="lookback">Lookback</option>
       <option value="minPct">Min%</option>
       <option value="atrPeriod">ATR周期</option>
-      <option value="entryAtrMult">入场ATR%</option>
-      <option value="atrMult">追踪ATR%</option>
+      <option value="entryAtrMult">入场ATR倍</option>
+      <option value="atrMult">追踪ATR倍</option>
       <option value="beTh">保本%</option>
       <option value="lockPct">锁定%</option>
       <option value="maxPos">仓位%</option>
@@ -132,8 +132,8 @@ tr:hover td { background: #1a2a3a; }
     <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="1" min="0" max="10" step="0.1" class="wide"></div>
     <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="50" min="0" max="100" step="5" class="wide"></div>
     <div class="param-group"><label>ATR周期:</label><input type="number" id="p_atr_period" value="14" min="5" max="60" step="1" class="wide"></div>
-    <div class="param-group"><label>入场ATR%:</label><input type="number" id="p_entry_atr" value="2.5" min="0.5" max="5" step="0.1" class="wide"></div>
-    <div class="param-group"><label>追踪ATR%:</label><input type="number" id="p_atr_mult" value="0.9" min="0.5" max="5" step="0.1" class="wide"></div>
+    <div class="param-group"><label>入场ATR倍:</label><input type="number" id="p_entry_atr" value="2.5" min="0.5" max="5" step="0.1" class="wide"></div>
+    <div class="param-group"><label>追踪ATR倍:</label><input type="number" id="p_atr_mult" value="0.9" min="0.5" max="5" step="0.1" class="wide"></div>
     <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
 
     <div class="param-group"><label>本金:</label><input type="number" id="p_capital" value="100000" min="10000" step="10000" class="wide"></div>
@@ -393,7 +393,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
   const mpHist = [], priceHist = [], trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
   let skipLong = 0, skipShort = 0, skipCount = SKIP;
   let prevCo = null, prevPo = null;
-  let prevClose = firstIdx > 0 ? fullData[firstIdx - 1].c : data[0].c;
+  let prevClose = firstIdx > 0 ? fullData[firstIdx - 1].c : data[0].o;
   let prevMp = firstIdx > 0 ? fullData[firstIdx - 1].mp : data[0].mp;
   let prevBec = null, prevBep = null, prevIvs = null;
   for (let i = preStart; i < firstIdx; i++) { mpHist.push(fullData[i].mp); priceHist.push(fullData[i].c); }
@@ -464,7 +464,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
               pos = { direction: td, entryPx: op, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: op, beActive: false, entryTrend: td === 'long' ? 'up' : 'down' };
               const enAtr = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
               if (td === 'long') {
-                const stop2 = prevClose - (isNaN(enAtr) ? prevClose * 0.005 : enAtr * ENTRY_ATR);
+                const stop2 = op - (isNaN(enAtr) ? op * 0.005 : enAtr * ENTRY_ATR);
                 if (lo < stop2) {
                   const pnl2 = (stop2 - op) * qty * mult;
                   trades.push({ entry: d, exit: d, entryPx: op, exitPx: stop2, dir: td, qty, pnl: pnl2 - 10 * qty * 2, reason: stop2 === op ? '保本出场' : '止损', entryReason: '趋势多', hold: 0 });
@@ -472,7 +472,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
                   pos = null;
                 }
               } else {
-                const stop2 = prevClose + (isNaN(enAtr) ? prevClose * 0.005 : enAtr * ENTRY_ATR);
+                const stop2 = op + (isNaN(enAtr) ? op * 0.005 : enAtr * ENTRY_ATR);
                 if (hi > stop2) {
                   const pnl2 = (op - stop2) * qty * mult;
                   trades.push({ entry: d, exit: d, entryPx: op, exitPx: stop2, dir: td, qty, pnl: pnl2 - 10 * qty * 2, reason: stop2 === op ? '保本出场' : '止损', entryReason: '趋势空', hold: 0 });
@@ -500,7 +500,11 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
       const _breakLevel = pos.direction === 'long' ? prevBep : prevBec;
       const atrVal = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
       let _s;
-      if (pos.beActive) {
+      if (pos.entryDate === d) {
+        _s = pos.direction === 'long'
+          ? (isNaN(atrVal) ? op * (1 - 0.005) : op - atrVal * ENTRY_ATR)
+          : (isNaN(atrVal) ? op * (1 + 0.005) : op + atrVal * ENTRY_ATR);
+      } else if (pos.beActive) {
         const _pp = pos.direction === 'long' ? pos.peakPx - pos.entryPx : pos.entryPx - pos.peakPx;
         _s = pos.direction === 'long' ? pos.entryPx + _pp * LOCK_PCT : pos.entryPx - _pp * LOCK_PCT;
       } else {
@@ -1085,9 +1089,9 @@ function runMonteCarlo() {
 const OPT_PARAMS = {
   lookback:   { label: 'Lookback',    range: [5, 60, 1] },
   minPct:     { label: 'Min%',        range: [0.1, 5, 0.1], unit: '%' },
-  entryAtrMult:  { label: '入场ATR',   range: [0.5, 3, 0.1] },
+  entryAtrMult:  { label: '入场ATR倍',   range: [0.5, 3, 0.1] },
   atrPeriod:  { label: 'ATR周期',     range: [5, 120, 1] },
-  atrMult:    { label: 'ATR倍数',     range: [0.5, 10, 0.1] },
+  atrMult:    { label: '追踪ATR倍',     range: [0.5, 10, 0.1] },
   maxPos:     { label: '仓位%',       range: [5, 100, 5], unit: '%' },
   beTh:       { label: '保本%',       range: [0.5, 5, 0.1], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 75, 5], unit: '%' },
