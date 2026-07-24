@@ -187,9 +187,23 @@ npx wrangler deploy
 Worker 域名: `maxpain-api.136320309workersdev.workers.dev`
 自定义域名: `api.starrysay.com`
 
-### D1 数据库
+### D1 数据库操作
 
-表 `daily_data`，PRIMARY KEY (symbol, date)：
+查询数据：
+
+```bash
+cd worker
+npx wrangler d1 execute maxpain-db --remote --command "SELECT * FROM daily_data WHERE symbol = 'TA' LIMIT 5"
+```
+
+新增字段（表结构变更）：
+
+```bash
+cd worker
+npx wrangler d1 execute maxpain-db --remote --command "ALTER TABLE backtest_params ADD COLUMN vol_filter_low REAL DEFAULT 0; ALTER TABLE backtest_params ADD COLUMN vol_filter_high REAL DEFAULT 0;"
+```
+
+> `schema.sql` 是表结构参考，已有表需用 ALTER TABLE 变更，`CREATE TABLE IF NOT EXISTS` 仅对新表生效。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
