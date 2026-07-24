@@ -137,6 +137,7 @@ tr:hover td { background: #1a2a3a; }
     <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
     <div class="param-group"><label>本金:</label><input type="number" id="p_capital" value="100000" min="10000" step="10000" class="wide"></div>
     <div class="param-group"><label>封顶(万):</label><input type="number" id="p_cap_limit" value="100" min="0" step="10" class="wide"></div>
+	    <div class="param-group"><label>波动过滤%:</label><input type="number" id="p_vol_low" value="5" min="0" max="50" step="5" class="wide" title="低于此百分位不开"> <input type="number" id="p_vol_high" value="95" min="50" max="100" step="5" class="wide" title="高于此百分位不开"></div>
     <div class="param-group"><label>开始:</label><input type="date" id="p_start" style="width:120px;padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font:12px sans-serif;"></div>
     <div class="param-group"><label>结束:</label><input type="date" id="p_end" style="width:120px;padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font:12px sans-serif;"></div>
     <div class="param-group" style="border-left:1px solid #2d3436;padding-left:12px;">
@@ -223,6 +224,8 @@ let defaultParams = {
   atrPeriod: 14,
   atrMult: 1,
   lockPct: 50,
+  volFilterLow: 5,
+  volFilterHigh: 95,
   capital: 100000,
   capLimit: 100,
   skipCount: 0,
@@ -386,7 +389,7 @@ function computeNextDirPred(fullData, params) {
 function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, btEnd) {
   btStart = btStart || 0;
   btEnd = btEnd || data.length;
-  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
+  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, volFilterLow: VOL_FL, volFilterHigh: VOL_FH, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
   const preStart = Math.max(0, firstIdx - LBK);
   let eq = CAP, peakEq = CAP, maxDd = 0, pos = null;
   const mpHist = [], priceHist = [], trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
@@ -397,6 +400,8 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
   let prevBec = null, prevBep = null, prevIvs = null;
   for (let i = preStart; i < firstIdx; i++) { mpHist.push(fullData[i].mp); priceHist.push(fullData[i].c); }
   const fullAtr = calcATR(fullData, ATR_PERIOD);
+  // ATR/价格 比率（用于波动率过滤）
+  const _atrRatio = fullData.map((r, i) => fullAtr[i] / r.c);
 
   for (let _di = 0; _di < data.length; _di++) {
     const row = data[_di];
@@ -454,6 +459,17 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
         }
       }
       if (td) {
+        // 波动率自适应过滤：ATR/价格 百分位
+        if (VOL_FL > 0 || VOL_FH < 100) {
+          const curR = _atrRatio[_fullIdx];
+          if (!isNaN(curR)) {
+            let _vcnt = 0, _vblw = 0;
+            for (let _ri = 0; _ri < _fullIdx; _ri++) { const _rv = _atrRatio[_ri]; if (!isNaN(_rv)) { _vcnt++; if (_rv < curR) _vblw++; } }
+            const _vpct = _vcnt > 0 ? _vblw / _vcnt * 100 : 50;
+            if (_vpct < VOL_FL || _vpct > VOL_FH) td = null;
+          }
+        }
+        if (td) {
           const dn = op * mult * MR;
           if (dn > 0) {
             let alloc = eq * MAX_POS;
@@ -481,6 +497,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
               }
             }
           }
+        }
       }
     }
 
@@ -587,6 +604,8 @@ function runBacktest() {
     entryAtrMult: parseFloat(document.getElementById('p_entry_atr').value) || defaultParams.entryAtrMult,
     atrPeriod: parseInt(document.getElementById('p_atr_period').value) || defaultParams.atrPeriod,
     atrMult: parseFloat(document.getElementById('p_atr_mult').value) || defaultParams.atrMult,
+    volFilterLow: parseInt(document.getElementById('p_vol_low').value) || 0,
+    volFilterHigh: parseInt(document.getElementById('p_vol_high').value) || 100,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || defaultParams.lockPct) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
@@ -1012,6 +1031,8 @@ function runMonteCarlo() {
     entryAtrMult: parseFloat(document.getElementById('p_entry_atr').value) || defaultParams.entryAtrMult,
     atrPeriod: parseInt(document.getElementById('p_atr_period').value) || defaultParams.atrPeriod,
     atrMult: parseFloat(document.getElementById('p_atr_mult').value) || defaultParams.atrMult,
+    volFilterLow: parseInt(document.getElementById('p_vol_low').value) || 0,
+    volFilterHigh: parseInt(document.getElementById('p_vol_high').value) || 100,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || defaultParams.lockPct) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
@@ -1135,6 +1156,8 @@ function optimizeParam() {
     entryAtrMult: parseFloat(document.getElementById('p_entry_atr').value) || defaultParams.entryAtrMult,
     atrPeriod: parseInt(document.getElementById('p_atr_period').value) || defaultParams.atrPeriod,
     atrMult: parseFloat(document.getElementById('p_atr_mult').value) || defaultParams.atrMult,
+    volFilterLow: parseInt(document.getElementById('p_vol_low').value) || 0,
+    volFilterHigh: parseInt(document.getElementById('p_vol_high').value) || 100,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || defaultParams.lockPct) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
@@ -1158,6 +1181,7 @@ function optimizeParam() {
       else if (paramKey === 'atrMult') pp.atrMult = v;
       else if (paramKey === 'beTh') pp.beTh = v / 100;
       else if (paramKey === 'lockPct') pp.lockPct = v / 100;
+      else if (paramKey === 'volFilterLow' || paramKey === 'volFilterHigh') pp[paramKey] = v;
       else if (paramKey === 'skipCount') pp.skipCount = v;
 
       const ppNextDir = computeNextDirPred(fullData, pp);
@@ -1205,7 +1229,7 @@ function optimizeParam() {
         <th class="num">' + meta.label + '</th><th class="num">最终权益</th><th class="num">收益</th><th class="num">笔数</th><th class="num">胜率</th><th class="num">盈亏比</th><th class="num">回撤</th><th class="num">均PnL</th>\
       </tr>' + rows + '</table></div>';
     status.textContent = '优化完成 | ' + values.length + '个值 | 最优 ' + meta.label + '=' + best.v + suffix + ' → ' + fmt(best.endEq);
-    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip' };
+    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip', volFilterLow:'p_vol_low', volFilterHigh:'p_vol_high' };
     const el = document.getElementById(idMap[paramKey]);
     if (meta.unit) el.value = best.v.toFixed(1);
     else el.value = best.v;
