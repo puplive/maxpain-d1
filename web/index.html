@@ -472,7 +472,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
         if (td) {
           const dn = op * mult * MR;
           if (dn > 0) {
-            let alloc = eq * MAX_POS;
+            let alloc = eq < 500000 ? eq : eq * MAX_POS;
             if (CAP_LIMIT > 0) alloc = Math.min(alloc, CAP_LIMIT);
             const qty = Math.floor(alloc / dn);
             if (qty >= 1) {
