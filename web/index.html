@@ -391,7 +391,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
   btEnd = btEnd || data.length;
   const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, volFilterLow: VOL_FL, volFilterHigh: VOL_FH, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
   const preStart = Math.max(0, firstIdx - LBK);
-  let eq = CAP, peakEq = CAP, maxDd = 0, pos = null;
+  let eq = CAP, peakEq = CAP, maxDd = 0, pos = null, posDays = 0;
   const mpHist = [], priceHist = [], trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
   let skipLong = 0, skipShort = 0, skipCount = SKIP;
   let prevCo = null, prevPo = null;
@@ -503,6 +503,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
 
     peakEq = Math.max(peakEq, eq);
     maxDd = Math.max(maxDd, (peakEq - eq) / peakEq * 100);
+    if (pos) posDays++;
     if (pos) {
       if (pos.direction === 'long' && px > pos.peakPx) {
         pos.peakPx = px;
@@ -542,7 +543,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
     prevBec = bec; prevBep = bep; prevIvs = ivs;
     eqCurve.push({ d, eq });
   }
-  return { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos: pos };
+  return { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos: pos, posDays };
 }
 
 function runBacktest() {
@@ -623,7 +624,7 @@ function runBacktest() {
     window._analysisCache[i] = genAnalysis(data, fullData, params, nextDirPred, core.trades, i);
   }
   const _lastAnalysis = window._analysisCache[data.length - 1];
-  const { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos } = core;
+  const { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos, posDays } = core;
 
   // 明日方向准确率（只统计回测区间）
   const dirAccH = { 1: { corr: 0, tot: 0 }, 3: { corr: 0, tot: 0 }, 5: { corr: 0, tot: 0 }, 10: { corr: 0, tot: 0 } };
@@ -663,6 +664,7 @@ function runBacktest() {
     winRate: round1(wins.length / trades.length * 100),
     profitFactor: pf === Infinity ? '∞' : round2(pf),
     avgHold: round1(trades.reduce((s, t) => s + t.hold, 0) / trades.length),
+    coverage: round1(posDays / (btEndIdx - btStartIdx) * 100),
     avgPnl: Math.round(trades.reduce((s, t) => s + t.pnl, 0) / trades.length),
   };
 
@@ -724,7 +726,7 @@ function runBacktest() {
       <div class="stat-card"><div class="value">' + s.trades + '</div><div class="label">交易笔数</div></div>\
       <div class="stat-card"><div class="value">' + s.winRate + '%</div><div class="label">胜率</div></div>\
       <div class="stat-card"><div class="value">' + s.profitFactor + '</div><div class="label">盈亏比</div></div>\
-      <div class="stat-card"><div class="value">' + s.avgHold + '天</div><div class="label">平均持仓</div></div>\
+      <div class="stat-card"><div class="value">' + s.avgHold + '天</div><div class="label">平均持仓</div></div>      <div class="stat-card"><div class="value">' + s.coverage + '%</div><div class="label">持仓覆盖率</div></div>\
       <div class="stat-card"><div class="value">' + fmt(s.avgPnl) + '</div><div class="label">均PnL</div></div>\
       <div class="stat-card"><div class="value" style="font-size:10px;line-height:1.4">' + dirAccText + '</div><div class="label">明日方向准确率</div></div>\
     </div>\
