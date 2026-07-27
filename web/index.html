@@ -724,9 +724,10 @@ function runBacktest() {
       <div class="stat-card"><div class="value ' + cls(s.totalReturn) + '">' + pct(s.totalReturn) + '</div><div class="label">总收益</div></div>\
       <div class="stat-card"><div class="value">' + s.maxDd + '%</div><div class="label">最大回撤</div></div>\
       <div class="stat-card"><div class="value">' + s.trades + '</div><div class="label">交易笔数</div></div>\
+      <div class="stat-card"><div class="value">' + s.coverage + '%</div><div class="label">持仓覆盖率</div></div>\
+      <div class="stat-card"><div class="value">' + s.avgHold + '天</div><div class="label">平均持仓</div></div>\
       <div class="stat-card"><div class="value">' + s.winRate + '%</div><div class="label">胜率</div></div>\
       <div class="stat-card"><div class="value">' + s.profitFactor + '</div><div class="label">盈亏比</div></div>\
-      <div class="stat-card"><div class="value">' + s.avgHold + '天</div><div class="label">平均持仓</div></div>      <div class="stat-card"><div class="value">' + s.coverage + '%</div><div class="label">持仓覆盖率</div></div>\
       <div class="stat-card"><div class="value">' + fmt(s.avgPnl) + '</div><div class="label">均PnL</div></div>\
       <div class="stat-card"><div class="value" style="font-size:10px;line-height:1.4">' + dirAccText + '</div><div class="label">明日方向准确率</div></div>\
     </div>\
