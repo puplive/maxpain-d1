@@ -1389,6 +1389,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
             _mc = tOi > 0 ? (ch[bestIdx].co + ch[bestIdx].po) / tOi : 0;
           }
         } catch(e) {}
+      }
       _subMpConf[i] = _mc;
       // ATR
       if (i === 0) {
