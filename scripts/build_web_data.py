@@ -72,7 +72,7 @@ def main():
                         ps = 0
                         pmax = -1
                         for it in ch:
-                            prem = (it.get('cclose') or 0) + (it.get('pclose') or 0)
+                            prem = (it.get('cclose') or 0) * it.get('co', 0) + (it.get('pclose') or 0) * it.get('po', 0)
                             if prem > pmax:
                                 pmax = prem
                                 ps = it['s']
