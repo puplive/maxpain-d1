@@ -65,26 +65,6 @@ def main():
             if sym not in pool:
                 pool[sym] = {}
             for rec in records:
-                # 预计算权利金最高行权价
-                if rec.get('oc_chain'):
-                    try:
-                        ch = json.loads(rec['oc_chain']) if isinstance(rec['oc_chain'], str) else rec['oc_chain']
-                        ps = 0
-                        pmax = -1
-                        price = rec.get('c') or 0
-                        for it in ch:
-                            # 同 MP，只考虑现价 ±20% 范围内的行权价
-                            if price > 0 and abs(it['s'] - price) / price > 0.2:
-                                continue
-                            prem = (it.get('cclose') or 0) * it.get('co', 0) + (it.get('pclose') or 0) * it.get('po', 0)
-                            if prem > pmax:
-                                pmax = prem
-                                ps = it['s']
-                        rec['ps'] = ps if pmax > 0 else 0
-                    except Exception:
-                        rec['ps'] = 0
-                else:
-                    rec['ps'] = 0
                 pool[sym][rec['d']] = rec
 
     # 排序、去重后写出
