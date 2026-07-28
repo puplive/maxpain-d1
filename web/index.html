@@ -419,21 +419,22 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
       }
 
       if (!exitPx) {
-        const atrVal = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
-        if (pos.direction === 'long') {
-          let stop;
-          if (pos.beActive) { const pp = pos.peakPx - pos.entryPx; stop = pos.entryPx + pp * LOCK_PCT; }
-          else {
+        let stop;
+        if (stopCurve.length > 0 && stopCurve[stopCurve.length - 1].stop === pos.entryStopLevel) {
+          // 入场第二天（前一条止损还是 entryStopLevel）：重新计算追踪止损
+          const atrVal = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
+          if (pos.direction === 'long') {
             stop = Math.max(isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT, pos.entryStopLevel);
-          }
-          if (lo < stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop > pos.entryPx ? '追踪止盈' : '止损'); }
-        } else {
-          let stop;
-          if (pos.beActive) { const pp = pos.entryPx - pos.peakPx; stop = pos.entryPx - pp * LOCK_PCT; }
-          else {
+          } else {
             stop = Math.min(isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT, pos.entryStopLevel);
           }
-          if (hi > stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop < pos.entryPx ? '追踪止盈' : '止损'); }
+        } else {
+          // 之后的直接用前一天计算好的止损线
+          stop = stopCurve[stopCurve.length - 1].stop;
+        }
+        if (stop != null) {
+          if (pos.direction === 'long' && lo < stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop > pos.entryPx ? '追踪止盈' : '止损'); }
+          else if (pos.direction === 'short' && hi > stop) { exitPx = stop; reason = stop === pos.entryPx ? '保本出场' : (stop < pos.entryPx ? '追踪止盈' : '止损'); }
         }
       }
       if (exitPx !== null) {
@@ -1816,8 +1817,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     for (let i = start; i < end && i < n; i++) {
       const row = data[i];
       const x = toX(i);
-      const prevClose = i > 0 ? data[i-1].c : row.c;
-      const upColor = row.c >= prevClose;
+      const opOpen = row.o;
+      const upColor = row.c >= opOpen;
       const color = upColor ? '#5cd85a' : '#ff6b6b';
 
       if (data[i].expiry && data[i].expiry === data[i].d) {
@@ -1837,8 +1838,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
 
       ctx.fillStyle = color;
       const bw = Math.max(1, state.barW * 0.5);
-      const bh = Math.max(1, Math.abs(toY(row.c) - toY(prevClose)) || 1);
-      const by = upColor ? toY(row.c) : toY(prevClose);
+      const bh = Math.max(1, Math.abs(toY(row.c) - toY(opOpen)) || 1);
+      const by = upColor ? toY(row.c) : toY(opOpen);
       ctx.fillRect(x - bw / 2, by, bw, bh);
 
       if (row._manual) {
