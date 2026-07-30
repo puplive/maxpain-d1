@@ -641,6 +641,10 @@ def main():
                 existing = json.loads(out_path.read_text())
             else:
                 existing = {}
+            # 清除不在本次输出中的旧品种（没有期权的品种不再残留）
+            for sym in list(existing.keys()):
+                if sym not in output:
+                    del existing[sym]
             for sym, records in output.items():
                 if sym not in existing:
                     existing[sym] = records

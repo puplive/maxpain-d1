@@ -191,64 +191,65 @@ tr:hover td { background: #1a2a3a; }
 <script>
 const API_BASE = 'data/';
 const SYM_CFG = {
-  // CZCE
-  TA: { name: 'PTA',     mult: 5 },
-  MA: { name: '甲醇',    mult: 10 },
-  SA: { name: '纯碱',    mult: 20 },
-  SR: { name: '白糖',    mult: 10 },
-  CF: { name: '棉花',    mult: 5 },
-  RM: { name: '菜粕',    mult: 10 },
-  OI: { name: '菜油',    mult: 10 },
-  PK: { name: '花生',    mult: 5 },
-  PF: { name: '短纤',    mult: 5 },
-  SM: { name: '锰硅',    mult: 5 },
-  SF: { name: '硅铁',    mult: 5 },
-  UR: { name: '尿素',    mult: 20 },
-  AP: { name: '苹果',    mult: 10 },
-  CJ: { name: '红枣',    mult: 5 },
-  FG: { name: '玻璃',    mult: 20 },
-  PX: { name: '对二甲苯', mult: 5 },
-  SH: { name: '烧碱',    mult: 10 },
-  // DCE
-  C:  { name: '玉米',     mult: 10 },
-  M:  { name: '豆粕',     mult: 10 },
-  I:  { name: '铁矿石',   mult: 100 },
-  PG: { name: '液化石油气', mult: 20 },
-  L:  { name: '聚乙烯',   mult: 5 },
-  V:  { name: '聚氯乙烯', mult: 5 },
-  PP: { name: '聚丙烯',   mult: 5 },
-  P:  { name: '棕榈油',   mult: 10 },
-  A:  { name: '豆一',     mult: 10 },
-  B:  { name: '豆二',     mult: 10 },
-  Y:  { name: '豆油',     mult: 10 },
-  EG: { name: '乙二醇',   mult: 10 },
-  EB: { name: '苯乙烯',   mult: 5 },
-  JD: { name: '鸡蛋',     mult: 5 },
-  CS: { name: '玉米淀粉', mult: 10 },
-  LH: { name: '生猪',     mult: 16 },
-  LG: { name: '原木',     mult: 90 },
-  // SHFE
-  CU: { name: '铜',       mult: 5 },
-  AL: { name: '铝',       mult: 5 },
-  ZN: { name: '锌',       mult: 5 },
-  PB: { name: '铅',       mult: 5 },
-  RB: { name: '螺纹钢',   mult: 10 },
-  NI: { name: '镍',       mult: 1 },
-  SN: { name: '锡',       mult: 1 },
-  AU: { name: '黄金',     mult: 1000 },
-  AG: { name: '白银',     mult: 15 },
-  RU: { name: '橡胶',     mult: 10 },
-  BR: { name: '丁二烯橡胶', mult: 5 },
-  AO: { name: '氧化铝',   mult: 20 },
-  // INE
-  SC: { name: '原油',     mult: 1000 },
-  NR: { name: '20号胶',   mult: 10 },
+  // CZCE 郑商所
+  TA: { name: 'PTA',     mult: 5, ex: 'CZCE' },
+  MA: { name: '甲醇',    mult: 10, ex: 'CZCE' },
+  SA: { name: '纯碱',    mult: 20, ex: 'CZCE' },
+  FG: { name: '玻璃',    mult: 20, ex: 'CZCE' },
+  SR: { name: '白糖',    mult: 10, ex: 'CZCE' },
+  CF: { name: '棉花',    mult: 5, ex: 'CZCE' },
+  RM: { name: '菜粕',    mult: 10, ex: 'CZCE' },
+  OI: { name: '菜油',    mult: 10, ex: 'CZCE' },
+  PF: { name: '短纤',    mult: 5, ex: 'CZCE' },
+  UR: { name: '尿素',    mult: 20, ex: 'CZCE' },
+  AP: { name: '苹果',    mult: 10, ex: 'CZCE' },
+  SM: { name: '锰硅',    mult: 5, ex: 'CZCE' },
+  SF: { name: '硅铁',    mult: 5, ex: 'CZCE' },
+  PK: { name: '花生',    mult: 5, ex: 'CZCE' },
+  CJ: { name: '红枣',    mult: 5, ex: 'CZCE' },
+  PX: { name: '对二甲苯', mult: 5, ex: 'CZCE' },
+  SH: { name: '烧碱',    mult: 10, ex: 'CZCE' },
+  // DCE 大商所
+  M:  { name: '豆粕',     mult: 10, ex: 'DCE' },
+  I:  { name: '铁矿石',   mult: 100, ex: 'DCE' },
+  P:  { name: '棕榈油',   mult: 10, ex: 'DCE' },
+  EG: { name: '乙二醇',   mult: 10, ex: 'DCE' },
+  EB: { name: '苯乙烯',   mult: 5, ex: 'DCE' },
+  C:  { name: '玉米',     mult: 10, ex: 'DCE' },
+  PG: { name: '液化石油气', mult: 20, ex: 'DCE' },
+  L:  { name: '聚乙烯',   mult: 5, ex: 'DCE' },
+  V:  { name: '聚氯乙烯', mult: 5, ex: 'DCE' },
+  PP: { name: '聚丙烯',   mult: 5, ex: 'DCE' },
+  A:  { name: '豆一',     mult: 10, ex: 'DCE' },
+  B:  { name: '豆二',     mult: 10, ex: 'DCE' },
+  Y:  { name: '豆油',     mult: 10, ex: 'DCE' },
+  JD: { name: '鸡蛋',     mult: 5, ex: 'DCE' },
+  CS: { name: '玉米淀粉', mult: 10, ex: 'DCE' },
+  LH: { name: '生猪',     mult: 16, ex: 'DCE' },
+  LG: { name: '原木',     mult: 90, ex: 'DCE' },
+  // SHFE 上期所
+  CU: { name: '铜',       mult: 5, ex: 'SHFE' },
+  AU: { name: '黄金',     mult: 1000, ex: 'SHFE' },
+  AG: { name: '白银',     mult: 15, ex: 'SHFE' },
+  RB: { name: '螺纹钢',   mult: 10, ex: 'SHFE' },
+  AL: { name: '铝',       mult: 5, ex: 'SHFE' },
+  ZN: { name: '锌',       mult: 5, ex: 'SHFE' },
+  PB: { name: '铅',       mult: 5, ex: 'SHFE' },
+  NI: { name: '镍',       mult: 1, ex: 'SHFE' },
+  SN: { name: '锡',       mult: 1, ex: 'SHFE' },
+  RU: { name: '橡胶',     mult: 10, ex: 'SHFE' },
+  BR: { name: '丁二烯橡胶', mult: 5, ex: 'SHFE' },
+  AO: { name: '氧化铝',   mult: 20, ex: 'SHFE' },
+  // INE 能源中心
+  SC: { name: '原油',     mult: 1000, ex: 'INE' },
+  NR: { name: '20号胶',   mult: 10, ex: 'INE' },
 };
 const LOOKBACK = 15;
 const MIN_SEG = 40;
 const MAX_SEG = 70;
 const FEE_PER_LOT = 10; // per side
 
+const PREFERRED_SYMS = ['TA','MA','SA','FG','M','I','P','CU','AU','AG','RB','SC','SR','CF','RM','OI','EG','EB'];
 let ALL_DATA = {};
 let segment = [];
 let segmentSymbol = '';
@@ -290,6 +291,16 @@ async function loadAllData() {
     symbols = Object.keys(SYM_CFG);
   }
 
+  // 排序：常用优先 → 按品种名
+  symbols.sort((a, b) => {
+    const ia = PREFERRED_SYMS.indexOf(a);
+    const ib = PREFERRED_SYMS.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return SYM_CFG[a].name.localeCompare(SYM_CFG[b].name, 'zh');
+  });
+
   // 动态填充品种选择器（保持 "随机品种" 在第一位）
   const randomOpt = sel.querySelector('option[value="random"]');
   sel.innerHTML = '';
@@ -297,7 +308,8 @@ async function loadAllData() {
   for (const sym of symbols) {
     const opt = document.createElement('option');
     opt.value = sym;
-    opt.textContent = (SYM_CFG[sym] ? SYM_CFG[sym].name : sym) + ' (' + sym + ')';
+    const cfg = SYM_CFG[sym];
+    opt.textContent = (cfg ? cfg.name : sym) + ' (' + sym + ')' + (cfg && cfg.ex ? ' · ' + cfg.ex : '');
     sel.appendChild(opt);
   }
 
