@@ -27,6 +27,62 @@ SHFE_MULT = {
     'SC': 1000, 'NR': 10,
 }
 
+# ==== Black 76 期货期权定价（用于反推 SHFE 缺失的 IV/Delta） ====
+_RATE = 0.025
+
+def _norm_pdf(x):
+    return np.exp(-0.5 * x * x) / np.sqrt(2 * np.pi)
+
+def _norm_cdf(x):
+    """Abramowitz & Stegun 近似，精度 ~1.5e-7"""
+    x_abs = np.abs(x)
+    t = 1 / (1 + 0.2316419 * x_abs)
+    a1, a2, a3, a4, a5 = 0.319381530, -0.356563782, 1.781477937, -1.821255978, 1.330274429
+    phi = _norm_pdf(x)
+    cdf = phi * (a1*t + a2*t**2 + a3*t**3 + a4*t**4 + a5*t**5)
+    return np.where(x > 0, 1 - cdf, cdf)
+
+def _black76_price(S, K, T, r, sigma, is_call):
+    """Black 76 期货期权定价（向量化）"""
+    sqrt_T = np.sqrt(T)
+    d1 = (np.log(np.clip(S/K, 0.01, 100)) + 0.5 * sigma**2 * T) / (sigma * sqrt_T)
+    d2 = d1 - sigma * sqrt_T
+    disc = np.exp(-r * T)
+    call = S * _norm_cdf(d1) - K * disc * _norm_cdf(d2)
+    put = K * disc * _norm_cdf(-d2) - S * _norm_cdf(-d1)
+    return np.where(is_call, call, put)
+
+def _black76_delta(S, K, T, r, sigma, is_call):
+    """Black 76 delta（向量化），sigma=0 返回 0"""
+    delta = np.zeros(len(S))
+    ok = (sigma > 1e-6) & (T > 0) & (S > 0) & (K > 0)
+    if not ok.any():
+        return delta
+    sqrt_T = np.sqrt(T[ok])
+    d1 = (np.log(np.clip(S[ok]/K[ok], 0.01, 100)) + 0.5 * sigma[ok]**2 * T[ok]) / (sigma[ok] * sqrt_T)
+    d1 = np.clip(d1, -10, 10)
+    delta[ok] = np.where(is_call[ok], _norm_cdf(d1), -_norm_cdf(-d1))
+    return delta
+
+def _calc_iv_batch(mkt, S, K, T, r, is_call):
+    """向量化二分法反推 IV"""
+    n = len(mkt)
+    iv = np.zeros(n)
+    valid = (mkt > 1e-8) & (S > 0) & (K > 0) & (T > 7/365)
+    if not valid.any():
+        return iv
+    lo = np.full(n, 0.001)
+    hi = np.full(n, 3.0)
+    for _ in range(80):
+        mid = (lo + hi) / 2
+        p = _black76_price(S, K, T, r, mid, is_call)
+        lo = np.where(p < mkt, mid, lo)
+        hi = np.where(p >= mkt, mid, hi)
+        if np.max(hi[valid] - lo[valid]) < 0.0001:
+            break
+    iv[valid] = ((lo[valid] + hi[valid]) / 2)
+    return iv
+
 
 def parse_opt_code(code):
     m = re.search(r'\d{4,}([CP])(\d+\.?\d*)$', str(code))
@@ -356,8 +412,34 @@ def process_one(sym, fut, opt, mult=10):
     result = {}
     for date, row in sorted(fut_dates.items()):
         if date not in opt_by_date: continue
-        o = opt_by_date[date]
+        o = opt_by_date[date].copy()
         px = row['c']
+
+        # ---- 计算 IV/Delta（SHFE XLSX 缺这两个字段） ----
+        day_fut = fut[fut['date'] == date]
+        fut_price_map = dict(zip(day_fut['合约'], _clean_num(day_fut['收盘价'])))
+        # XLSX 无 IV 列 → iv 全为 0，需反推
+        if o['iv'].isna().all() or (o['iv'] == 0).all():
+            # 匹配每个期权对应的期货合约价
+            codes = o['合约']
+            parsed_parts = codes.str.extract(r'^([A-Z]{1,2})(\d{4})[CP]', expand=False)
+            fcodes = parsed_parts[0].fillna('') + parsed_parts[1].fillna('')
+            S_arr = np.where(fcodes.isin(fut_price_map),
+                             fcodes.map(fut_price_map).fillna(px).values, px)
+            K_arr = o['strike'].values
+            mkt_arr = o['close'].values
+            is_call = (o['type'] == 'C').values
+            # 按唯一合约码算 T
+            unique_codes = codes.str.extract(r'^([A-Z]{1,2}\d{4})[CP]', expand=False).dropna().unique()
+            T_map = {c: _calc_T_shfe(c, date, calendar) for c in unique_codes}
+            T_map_key = codes.str.extract(r'^([A-Z]{1,2}\d{4})[CP]', expand=False)
+            T_arr = T_map_key.map(T_map).fillna(30/365).values
+
+            iv_arr = _calc_iv_batch(mkt_arr, S_arr, K_arr, T_arr, _RATE, is_call)
+            delta_arr = _black76_delta(S_arr, K_arr, T_arr, _RATE, iv_arr, is_call)
+            o['iv'] = iv_arr
+            o['delta'] = delta_arr
+        # ---- 计算 IV/Delta 结束 ----
 
         # 一次过滤，重复用
         calls = o[o['type'] == 'C']
@@ -376,9 +458,7 @@ def process_one(sym, fut, opt, mult=10):
         civ = calls[calls['delta'].between(0.20, 0.30)]['iv'].mean()
         piv = puts[puts['delta'].between(-0.30, -0.20)]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
-        day_fut = fut[fut['date'] == date]
-        fut_prices = dict(zip(day_fut['合约'], day_fut['收盘价']))
-        gex = calc_gex(o, px, mult, fut_prices, date, calendar)
+        gex = calc_gex(o, px, mult, fut_price_map, date, calendar)
 
         # 期权成交量/持仓量
         vol_call = cv
