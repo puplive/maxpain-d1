@@ -562,6 +562,15 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
     prevBec = bec; prevBep = bep; prevIvs = ivs;
     eqCurve.push({ d, eq });
   }
+  // 最后一单持仓浮盈浮亏计入 eq
+  if (pos) {
+    const _lr = data[data.length - 1];
+    const _upnl = pos.direction === 'long'
+      ? (_lr.c - pos.entryPx) * pos.qty * mult
+      : (pos.entryPx - _lr.c) * pos.qty * mult;
+    eq += _upnl;
+    eqCurve[eqCurve.length - 1].eq = eq;
+  }
   return { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos: pos, posDays };
 }
 
