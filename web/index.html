@@ -21,6 +21,22 @@ h1 small { font-size: 13px; color: #576574; font-weight: normal; }
 .btn:hover { background: #2e86de; }
 .btn:disabled { background: #576574; cursor: not-allowed; }
 .status { color: #8395a7; font-size: 13px; }
+/* 品种选择按钮 */
+.sym-btn { padding: 8px 14px; border: 1px solid #2d3436; border-radius: 6px; background: #1a2a3a; color: #c8d6e5; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sym-btn:hover { border-color: #54a0ff; }
+.sym-btn::after { content: '▾'; font-size: 10px; color: #576574; }
+/* 模态弹框 */
+.modal-overlay { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; }
+.modal-overlay.open { display: flex; }
+.modal-box { background: #152238; border: 1px solid #2d3436; border-radius: 12px; padding: 24px; max-width: 620px; width: 90%; max-height: 80vh; overflow-y: auto; }
+.modal-box h3 { font-size: 15px; color: #8395a7; margin-bottom: 16px; }
+.modal-group { margin-bottom: 16px; }
+.modal-group:last-child { margin-bottom: 0; }
+.modal-group .group-title { font-size: 12px; color: #576574; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #1a2a3a; }
+.modal-symbols { display: flex; flex-wrap: wrap; gap: 6px; }
+.modal-sym { padding: 6px 14px; border: 1px solid #2d3436; border-radius: 6px; background: #1a2a3a; color: #c8d6e5; font-size: 13px; cursor: pointer; transition: all .15s; white-space: nowrap; }
+.modal-sym:hover { border-color: #54a0ff; color: #54a0ff; }
+.modal-sym.active { border-color: #e8c84a; color: #e8c84a; background: #e8c84a11; }
 .params { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; padding: 12px 16px; background: #1a2a3a; border-radius: 8px; font-size: 12px; align-items: center; }
 .param-group { display: flex; align-items: center; gap: 4px; }
 .param-group label { color: #8395a7; white-space: nowrap; }
@@ -104,7 +120,7 @@ tr:hover td { background: #1a2a3a; }
   </div>
 
   <div class="controls">
-    <select id="symbol" onchange="switchSymbol()"></select>
+    <button id="symBtn" class="sym-btn" onclick="openSymModal()">加载中...</button>
     <button class="btn" id="runBtn" onclick="runBacktest()">运行回测</button>
     <button class="btn" onclick="resetParams()" style="background:#2d3436;">重置参数</button>
     <button class="btn" onclick="runMonteCarlo()" style="background:#e8c84a;color:#0f1923;">蒙特卡洛</button>
@@ -213,8 +229,8 @@ const SYM_CFG = {
   NR: { name: '20号胶',   mult: 10, ex: 'INE' },
 };
 let ALL_DATA = {};
-// 常用品种优先
-const PREFERRED_SYMS = ['TA','MA','SA','FG','M','I','P','CU','AU','AG','RB','SC','SR','CF','RM','OI','EG','EB'];
+let SYMBOLS = [];
+let CURRENT_SYM = '';
 let defaultParams = {
   lookback: 21,
   minPct: 0.1,
@@ -254,7 +270,6 @@ async function loadData(symbol) {
 
 async function loadAllData() {
   const status = document.getElementById('dataStatus');
-  const sel = document.getElementById('symbol');
   status.textContent = '加载品种列表...';
 
   // 本地 data/index.json 获取品种列表
@@ -267,36 +282,20 @@ async function loadAllData() {
     symbols = Object.keys(SYM_CFG);
   }
 
-  // 排序：常用优先 → 按品种名
-  symbols.sort((a, b) => {
-    const ia = PREFERRED_SYMS.indexOf(a);
-    const ib = PREFERRED_SYMS.indexOf(b);
-    if (ia !== -1 && ib !== -1) return ia - ib;
-    if (ia !== -1) return -1;
-    if (ib !== -1) return 1;
-    return SYM_CFG[a].name.localeCompare(SYM_CFG[b].name, 'zh');
-  });
+  // 按品种名排序
+  symbols.sort((a, b) => SYM_CFG[a].name.localeCompare(SYM_CFG[b].name, 'zh'));
 
-  // 动态填充品种选择器
-  sel.innerHTML = '';
-  for (const sym of symbols) {
-    const opt = document.createElement('option');
-    opt.value = sym;
-    const cfg = SYM_CFG[sym];
-    opt.textContent = cfg.name + ' (' + sym + ')' + (cfg.ex ? ' · ' + cfg.ex : '');
-    sel.appendChild(opt);
-  }
+  SYMBOLS = symbols;
 
   // 恢复上次选中的品种，否则默认 PTA
-  const saved = localStorage.getItem('maxpain_symbol');
-  if (saved && symbols.includes(saved)) {
-    sel.value = saved;
-  } else if (symbols.includes('TA')) {
-    sel.value = 'TA';
+  let firstSym = localStorage.getItem('maxpain_symbol');
+  if (!firstSym || !symbols.includes(firstSym)) {
+    firstSym = symbols.includes('TA') ? 'TA' : symbols[0];
   }
+  CURRENT_SYM = firstSym;
+  document.getElementById('symBtn').textContent = SYM_CFG[firstSym].name + ' (' + firstSym + ')';
 
   // 只加载第一个品种的数据
-  const firstSym = sel.value;
   const data = await loadData(firstSym);
   if (data) {
     ALL_DATA[firstSym] = data;
@@ -307,8 +306,15 @@ async function loadAllData() {
   return false;
 }
 
-async function switchSymbol() {
-  const sym = document.getElementById('symbol').value;
+function updateSymBtn(sym) {
+  const cfg = SYM_CFG[sym];
+  document.getElementById('symBtn').textContent = cfg ? (cfg.name + ' (' + sym + ')') : sym;
+}
+
+async function switchSymbol(sym) {
+  if (!sym) return;
+  CURRENT_SYM = sym;
+  updateSymBtn(sym);
   localStorage.setItem('maxpain_symbol', sym);
   if (!ALL_DATA[sym]) {
     document.getElementById('dataStatus').textContent = '加载 ' + sym + ' ...';
@@ -560,7 +566,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
 }
 
 function runBacktest() {
-  const sym = document.getElementById('symbol').value;
+  const sym = CURRENT_SYM;
   const result = document.getElementById('result');
   const status = document.getElementById('status');
   const btn = document.getElementById('runBtn');
@@ -962,7 +968,7 @@ function setParamValues(p) {
 }
 
 async function saveParams() {
-  const sym = document.getElementById('symbol').value;
+  const sym = CURRENT_SYM;
   const btn = document.getElementById('saveBtn');
   const orig = btn.textContent;
   btn.textContent = '保存中...'; btn.disabled = true;
@@ -1032,7 +1038,7 @@ function toggleManual() {
 }
 
 function runMonteCarlo() {
-  const sym = document.getElementById('symbol').value;
+  const sym = CURRENT_SYM;
   const cfg = SYM_CFG[sym] || { name: sym, mult: 10 };
   const fullData = ALL_DATA[sym];
   if (!fullData) { alert('数据未加载'); return; }
@@ -1151,7 +1157,7 @@ const OPT_PARAMS = {
 };
 
 function optimizeParam() {
-  const sym = document.getElementById('symbol').value;
+  const sym = CURRENT_SYM;
   const result = document.getElementById('result');
   const status = document.getElementById('status');
   const cfg = SYM_CFG[sym] || { name: sym, mult: 10 };
@@ -1259,7 +1265,7 @@ function optimizeParam() {
 
 function resetParams() {
   if (Object.keys(defaultParams).length > 0) setParamValues(defaultParams);
-  const sym = document.getElementById('symbol').value;
+  const sym = CURRENT_SYM;
   const data = ALL_DATA[sym];
   if (data) {
     document.getElementById('p_start').value = data[0].d;
@@ -2868,7 +2874,7 @@ function drawEquityCurve(eqCurve, cap) {
 window.onload = async function() {
   const ok = await loadAllData();
   if (ok) {
-    const sym = document.getElementById('symbol').value;
+    const sym = CURRENT_SYM;
     if (!await loadParams(sym)) setParamValues(defaultParams);
     const d = ALL_DATA[sym];
     if (d) {
@@ -2878,6 +2884,56 @@ window.onload = async function() {
     runBacktest();
   }
 };
+
+/* ---- 品种选择弹框 ---- */
+function openSymModal() {
+  const overlay = document.getElementById('symModal');
+  const body = document.getElementById('symModalBody');
+  const groups = {};
+  for (const sym of SYMBOLS) {
+    const ex = SYM_CFG[sym].ex || '其他';
+    if (!groups[ex]) groups[ex] = [];
+    groups[ex].push(sym);
+  }
+  const exNames = { CZCE: '郑商所 (CZCE)', DCE: '大商所 (DCE)', SHFE: '上期所 (SHFE)', INE: '能源中心 (INE)' };
+  let html = '';
+  for (const [ex, syms] of Object.entries(groups)) {
+    html += '<div class="modal-group"><div class="group-title">' + (exNames[ex] || ex) + '</div><div class="modal-symbols">';
+    for (const sym of syms) {
+      const cfg = SYM_CFG[sym];
+      const active = sym === CURRENT_SYM ? ' active' : '';
+      html += '<button class="modal-sym' + active + '" onclick="pickSymbol(\'' + sym + '\')">' + cfg.name + ' (' + sym + ')</button>';
+    }
+    html += '</div></div>';
+  }
+  body.innerHTML = html;
+  overlay.classList.add('open');
+}
+
+function closeSymModal() {
+  document.getElementById('symModal').classList.remove('open');
+}
+
+function pickSymbol(sym) {
+  closeSymModal();
+  if (sym === CURRENT_SYM) return;
+  switchSymbol(sym);
+}
+
+document.addEventListener('click', function(e) {
+  const overlay = document.getElementById('symModal');
+  if (overlay.classList.contains('open') && e.target === overlay) {
+    closeSymModal();
+  }
+});
 </script>
+
+<!-- 品种选择弹框 -->
+<div class="modal-overlay" id="symModal">
+  <div class="modal-box">
+    <h3>选择品种</h3>
+    <div id="symModalBody"></div>
+  </div>
+</div>
 </body>
 </html>

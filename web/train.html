@@ -30,6 +30,24 @@ body { font: 14px/1.6 -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-seri
 .btn-primary { background: #54a0ff; color: #fff; }
 .btn-primary:hover:not(:disabled) { background: #2e86de; }
 .status { color: #8395a7; font-size: 13px; margin-left: auto; }
+/* 品种选择按钮 */
+.sym-btn { padding: 8px 14px; border: 1px solid #2d3436; border-radius: 6px; background: #1a2a3a; color: #c8d6e5; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sym-btn:hover { border-color: #54a0ff; }
+.sym-btn::after { content: '▾'; font-size: 10px; color: #576574; }
+/* 模态弹框 */
+.modal-overlay { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; }
+.modal-overlay.open { display: flex; }
+.modal-box { background: #152238; border: 1px solid #2d3436; border-radius: 12px; padding: 24px; max-width: 620px; width: 90%; max-height: 80vh; overflow-y: auto; }
+.modal-box h3 { font-size: 15px; color: #8395a7; margin-bottom: 16px; }
+.modal-group { margin-bottom: 16px; }
+.modal-group:last-child { margin-bottom: 0; }
+.modal-group .group-title { font-size: 12px; color: #576574; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #1a2a3a; }
+.modal-symbols { display: flex; flex-wrap: wrap; gap: 6px; }
+.modal-sym { padding: 6px 14px; border: 1px solid #2d3436; border-radius: 6px; background: #1a2a3a; color: #c8d6e5; font-size: 13px; cursor: pointer; transition: all .15s; white-space: nowrap; }
+.modal-sym:hover { border-color: #54a0ff; color: #54a0ff; }
+.modal-sym.active { border-color: #e8c84a; color: #e8c84a; background: #e8c84a11; }
+.modal-random { display: block; width: 100%; padding: 10px; margin-bottom: 12px; border: 1px dashed #2d3436; border-radius: 8px; background: transparent; color: #c8d6e5; font-size: 14px; cursor: pointer; text-align: center; transition: all .15s; }
+.modal-random:hover { border-color: #54a0ff; color: #54a0ff; }
 
 /* Score summary */
 .score-bar { display: none; gap: 16px; align-items: center; padding: 12px 16px; background: #1a2a3a; border-radius: 8px; margin-bottom: 16px; flex-wrap: wrap; font-size: 13px; }
@@ -127,9 +145,7 @@ tr:hover td { background: #1a2a3a; }
   </div>
 
   <div class="controls">
-    <select id="symbol">
-      <option value="random">🎲 随机品种</option>
-    </select>
+    <button id="symBtn" class="sym-btn" onclick="openSymModal()">🎲 随机品种</button>
     <button class="btn btn-primary" id="startBtn" onclick="startTraining()">开始训练</button>
     <span class="status" id="status">就绪</span>
   </div>
@@ -249,8 +265,9 @@ const MIN_SEG = 40;
 const MAX_SEG = 70;
 const FEE_PER_LOT = 10; // per side
 
-const PREFERRED_SYMS = ['TA','MA','SA','FG','M','I','P','CU','AU','AG','RB','SC','SR','CF','RM','OI','EG','EB'];
 let ALL_DATA = {};
+let SYMBOLS = [];
+let CURRENT_SYM = '';
 let segment = [];
 let segmentSymbol = '';
 let segmentStartIdx = 0;
@@ -278,7 +295,6 @@ async function loadData(symbol) {
 
 async function loadAllData() {
   const status = document.getElementById('status');
-  const sel = document.getElementById('symbol');
   status.textContent = '加载品种列表...';
 
   // 本地 data/index.json 获取品种列表
@@ -291,27 +307,11 @@ async function loadAllData() {
     symbols = Object.keys(SYM_CFG);
   }
 
-  // 排序：常用优先 → 按品种名
-  symbols.sort((a, b) => {
-    const ia = PREFERRED_SYMS.indexOf(a);
-    const ib = PREFERRED_SYMS.indexOf(b);
-    if (ia !== -1 && ib !== -1) return ia - ib;
-    if (ia !== -1) return -1;
-    if (ib !== -1) return 1;
-    return SYM_CFG[a].name.localeCompare(SYM_CFG[b].name, 'zh');
-  });
+  // 按品种名排序
+  symbols.sort((a, b) => SYM_CFG[a].name.localeCompare(SYM_CFG[b].name, 'zh'));
 
-  // 动态填充品种选择器（保持 "随机品种" 在第一位）
-  const randomOpt = sel.querySelector('option[value="random"]');
-  sel.innerHTML = '';
-  sel.appendChild(randomOpt);
-  for (const sym of symbols) {
-    const opt = document.createElement('option');
-    opt.value = sym;
-    const cfg = SYM_CFG[sym];
-    opt.textContent = (cfg ? cfg.name : sym) + ' (' + sym + ')' + (cfg && cfg.ex ? ' · ' + cfg.ex : '');
-    sel.appendChild(opt);
-  }
+  SYMBOLS = symbols;
+  CURRENT_SYM = '';
 
   status.textContent = symbols.length + ' 品种可选，点击开始训练';
   return true;
@@ -347,12 +347,10 @@ function linearProjected(arr, lookback) {
 }
 
 async function pickSegment() {
-  let sym = document.getElementById('symbol').value;
-  if (sym === 'random') {
-    const opts = [...document.getElementById('symbol').options].filter(o => o.value !== 'random');
-    if (opts.length === 0) { document.getElementById('status').textContent = '无品种可选'; return false; }
-    sym = opts[Math.floor(Math.random() * opts.length)].value;
-    document.getElementById('symbol').value = sym;
+  let sym = CURRENT_SYM;
+  if (!sym) {
+    if (SYMBOLS.length === 0) { document.getElementById('status').textContent = '无品种可选'; return false; }
+    sym = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
   }
 
   // 按需加载数据
@@ -399,7 +397,7 @@ async function startTraining() {
   document.getElementById('startBtn').textContent = '重新训练';
   document.getElementById('scoreBar').classList.remove('show');
   document.getElementById('chartHint').style.display = 'none';
-  document.getElementById('symbol').disabled = true;
+  document.getElementById('symBtn').disabled = true;
 
   updateUI();
   drawChart();
@@ -505,7 +503,7 @@ function updateFloatingPnl() {
 
 function endTraining() {
   state = 'done';
-  document.getElementById('symbol').disabled = false;
+  document.getElementById('symBtn').disabled = false;
   if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
   document.getElementById('btnAuto').classList.remove('on');
   document.getElementById('btnAuto').textContent = '▶ 自动';
@@ -989,6 +987,48 @@ function drawChart() {
 
 }
 
+/* ---- 品种选择弹框 ---- */
+function openSymModal() {
+  const overlay = document.getElementById('symModal');
+  const body = document.getElementById('symModalBody');
+  const groups = {};
+  for (const sym of SYMBOLS) {
+    const ex = SYM_CFG[sym].ex || '其他';
+    if (!groups[ex]) groups[ex] = [];
+    groups[ex].push(sym);
+  }
+  const exNames = { CZCE: '郑商所 (CZCE)', DCE: '大商所 (DCE)', SHFE: '上期所 (SHFE)', INE: '能源中心 (INE)' };
+  let html = '<button class="modal-random" onclick="pickSymbol(\'\')">🎲 随机品种</button>';
+  for (const [ex, syms] of Object.entries(groups)) {
+    html += '<div class="modal-group"><div class="group-title">' + (exNames[ex] || ex) + '</div><div class="modal-symbols">';
+    for (const sym of syms) {
+      const cfg = SYM_CFG[sym];
+      const active = sym === CURRENT_SYM ? ' active' : '';
+      html += '<button class="modal-sym' + active + '" onclick="pickSymbol(\'' + sym + '\')">' + cfg.name + ' (' + sym + ')</button>';
+    }
+    html += '</div></div>';
+  }
+  body.innerHTML = html;
+  overlay.classList.add('open');
+}
+
+function closeSymModal() {
+  document.getElementById('symModal').classList.remove('open');
+}
+
+function pickSymbol(sym) {
+  closeSymModal();
+  CURRENT_SYM = sym;
+  document.getElementById('symBtn').textContent = sym ? (SYM_CFG[sym].name + ' (' + sym + ')') : '🎲 随机品种';
+}
+
+document.addEventListener('click', function(e) {
+  const overlay = document.getElementById('symModal');
+  if (overlay.classList.contains('open') && e.target === overlay) {
+    closeSymModal();
+  }
+});
+
 // ── Init ──
 
 window.onload = async function() {
@@ -1000,5 +1040,13 @@ window.onresize = function() {
   if (state === 'playing' || state === 'done') drawChart();
 };
 </script>
+
+<!-- 品种选择弹框 -->
+<div class="modal-overlay" id="symModal">
+  <div class="modal-box">
+    <h3>选择品种</h3>
+    <div id="symModalBody"></div>
+  </div>
+</div>
 </body>
 </html>
