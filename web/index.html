@@ -411,6 +411,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
   const preStart = Math.max(0, firstIdx - LBK);
   let eq = CAP, peakEq = CAP, maxDd = 0, pos = null, posDays = 0;
   const mpHist = [], priceHist = [], trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
+  const stateByDate = {};  // date -> 当日收盘状态(eq/持仓/冷静期计数),供明日推演用
   let skipLong = 0, skipShort = 0, skipCount = SKIP;
   let prevCo = null, prevPo = null;
   let prevClose = firstIdx > 0 ? fullData[firstIdx - 1].c : data[0].o;
@@ -485,10 +486,10 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
       if (td) {
         // 波动率自适应过滤：ATR/价格 百分位
         if (VOL_FL > 0 || VOL_FH < 100) {
-          const curR = _atrRatio[_fullIdx];
+          const curR = _atrRatio[_fullIdx - 1];  // 用昨日的ATR/价格,避免使用进场当天收盘数据
           if (!isNaN(curR)) {
             let _vcnt = 0, _vblw = 0;
-            for (let _ri = 0; _ri < _fullIdx; _ri++) { const _rv = _atrRatio[_ri]; if (!isNaN(_rv)) { _vcnt++; if (_rv < curR) _vblw++; } }
+            for (let _ri = 0; _ri < _fullIdx - 1; _ri++) { const _rv = _atrRatio[_ri]; if (!isNaN(_rv)) { _vcnt++; if (_rv < curR) _vblw++; } }
             const _vpct = _vcnt > 0 ? _vblw / _vcnt * 100 : 50;
             if (_vpct < VOL_FL || _vpct > VOL_FH) td = null;
           }
@@ -566,6 +567,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
     prevMp = mp;
     prevBec = bec; prevBep = bep; prevIvs = ivs;
     eqCurve.push({ d, eq });
+    stateByDate[d] = { eq, posOpen: !!pos, skipLong, skipShort };
   }
   // 最后一单持仓浮盈浮亏计入 eq
   if (pos) {
@@ -576,7 +578,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
     eq += _upnl;
     eqCurve[eqCurve.length - 1].eq = eq;
   }
-  return { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos: pos, posDays };
+  return { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos: pos, posDays, stateByDate, atrRatio: _atrRatio };
 }
 
 function runBacktest() {
@@ -654,7 +656,7 @@ function runBacktest() {
   // Pre-compute analysis for every candle for dynamic hover
   window._analysisCache = [];
   for (let i = 0; i < data.length; i++) {
-    window._analysisCache[i] = genAnalysis(data, fullData, params, nextDirPred, core.trades, i);
+    window._analysisCache[i] = genAnalysis(data, fullData, params, nextDirPred, core.trades, i, core.stateByDate, core.atrRatio);
   }
   const _lastAnalysis = window._analysisCache[data.length - 1];
   const { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos, posDays } = core;
@@ -784,7 +786,7 @@ function runBacktest() {
     <div class="section"><h2>全部交易</h2><table class="recent"><tr><th>入场</th><th>出场</th><th>方向</th><th class="num">手数</th><th class="num">开仓价</th><th class="num">平仓价</th><th class="num">PnL</th><th>原因</th><th class="num">持仓</th></tr>\
       ' + recent.map(t => '<tr><td>' + t.entry + '</td><td>' + t.exit + '</td><td>' + dirText(t.dir) + '</td><td class="num">' + t.qty + '</td><td class="num">' + t.entryPx.toFixed(0) + '</td><td class="num">' + t.exitPx.toFixed(0) + '</td><td class="num ' + cls(t.pnl) + '">' + fmt(Math.round(t.pnl)) + '</td><td>' + t.reason + '</td><td class="num">' + Math.round(t.hold) + '天</td></tr>').join('') + '</table></div>';
 
-function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx) {
+function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, stateByDate, atrRatio) {
   const n = data.length;
   const idx = targetIdx !== undefined ? targetIdx : n - 1;
   const r = data[idx];
@@ -838,8 +840,57 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx) {
   if (trendDir === 'up' && spread < 0) projFactors.push('MP趋势向上但价格在MP下方,有回归引力');
   if (trendDir === 'down' && r.gex < 0 && r.vr < 1) projFactors.push('GEX为负+量比偏空,短期有下行压力');
   if (trendDir === 'down' && spread > 0) projFactors.push('MP趋势向下但价格在MP上方,有回归引力');
-  if (nd === 'long') projFactors.push('明日方向做多,系统有开仓信号');
-  if (nd === 'short') projFactors.push('明日方向做空,系统有开仓信号');
+  if (nd) {
+    const _st = stateByDate ? stateByDate[r.d] : null;
+    let _blocked = null;
+    const _conds = [];
+    if (!_st) {
+      _conds.push('状态:不可评估');
+    } else {
+      // 开仓执行条件(与回测一致,全部用今日收盘可知数据)
+      if ((nd === 'long' && _st.skipLong > 0) || (nd === 'short' && _st.skipShort > 0)) {
+        const _n = nd === 'long' ? _st.skipLong : _st.skipShort;
+        _conds.push('冷静期:剩' + _n + '天 ✗');
+        _blocked = '获利后冷静期未结束';
+      } else {
+        _conds.push('冷静期:未触发 ✓');
+      }
+      if (!_blocked) {
+        if (_st.posOpen) { _conds.push('持仓:今日收盘未平 ✗'); _blocked = '已有持仓'; }
+        else _conds.push('持仓:无 ✓');
+      }
+      if (!_blocked) {
+        const _VL = params.volFilterLow || 0, _VH = params.volFilterHigh || 100;
+        if (_VL > 0 || _VH < 100) {
+          const _rr = atrRatio;
+          const _curR = _rr ? _rr[lastPredIdx] : NaN;
+          let _vp = 50;
+          if (_rr && !isNaN(_curR)) {
+            let _vc = 0, _vb = 0;
+            for (let _j = 0; _j < lastPredIdx; _j++) { const _rv = _rr[_j]; if (!isNaN(_rv)) { _vc++; if (_rv < _curR) _vb++; } }
+            _vp = _vc > 0 ? _vb / _vc * 100 : 50;
+          }
+          if (_vp < _VL || _vp > _VH) { _conds.push('波动率:百分位' + _vp.toFixed(0) + '%(' + _VL + '~' + _VH + ') ✗'); _blocked = '波动率过滤'; }
+          else _conds.push('波动率:百分位' + _vp.toFixed(0) + '%(' + _VL + '~' + _VH + ') ✓');
+        } else {
+          _conds.push('波动率:未启用');
+        }
+      }
+      if (!_blocked) {
+        const _dn = r.c * params.mult * params.margin;
+        let _qty = 0;
+        if (_dn > 0) {
+          let _alloc = _st.eq < 500000 ? _st.eq : _st.eq * params.maxPos;
+          if (params.capLimit > 0) _alloc = Math.min(_alloc, params.capLimit);
+          _qty = Math.floor(_alloc / _dn);
+        }
+        if (_qty < 1) { _conds.push('资金:可开' + _qty + '手 ✗'); _blocked = '资金不足'; }
+        else _conds.push('资金:按今日权益可开' + _qty + '手 ✓');
+      }
+    }
+    projFactors.push('明日方向' + (nd === 'long' ? '做多' : '做空') + ',系统有开仓信号' + (_blocked ? ',但无法开仓:' + _blocked : ',明日可正常开仓'));
+    projFactors.push('开仓条件: ' + _conds.join(' | '));
+  }
   if (nd === null && trendDir) projFactors.push('明日方向无信号,系统不会新开仓');
   if (oiDrop) projFactors.push('期权换月期间,MP数据不稳定,建议等待新链积累足够OI');
   if (r.bec != null && r.bep != null) {
