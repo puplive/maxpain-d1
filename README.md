@@ -115,8 +115,9 @@ python scripts/build_web_data.py
 # 1. 去上期所官网下载 XLSX 到 file/shfe/
 #    期货放 fu2026/，期权放 opt2026/
 # 2. 转换
-python scripts/convert_shfe.py --date 2026
-python scripts/convert_shfe.py --date 20260629
+python scripts/convert_shfe.py --date 2026        # 全年
+python scripts/convert_shfe.py --date 202607      # 某月
+python scripts/convert_shfe.py --date 20260629    # 某天
 # 3. 构建
 python scripts/build_web_data.py
 ```
