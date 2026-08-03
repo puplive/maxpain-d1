@@ -1287,6 +1287,7 @@ function optimizeParam() {
         v, endEq: Math.round(core.eq),
         ret: round1((core.eq / p.capital - 1) * 100),
         trades: core.trades.length,
+        cov: round1(core.posDays / data.length * 100),
         wr: round1(wins.length / core.trades.length * 100),
         pf: lossSum > 0 ? round2(winSum / lossSum) : '∞',
         dd: round1(core.maxDd),
@@ -1308,6 +1309,7 @@ function optimizeParam() {
         <td class="num ' + cls(v.endEq - p.capital) + '">' + fmt(v.endEq) + '</td>\
         <td class="num ' + cls(v.ret) + '">' + pct(v.ret) + '</td>\
         <td class="num">' + v.trades + '</td>\
+        <td class="num">' + v.cov + '%</td>\
         <td class="num">' + v.wr + '%</td>\
         <td class="num">' + v.pf + '</td>\
         <td class="num">' + v.dd + '%</td>\
@@ -1318,7 +1320,7 @@ function optimizeParam() {
     result.innerHTML = '<div class="section"><h2>' + meta.label + ' 优化结果（按最终权益排序）</h2>\
       <p style="font-size:12px;color:#576574;margin-bottom:8px;">当前其他参数: lookback=' + p.lookback + ' | min%=' + (p.minPct*100).toFixed(1) + '% | 保本=' + (p.beTh*100).toFixed(1) + '% | 锁定=' + (p.lockPct*100).toFixed(0) + '%</p>\
       <table><tr>\
-        <th class="num">' + meta.label + '</th><th class="num">最终权益</th><th class="num">收益</th><th class="num">笔数</th><th class="num">胜率</th><th class="num">盈亏比</th><th class="num">回撤</th><th class="num">均PnL</th>\
+        <th class="num">' + meta.label + '</th><th class="num">最终权益</th><th class="num">收益</th><th class="num">笔数</th><th class="num">持仓覆盖率</th><th class="num">胜率</th><th class="num">盈亏比</th><th class="num">回撤</th><th class="num">均PnL</th>\
       </tr>' + rows + '</table></div>';
     status.textContent = '优化完成 | ' + values.length + '个值 | 最优 ' + meta.label + '=' + best.v + suffix + ' → ' + fmt(best.endEq);
     const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip', volFilterLow:'p_vol_low', volFilterHigh:'p_vol_high' };
