@@ -2102,6 +2102,20 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       ctx.fillText(data[i].d.slice(0, 7), toX(i), H - 10);
     }
 
+    // 期货换月标记: 日期轴底部小三角 (H-10 日期标签 与 H-36 蜡烛底部 之间)
+    ctx.fillStyle = '#fdcb6e';
+    for (let i = start; i < end && i < n; i++) {
+      if (i > 0 && data[i].fut_contract && data[i - 1].fut_contract && data[i].fut_contract !== data[i - 1].fut_contract) {
+        const x = toX(i);
+        ctx.beginPath();
+        ctx.moveTo(x, H - 18);
+        ctx.lineTo(x - 4.5, H - 27);
+        ctx.lineTo(x + 4.5, H - 27);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
     const sbY = H - 4, sbH = 3;
     ctx.fillStyle = '#1a2a3a';
     ctx.fillRect(pad.left, sbY, cw, sbH);
