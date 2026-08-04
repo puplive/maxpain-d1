@@ -382,8 +382,20 @@ function calcATR(data, period) {
   }
   return atr;
 }
+
+function calcRollSegStart(fullData) {
+  // 期权换月(expiry变化)后方向lookback重新累计: 返回每天的方向数据段起点index
+  const seg = new Int32Array(fullData.length);
+  let s = 0;
+  for (let i = 0; i < fullData.length; i++) {
+    if (i > 0 && fullData[i].expiry && fullData[i - 1].expiry && fullData[i].expiry !== fullData[i - 1].expiry) s = i;
+    seg[i] = s;
+  }
+  return seg;
+}
+
 function calcMpRebase(fullData) {
-  // 期权换月(expiry变化)时MP跳空,复权抹平:返回逐日累计偏移量,方向EMA用 adjusted = mp - offset
+  // 期权换月MP跳空累计偏移: 换月后不满lookback时, 用 对齐当前水平的复权MP 补齐缺口
   const off = new Float64Array(fullData.length);
   let cum = 0, prevExp = null, prevMp = null;
   for (let i = 0; i < fullData.length; i++) {
@@ -399,12 +411,34 @@ function calcMpRebase(fullData) {
   return off;
 }
 
+function dirMpHist(fullData, off, rollSeg, i, lookback) {
+  // 方向lookback用的MP序列: 换月后不满窗口时, 缺几天就用复权(对齐当前MP水平)的换月前数据补齐
+  if (i < 0) return [];
+  const R = rollSeg[i];
+  const segLen = i - R + 1;
+  const hist = [];
+  if (segLen >= lookback) {
+    for (let k = i - lookback + 1; k <= i; k++) hist.push(fullData[k].mp);
+  } else {
+    const need = lookback - segLen;
+    const fillStart = Math.max(0, R - need);
+    const anchor = off[R];
+    for (let k = fillStart; k < R; k++) {
+      const m = fullData[k].mp;
+      hist.push(m != null ? m - off[k] + anchor : m);
+    }
+    for (let k = R; k <= i; k++) hist.push(fullData[k].mp);
+  }
+  return hist;
+}
+
 function computeNextDirPred(fullData, params) {
   const n = fullData.length;
   const preds = new Array(n).fill(null);
-  const mpOff = calcMpRebase(fullData);
+  const off = calcMpRebase(fullData);
+  const rollSeg = calcRollSegStart(fullData);
   for (let i = 0; i < n; i++) {
-    const mpHist = fullData.slice(0, i + 1).map((r, j) => r.mp != null ? r.mp - mpOff[j] : r.mp);
+    const mpHist = dirMpHist(fullData, off, rollSeg, i, params.lookback);
     const { dir: td } = emaDirection(mpHist, params.lookback, params.minPct);
     let nd = null;
     if (td === 'up') nd = 'long';
@@ -428,7 +462,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
   const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, volFilterLow: VOL_FL, volFilterHigh: VOL_FH, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
   const preStart = Math.max(0, firstIdx - LBK);
   let eq = CAP, peakEq = CAP, maxDd = 0, pos = null, posDays = 0;
-  const mpHist = [], priceHist = [], trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
+  const trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
   const stateByDate = {};  // date -> 当日收盘状态(eq/持仓/冷静期计数),供明日推演用
   let skipLong = 0, skipShort = 0, skipCount = SKIP;
   let prevCo = null, prevPo = null;
@@ -436,7 +470,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
   let prevMp = firstIdx > 0 ? fullData[firstIdx - 1].mp : data[0].mp;
   let prevBec = null, prevBep = null, prevIvs = null;
   const mpOff = calcMpRebase(fullData);
-  for (let i = preStart; i < firstIdx; i++) { mpHist.push(fullData[i].mp != null ? fullData[i].mp - mpOff[i] : fullData[i].mp); priceHist.push(fullData[i].c); }
+  const rollSeg = calcRollSegStart(fullData);
   const fullAtr = calcATR(fullData, ATR_PERIOD);
   // ATR/价格 比率（用于波动率过滤）
   const _atrRatio = fullData.map((r, i) => fullAtr[i] / r.c);
@@ -463,7 +497,8 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
       let exitPx = null;
 
       if (!exitPx) {
-        const { dir: currDir } = emaDirection(mpHist, LBK, MIN_PCT);
+        // 方向判断用 换月后复权补齐的lookback MP (截至昨日)
+        const { dir: currDir } = _fullIdx > 0 ? emaDirection(dirMpHist(fullData, mpOff, rollSeg, _fullIdx - 1, LBK), LBK, MIN_PCT) : { dir: null };
         if (currDir !== pos.entryTrend && currDir !== null) { exitPx = row.o; reason = '方向反转'; }
       }
 
@@ -592,7 +627,6 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
     } else {
       stopCurve.push({ d, stop: null, breakLevel: null });
     }
-    mpHist.push(mp != null ? mp - mpOff[_fullIdx] : mp); priceHist.push(px);
     prevCo = co; prevPo = po;
     prevClose = px;
     prevMp = mp;
@@ -836,9 +870,11 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
   const n = data.length;
   const idx = targetIdx !== undefined ? targetIdx : n - 1;
   const r = data[idx];
+  // 期权换月后方向lookback: 不满窗口时缺几天就复权补齐
   const mpOff = calcMpRebase(fullData);
-  const mpFirst = fullData.findIndex(x => x.d === data[0].d);
-  const mpHist = data.slice(0, idx + 1).map((x, j) => x.mp != null ? x.mp - mpOff[mpFirst + j] : x.mp);
+  const rollSeg = calcRollSegStart(fullData);
+  const mpFirst = Math.max(0, fullData.findIndex(x => x.d === data[0].d));
+  const mpHist = dirMpHist(fullData, mpOff, rollSeg, Math.min(fullData.length - 1, mpFirst + idx), params.lookback);
   const { dir: trendDir } = emaDirection(mpHist, params.lookback, params.minPct);
   const lastPredIdx = fullData.findIndex(x => x.d === r.d);
   const nd = lastPredIdx >= 0 ? nextDirPred[lastPredIdx] : null;
@@ -980,7 +1016,7 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
   const evRows = [];
   for (let i = evStart; i < evEnd; i++) {
     const d = data[i];
-    const sub = data.slice(0, i + 1).map(x => x.mp);
+    const sub = dirMpHist(fullData, mpOff, rollSeg, Math.min(fullData.length - 1, mpFirst + i), params.lookback);
     const { dir: td } = emaDirection(sub, params.lookback, params.minPct);
     const dayTrades = evTradeMap[d.d] || [];
     const evs = [];
@@ -1405,6 +1441,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
   const n = data.length;
+  const mpOff = calcMpRebase(data);
+  const rollSeg = calcRollSegStart(data);
 
   const subCanvas = document.getElementById('subChart');
   var _subGex, _subSkewD, _subMinG, _subMaxG, _subMinS, _subMaxS;
@@ -1614,7 +1652,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     const absSkew = Math.abs(parseFloat(oiSkew) / 100);
     const oiDir = absSkew < 0.3 ? (parseFloat(oiSkew) > 0 ? '涨' : '跌') : (parseFloat(oiSkew) > 0 ? '跌⚠' : '涨⚠');
     const vrDir = row.vr != null ? (row.vr > 1 ? '涨' : row.vr < 1 ? '跌' : '—') : '';
-    const subHist = data.slice(0, idx + 1).map(r => r.mp);
+    const subHist = dirMpHist(data, mpOff, rollSeg, idx, params.lookback);
     const { dir: trendDir } = emaDirection(subHist, params.lookback, params.minPct);
     // MP EMA & 偏离
     const _mpEmaVals = subHist.slice(-params.lookback);
@@ -2105,8 +2143,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     // 期货换月标记: 空心三角 + "换"字, 悬在蜡烛图底部边缘下 (H-36)
     ctx.strokeStyle = '#fdcb6e';
     ctx.fillStyle = '#fdcb6e';
-    ctx.lineWidth = 1;
-    ctx.font = 'bold 7px sans-serif';
+    ctx.lineWidth = 0.5;
+    ctx.font = 'bold 5px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let i = start; i < end && i < n; i++) {
@@ -2114,11 +2152,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
         const x = toX(i);
         ctx.beginPath();
         ctx.moveTo(x, H - 36);
-        ctx.lineTo(x - 6, H - 46);
-        ctx.lineTo(x + 6, H - 46);
+        ctx.lineTo(x - 4.5, H - 45);
+        ctx.lineTo(x + 4.5, H - 45);
         ctx.closePath();
         ctx.stroke();
-        ctx.fillText('换', x, H - 41);
+        ctx.fillText('换', x, H - 42.5);
       }
     }
     ctx.textBaseline = 'alphabetic';
