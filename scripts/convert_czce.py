@@ -371,7 +371,8 @@ def process_one(sym, fut, opt, date=None, mult=10):
                                  'h': float(r.get('最高价', 0)), 'l': float(r.get('最低价', 0)),
                                  'fv': float(r.get('成交量(手)', 0)),
                                  'foi': float(r.get('持仓量', 0)),
-                                 'fto': float(r.get('成交额(万元)', 0))}
+                                 'fto': float(r.get('成交额(万元)', 0)),
+                                 'fc': str(r.get('合约代码', ''))}
         # 近月连续：取成交量>0且收盘价>0中交割月最早的
         if vol_col:
             active = g[(pd.to_numeric(g[vol_col], errors='coerce') > 0) & (pd.to_numeric(g['今收盘'], errors='coerce') > 0)]
@@ -527,6 +528,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
                         'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
                         'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,
                         'fut_vol': row['fv'], 'fut_oi': row['foi'], 'fut_turnover': row['fto'],
+                        'fut_contract': row['fc'],
                         'atm_iv': atm_iv}
     return result
 

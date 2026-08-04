@@ -477,6 +477,7 @@ def process_symbol(sym, prefix, year, date=None):
             'fut_vol': float(row['volume']),
             'fut_oi': float(row['open_interest']),
             'fut_turnover': float(row['turnover']),
+            'fut_contract': str(row['合约名称']),
             'atm_iv': atm_iv,
         }
 

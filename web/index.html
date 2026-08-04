@@ -382,11 +382,29 @@ function calcATR(data, period) {
   }
   return atr;
 }
+function calcMpRebase(fullData) {
+  // 期权换月(expiry变化)时MP跳空,复权抹平:返回逐日累计偏移量,方向EMA用 adjusted = mp - offset
+  const off = new Float64Array(fullData.length);
+  let cum = 0, prevExp = null, prevMp = null;
+  for (let i = 0; i < fullData.length; i++) {
+    const r = fullData[i];
+    const curMp = r.mp;
+    if (r.expiry && prevExp && curMp != null && prevMp != null && r.expiry !== prevExp) {
+      cum += curMp - prevMp;
+    }
+    off[i] = cum;
+    prevExp = r.expiry;
+    prevMp = curMp;
+  }
+  return off;
+}
+
 function computeNextDirPred(fullData, params) {
   const n = fullData.length;
   const preds = new Array(n).fill(null);
+  const mpOff = calcMpRebase(fullData);
   for (let i = 0; i < n; i++) {
-    const mpHist = fullData.slice(0, i + 1).map(r => r.mp);
+    const mpHist = fullData.slice(0, i + 1).map((r, j) => r.mp != null ? r.mp - mpOff[j] : r.mp);
     const { dir: td } = emaDirection(mpHist, params.lookback, params.minPct);
     let nd = null;
     if (td === 'up') nd = 'long';
@@ -417,7 +435,8 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
   let prevClose = firstIdx > 0 ? fullData[firstIdx - 1].c : data[0].o;
   let prevMp = firstIdx > 0 ? fullData[firstIdx - 1].mp : data[0].mp;
   let prevBec = null, prevBep = null, prevIvs = null;
-  for (let i = preStart; i < firstIdx; i++) { mpHist.push(fullData[i].mp); priceHist.push(fullData[i].c); }
+  const mpOff = calcMpRebase(fullData);
+  for (let i = preStart; i < firstIdx; i++) { mpHist.push(fullData[i].mp != null ? fullData[i].mp - mpOff[i] : fullData[i].mp); priceHist.push(fullData[i].c); }
   const fullAtr = calcATR(fullData, ATR_PERIOD);
   // ATR/价格 比率（用于波动率过滤）
   const _atrRatio = fullData.map((r, i) => fullAtr[i] / r.c);
@@ -430,6 +449,17 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
       : (prevCo !== null ? (prevCo - prevPo) / (prevCo + prevPo + 1e-10) : (co - po) / (co + po + 1e-10));
     let reason = '';
     if (pos) {
+      const curFc = row.fut_contract;
+      const prevFc = _fullIdx > 0 ? fullData[_fullIdx - 1].fut_contract : null;
+      if (curFc && prevFc && curFc !== prevFc) {
+        // 期货换月: 昨收平旧仓(旧合约最后价) + 今开重开新仓, 跳空不计入交易盈亏
+        const rollPnl = (prevClose - pos.entryPx) * pos.qty * mult * (pos.direction === 'long' ? 1 : -1);
+        const rollFee = 10 * pos.qty * 2;
+        trades.push({ entry: pos.entryDate, exit: d, entryPx: pos.entryPx, exitPx: prevClose, dir: pos.direction, qty: pos.qty, pnl: rollPnl - rollFee, reason: '换月', entryReason: pos.entryReason, hold: (new Date(d) - new Date(pos.entryDate)) / 864e5 });
+        eq += rollPnl - rollFee;
+        const rAtr = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
+        pos = { direction: pos.direction, entryPx: op, entryDate: d, qty: pos.qty, entryReason: pos.entryReason, peakPx: op, beActive: false, entryTrend: pos.direction === 'long' ? 'up' : 'down', entryStopLevel: pos.direction === 'long' ? op - (isNaN(rAtr) ? op * 0.005 : rAtr * ENTRY_ATR) : op + (isNaN(rAtr) ? op * 0.005 : rAtr * ENTRY_ATR) };
+      } else {
       let exitPx = null;
 
       if (!exitPx) {
@@ -469,6 +499,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
           if (pos.direction === 'long') skipShort = skipCount; else skipLong = skipCount;
         }
         pos = null;
+      }
       }
     }
 
@@ -561,7 +592,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
     } else {
       stopCurve.push({ d, stop: null, breakLevel: null });
     }
-    mpHist.push(mp); priceHist.push(px);
+    mpHist.push(mp != null ? mp - mpOff[_fullIdx] : mp); priceHist.push(px);
     prevCo = co; prevPo = po;
     prevClose = px;
     prevMp = mp;
@@ -805,7 +836,9 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
   const n = data.length;
   const idx = targetIdx !== undefined ? targetIdx : n - 1;
   const r = data[idx];
-  const mpHist = data.slice(0, idx + 1).map(x => x.mp);
+  const mpOff = calcMpRebase(fullData);
+  const mpFirst = fullData.findIndex(x => x.d === data[0].d);
+  const mpHist = data.slice(0, idx + 1).map((x, j) => x.mp != null ? x.mp - mpOff[mpFirst + j] : x.mp);
   const { dir: trendDir } = emaDirection(mpHist, params.lookback, params.minPct);
   const lastPredIdx = fullData.findIndex(x => x.d === r.d);
   const nd = lastPredIdx >= 0 ? nextDirPred[lastPredIdx] : null;
