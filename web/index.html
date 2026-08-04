@@ -2102,19 +2102,26 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       ctx.fillText(data[i].d.slice(0, 7), toX(i), H - 10);
     }
 
-    // 期货换月标记: 三角尖端顶住蜡烛图底部边缘 (H-36)
+    // 期货换月标记: 空心三角 + "换"字, 悬在蜡烛图底部边缘下 (H-36)
+    ctx.strokeStyle = '#fdcb6e';
     ctx.fillStyle = '#fdcb6e';
+    ctx.lineWidth = 1.5;
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     for (let i = start; i < end && i < n; i++) {
       if (i > 0 && data[i].fut_contract && data[i - 1].fut_contract && data[i].fut_contract !== data[i - 1].fut_contract) {
         const x = toX(i);
         ctx.beginPath();
         ctx.moveTo(x, H - 36);
-        ctx.lineTo(x - 5, H - 43);
-        ctx.lineTo(x + 5, H - 43);
+        ctx.lineTo(x - 9, H - 50);
+        ctx.lineTo(x + 9, H - 50);
         ctx.closePath();
-        ctx.fill();
+        ctx.stroke();
+        ctx.fillText('换', x, H - 44);
       }
     }
+    ctx.textBaseline = 'alphabetic';
 
     const sbY = H - 4, sbH = 3;
     ctx.fillStyle = '#1a2a3a';
