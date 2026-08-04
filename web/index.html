@@ -721,18 +721,16 @@ function runBacktest() {
 
   const byMo = {};
   trades.forEach(t => {
-    const m = t.exit.slice(0, 7);
+    const m = t.exit.slice(5, 7) + '月';
     if (!byMo[m]) byMo[m] = { ts: [], lc: 0, sc: 0 };
     byMo[m].ts.push(t);
     if (t.dir === 'long') byMo[m].lc++; else byMo[m].sc++;
   });
-  let moCumPnl = 0;
   const moHtml = Object.keys(byMo).sort().map(m => {
     const g = byMo[m], pnl = g.ts.reduce((s, t) => s + t.pnl, 0);
-    const startEq = CAP + moCumPnl;
-    moCumPnl += pnl;
-    const moRet = startEq > 0 ? pnl / startEq * 100 : 0;
-    return '<tr><td>' + m + '</td><td class="num">' + g.ts.length + '</td><td class="center">' + g.lc + '/' + g.sc + '</td><td class="num ' + cls(pnl) + '">' + fmt(pnl) + '</td><td class="num ' + cls(moRet) + '">' + round1(moRet) + '%</td><td class="num ' + cls(pnl/g.ts.length) + '">' + fmt(Math.round(pnl/g.ts.length)) + '</td><td class="num">' + round1(g.ts.filter(t=>t.pnl>0).length/g.ts.length*100) + '%</td></tr>';
+    const w = g.ts.filter(t=>t.pnl>0), l = g.ts.filter(t=>t.pnl<=0);
+    const wp = w.reduce((s,t)=>s+t.pnl,0), lp = l.reduce((s,t)=>s+Math.abs(t.pnl),0);
+    return '<tr><td>' + m + '</td><td class="num">' + g.ts.length + '</td><td class="center">' + g.lc + '/' + g.sc + '</td><td class="num ' + cls(pnl) + '">' + fmt(pnl) + '</td><td class="num ' + cls(pnl/g.ts.length) + '">' + fmt(Math.round(pnl/g.ts.length)) + '</td><td class="num">' + round1(w.length/g.ts.length*100) + '%</td><td class="num">' + (lp>0?round2(wp/lp):'∞') + '</td></tr>';
   }).join('');
 
   const byRs = {};
@@ -794,7 +792,7 @@ function runBacktest() {
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th></tr>' + yrHtml + '</table></div>\
-    <div class="section"><h2>按月份</h2><table><tr><th>月份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">月度收益%</th><th class="num">均PnL</th><th class="num">胜率</th></tr>' + moHtml + '</table></div>\
+    <div class="section"><h2>按月份（跨年合并）</h2><table><tr><th>月份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + moHtml + '</table></div>\
     <div class="section"><h2>按退出原因</h2><table><tr><th>原因</th><th class="num">笔数</th><th class="num">占比</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">均持仓</th></tr>' + rsHtml + '</table></div>\
     <div class="section"><h2>按持仓天数</h2><table><tr><th>持仓</th><th class="num">笔数</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + holdHtml + '</table></div>\
     <div class="section"><h2>按方向</h2><table><tr><th>方向</th><th class="num">笔数</th><th class="num">总PnL</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + dirHtml + '</table></div>\
