@@ -452,6 +452,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
         # 最近到期日（用 regex 提取唯一合约码，避免 iterrows）
         from datetime import datetime, date as dt_date
         nearest_expiry = None
+        nearest_code = None  # 最近到期期权对应的标的期货合约号（如 TA201）
         nearest_dte = 0
         seen_codes = set()
         for code in o['合约代码'].str.extract(r'^([A-Z]+\d{3})[CP]', expand=False).dropna().unique():
@@ -462,6 +463,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
             if isinstance(expiry_str, str):
                 if nearest_expiry is None or expiry_str < nearest_expiry:
                     nearest_expiry = expiry_str
+                    nearest_code = code
             else:
                 # AKShare只有当年日历，2027+无法精确计算，回退到15号近似
                 m2 = re.search(r'[A-Z]+(\d{3})$', str(code))
@@ -477,6 +479,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
                     approx = f'{cy2:04d}-{mo2:02d}-15'  # 2027+月份回退到15号近似
                     if nearest_expiry is None or approx < nearest_expiry:
                         nearest_expiry = approx
+                        nearest_code = code
         if nearest_expiry:
             td = datetime.strptime(date, '%Y-%m-%d').date()
             ex = datetime.strptime(nearest_expiry, '%Y-%m-%d').date()
@@ -524,7 +527,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
                         'h': row['h'], 'l': row['l'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep,
                         'vr': vr, 'ivs': ivs, 'gex': gex, 'oc_chain': oc_chain,
-                        'expiry': nearest_expiry, 'dte': nearest_dte,
+                        'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,
                         'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
                         'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,
                         'fut_vol': row['fv'], 'fut_oi': row['foi'], 'fut_turnover': row['fto'],

@@ -432,6 +432,12 @@ function dirMpHist(fullData, off, rollSeg, i, lookback) {
   return hist;
 }
 
+function sameContractMonth(fc, opt) {
+  // 期货主力合约与最近到期期权是否同一合约: fut_contract === opt_contract
+  // (opt_contract 转换时记录, 与 fut_contract 同一编码, 直接字符串比对)
+  return !!(fc && opt && String(fc) === String(opt));
+}
+
 function computeNextDirPred(fullData, params) {
   const n = fullData.length;
   const preds = new Array(n).fill(null);
@@ -592,8 +598,11 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
       }
     }
 
-    peakEq = Math.max(peakEq, eq);
-    maxDd = Math.max(maxDd, (peakEq - eq) / peakEq * 100);
+    // 当日收盘权益 = 已实现 eq + 持仓浮盈浮亏 (标记到市)
+    const floatPnl = pos ? (pos.direction === 'long' ? (px - pos.entryPx) : (pos.entryPx - px)) * pos.qty * mult : 0;
+    const mtmEq = eq + floatPnl;
+    peakEq = Math.max(peakEq, mtmEq);
+    maxDd = Math.max(maxDd, (peakEq - mtmEq) / peakEq * 100);
     if (pos) posDays++;
     if (pos) {
       if (pos.direction === 'long' && px > pos.peakPx) {
@@ -631,8 +640,8 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
     prevClose = px;
     prevMp = mp;
     prevBec = bec; prevBep = bep; prevIvs = ivs;
-    eqCurve.push({ d, eq });
-    stateByDate[d] = { eq, posOpen: !!pos, skipLong, skipShort };
+    eqCurve.push({ d, eq: mtmEq });
+    stateByDate[d] = { eq: mtmEq, posOpen: !!pos, skipLong, skipShort };
   }
   // 最后一单持仓浮盈浮亏计入 eq
   if (pos) {
@@ -853,7 +862,8 @@ function runBacktest() {
         <label style="cursor:pointer;"><input type="checkbox" id="t_bec" checked onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label>\
-        <label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期仓</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+        <label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label>\
+        <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期仓</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th></tr>' + yrHtml + '</table></div>\
@@ -1087,7 +1097,7 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
   status.textContent = '完成 | 数据: ' + data[0].d + ' ~ ' + data[data.length-1].d + ' | ' + trades.length + '笔交易' + capInfo;
   btn.disabled = false;
   setTimeout(function() {
-    drawChart(data, trades, params, stopCurve, nextDirPred, openPos);
+    drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurve, CAP);
     drawEquityCurve(eqCurve, CAP);
   }, 0);
 }
@@ -1426,7 +1436,7 @@ function resetParams() {
   toggleManual();
 }
 
-function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
+function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurve, cap) {
   const infoEl = document.getElementById('chartInfo');
   const canvas = document.getElementById('chart');
   if (!canvas) return;
@@ -1822,6 +1832,20 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       ctx.fillStyle = '#c8d6e5';
       ctx.textAlign = 'center';
       ctx.fillText(dateText, hx, pad.top + ch + 15);
+      if (document.getElementById('t_eq').checked && eqCurve && state.hoverIdx + 1 < eqCurve.length) {
+        const eqv = eqCurve[state.hoverIdx + 1].eq;
+        const eqPct = cap > 0 ? (eqv / cap - 1) * 100 : 0;
+        const eqText = '收益 ' + Math.round(eqv).toLocaleString() + ' (' + (eqPct >= 0 ? '+' : '') + eqPct.toFixed(1) + '%)';
+        ctx.font = 'bold 11px sans-serif';
+        const eqW = ctx.measureText(eqText).width;
+        let eqX = hx + 8;
+        if (eqX + eqW + 12 > W - pad.right) eqX = hx - eqW - 20;
+        ctx.fillStyle = '#1a2a3a';
+        ctx.fillRect(eqX, pad.top + 4, eqW + 12, 18);
+        ctx.fillStyle = '#48dbfb';
+        ctx.textAlign = 'left';
+        ctx.fillText(eqText, eqX + 6, pad.top + 17);
+      }
       ctx.restore();
     }
 
@@ -1859,6 +1883,48 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
     ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.setLineDash([]);
+    }
+
+    // 收益曲线叠加（自有归一化刻度, 映射到蜡烛图区域; 收益=eqCurve[i+1]）
+    if (document.getElementById('t_eq').checked && eqCurve) {
+      let eMin = Infinity, eMax = -Infinity;
+      for (let i = start; i < end; i++) {
+        const p = eqCurve[i + 1];
+        if (!p) continue;
+        if (p.eq < eMin) eMin = p.eq;
+        if (p.eq > eMax) eMax = p.eq;
+      }
+      if (isFinite(eMin) && isFinite(eMax) && eMax >= eMin) {
+        const eRng = (eMax - eMin) || 1;
+        eMin -= eRng * 0.1; eMax += eRng * 0.1;
+        const eScale = ch / (eMax - eMin);
+        const toEqY = v => pad.top + ch - (v - eMin) * eScale;
+        // 本金线
+        ctx.strokeStyle = '#8395a7';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.globalAlpha = 0.8;
+        const capY = toEqY(cap);
+        ctx.beginPath(); ctx.moveTo(pad.left, capY); ctx.lineTo(W - pad.right, capY); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#8395a7'; ctx.textAlign = 'right'; ctx.font = '10px sans-serif';
+        ctx.fillText('本金', W - pad.right - 2, capY - 3);
+        ctx.globalAlpha = 1;
+        // 收益曲线
+        ctx.strokeStyle = '#48dbfb';
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.9;
+        ctx.beginPath();
+        let eqStarted = false;
+        for (let i = start; i < end; i++) {
+          const p = eqCurve[i + 1];
+          if (!p) continue;
+          const x = toX(i), y = toEqY(p.eq);
+          if (!eqStarted) { ctx.moveTo(x, y); eqStarted = true; } else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
     }
 
     if (document.getElementById('t_bec').checked) {
@@ -2160,6 +2226,16 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos) {
       }
     }
     ctx.textBaseline = 'alphabetic';
+
+    // 期货/期权同一合约月标记: K线图底部边界线(H-36)上点小红点
+    ctx.fillStyle = '#e74c3c';
+    for (let i = start; i < end && i < n; i++) {
+      if (sameContractMonth(data[i].fut_contract, data[i].opt_contract)) {
+        ctx.beginPath();
+        ctx.arc(toX(i), H - 36, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
 
     const sbY = H - 4, sbH = 3;
     ctx.fillStyle = '#1a2a3a';
