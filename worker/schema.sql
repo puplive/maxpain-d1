@@ -56,6 +56,10 @@ CREATE TABLE IF NOT EXISTS backtest_params (
   mom_days INTEGER DEFAULT 3,
   vol_filter_low REAL DEFAULT 0,
   vol_filter_high REAL DEFAULT 0,
+  vol_target INTEGER DEFAULT 0,
+  vol_target_cap REAL DEFAULT 2,
+  ewma_filter_high REAL DEFAULT 0,
+  ewma_filter_low REAL DEFAULT 0,
   start_date TEXT,
   end_date TEXT,
   updated_at TEXT DEFAULT (datetime('now'))

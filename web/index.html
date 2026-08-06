@@ -154,6 +154,8 @@ tr:hover td { background: #1a2a3a; }
     <div class="param-group"><label>本金:</label><input type="number" id="p_capital" value="100000" min="10000" step="10000" class="wide"></div>
     <div class="param-group"><label>封顶(万):</label><input type="number" id="p_cap_limit" value="100" min="0" step="10" class="wide"></div>
 	    <div class="param-group"><label>波动过滤%:</label><input type="number" id="p_vol_low" value="5" min="0" max="50" step="5" class="wide" title="低于此百分位不开"> <input type="number" id="p_vol_high" value="95" min="50" max="100" step="5" class="wide" title="高于此百分位不开"></div>
+	    <div class="param-group"><label>目标化:</label><input type="number" id="p_vol_target" value="0" min="0" max="1" step="1" class="wide" title="1=开, 仓位按EWMA波动比值缩放"> <label>上限:</label><input type="number" id="p_vol_target_cap" value="2" min="1" max="5" step="0.5" class="wide" title="缩放上限, 波动低时最多放大到此倍数"></div>
+	    <div class="param-group"><label>EWMA挡高:</label><input type="number" id="p_ewma_high" value="1.2" min="0" max="2" step="0.1" class="wide" title="当期/长期EWMA比值高于此值挡掉, 0=关"> <label>挡低:</label><input type="number" id="p_ewma_low" value="0.75" min="0" max="1" step="0.05" class="wide" title="比值低于此值挡掉, 0=关"></div>
     <div class="param-group"><label>开始:</label><input type="date" id="p_start" style="width:120px;padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font:12px sans-serif;"></div>
     <div class="param-group"><label>结束:</label><input type="date" id="p_end" style="width:120px;padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font:12px sans-serif;"></div>
     <div class="param-group" style="border-left:1px solid #2d3436;padding-left:12px;">
@@ -243,6 +245,10 @@ let defaultParams = {
   lockPct: 50,
   volFilterLow: 5,
   volFilterHigh: 95,
+  volTarget: 0,
+  volTargetCap: 2,
+  ewmaFilterHigh: 1.2,
+  ewmaFilterLow: 0.75,
   capital: 100000,
   capLimit: 200,
   skipCount: 0,
@@ -465,7 +471,7 @@ function computeNextDirPred(fullData, params) {
 function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, btEnd) {
   btStart = btStart || 0;
   btEnd = btEnd || data.length;
-  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, volFilterLow: VOL_FL, volFilterHigh: VOL_FH, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
+  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, volFilterLow: VOL_FL, volFilterHigh: VOL_FH, volTarget: VT, volTargetCap: VT_CAP, ewmaFilterHigh: EWF_H, ewmaFilterLow: EWF_L, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
   const preStart = Math.max(0, firstIdx - LBK);
   let eq = CAP, peakEq = CAP, maxDd = 0, pos = null, posDays = 0;
   const trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
@@ -480,6 +486,25 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
   const fullAtr = calcATR(fullData, ATR_PERIOD);
   // ATR/价格 比率（用于波动率过滤）
   const _atrRatio = fullData.map((r, i) => fullAtr[i] / r.c);
+  // EWMA 波动率估计: 快=RiskMetrics 0.94(当期), 慢=0.99(长期目标), 供波动率目标化
+  const fastVol = new Float64Array(fullData.length);
+  const slowVol = new Float64Array(fullData.length);
+  {
+    let seedSum = 0, seedCnt = 0;
+    for (let i = 1; i < fullData.length && i <= 30; i++) {
+      const r = (fullData[i].c - fullData[i - 1].c) / fullData[i - 1].c;
+      if (isFinite(r)) { seedSum += r * r; seedCnt++; }
+    }
+    let fv = seedCnt > 2 ? seedSum / (seedCnt - 1) : 0, sv = fv;
+    for (let i = 1; i < fullData.length; i++) {
+      const r = (fullData[i].c - fullData[i - 1].c) / fullData[i - 1].c;
+      const rr = isFinite(r) ? r * r : 0;
+      fv = 0.94 * fv + 0.06 * rr;
+      sv = 0.99 * sv + 0.01 * rr;
+      fastVol[i] = Math.sqrt(fv);
+      slowVol[i] = Math.sqrt(sv);
+    }
+  }
 
   for (let _di = 0; _di < data.length; _di++) {
     const row = data[_di];
@@ -566,11 +591,31 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
             if (_vpct < VOL_FL || _vpct > VOL_FH) td = null;
           }
         }
+        // EWMA 波动率过滤: 当期/长期EWMA比值, 高于挡高阈值或低于挡低阈值都挡掉 (用昨日估计, 无前视)
+        if (td && (EWF_H > 0 || EWF_L > 0)) {
+          const _fi = _fullIdx - 1;
+          const _fv = _fi >= 1 ? fastVol[_fi] : NaN;
+          const _sv = _fi >= 1 ? slowVol[_fi] : NaN;
+          if (isFinite(_fv) && _fv > 1e-9 && isFinite(_sv)) {
+            const _ratio = _fv / _sv;
+            if ((EWF_H > 0 && _ratio > EWF_H) || (EWF_L > 0 && _ratio < EWF_L)) td = null;
+          }
+        }
         if (td) {
           const dn = op * mult * MR;
           if (dn > 0) {
             let alloc = eq < 500000 ? eq : eq * MAX_POS;
             if (CAP_LIMIT > 0) alloc = Math.min(alloc, CAP_LIMIT);
+            // 波动率目标化: 仓位按 长期EWMA波动/当期EWMA波动 缩放 (用昨日估计, 无前视)
+            if (VT > 0) {
+              const _fi = _fullIdx - 1;
+              const _fv = _fi >= 1 ? fastVol[_fi] : NaN;
+              const _sv = _fi >= 1 ? slowVol[_fi] : NaN;
+              if (isFinite(_fv) && _fv > 1e-9) {
+                const _sc = Math.min(VT_CAP > 0 ? VT_CAP : 2, Math.max(0.2, _sv / _fv));
+                alloc *= _sc;
+              }
+            }
             const qty = Math.floor(alloc / dn);
             if (qty >= 1) {
               const enAtr = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
@@ -716,6 +761,10 @@ function runBacktest() {
     atrMult: parseFloat(document.getElementById('p_atr_mult').value) || defaultParams.atrMult,
     volFilterLow: parseInt(document.getElementById('p_vol_low').value) || 0,
     volFilterHigh: parseInt(document.getElementById('p_vol_high').value) || 100,
+    volTarget: parseInt(document.getElementById('p_vol_target').value) || 0,
+    volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) || defaultParams.volTargetCap,
+    ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) || 0,
+    ewmaFilterLow: parseFloat(document.getElementById('p_ewma_low').value) || 0,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || defaultParams.lockPct) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
@@ -1124,6 +1173,10 @@ function setParamValues(p) {
   if (p.atrMult !== undefined) document.getElementById('p_atr_mult').value = p.atrMult;
   if (p.volFilterLow !== undefined) document.getElementById('p_vol_low').value = p.volFilterLow;
   if (p.volFilterHigh !== undefined) document.getElementById('p_vol_high').value = p.volFilterHigh;
+  if (p.volTarget !== undefined) document.getElementById('p_vol_target').value = p.volTarget;
+  if (p.volTargetCap !== undefined) document.getElementById('p_vol_target_cap').value = p.volTargetCap;
+  if (p.ewmaFilterHigh !== undefined) document.getElementById('p_ewma_high').value = p.ewmaFilterHigh;
+  if (p.ewmaFilterLow !== undefined) document.getElementById('p_ewma_low').value = p.ewmaFilterLow;
 }
 
 async function saveParams() {
@@ -1148,6 +1201,10 @@ async function saveParams() {
       skip_count: parseInt(document.getElementById('p_skip').value) || null,
       vol_filter_low: parseInt(document.getElementById('p_vol_low').value) || 0,
       vol_filter_high: parseInt(document.getElementById('p_vol_high').value) || 100,
+      vol_target: parseInt(document.getElementById('p_vol_target').value) || 0,
+      vol_target_cap: parseFloat(document.getElementById('p_vol_target_cap').value) || null,
+      ewma_filter_high: parseFloat(document.getElementById('p_ewma_high').value) || null,
+      ewma_filter_low: parseFloat(document.getElementById('p_ewma_low').value) || null,
       start_date: document.getElementById('p_start').value || null,
       end_date: document.getElementById('p_end').value || null,
     };
@@ -1182,6 +1239,10 @@ async function loadParams(sym) {
         skipCount: r.params.skip_count,
         volFilterLow: r.params.vol_filter_low,
         volFilterHigh: r.params.vol_filter_high,
+        volTarget: r.params.vol_target,
+        volTargetCap: r.params.vol_target_cap,
+        ewmaFilterHigh: r.params.ewma_filter_high,
+        ewmaFilterLow: r.params.ewma_filter_low,
       });
       if (r.params.start_date) document.getElementById('p_start').value = r.params.start_date;
       if (r.params.end_date) document.getElementById('p_end').value = r.params.end_date;
@@ -1219,6 +1280,10 @@ function runMonteCarlo() {
     atrMult: parseFloat(document.getElementById('p_atr_mult').value) || defaultParams.atrMult,
     volFilterLow: parseInt(document.getElementById('p_vol_low').value) || 0,
     volFilterHigh: parseInt(document.getElementById('p_vol_high').value) || 100,
+    volTarget: parseInt(document.getElementById('p_vol_target').value) || 0,
+    volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) || defaultParams.volTargetCap,
+    ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) || 0,
+    ewmaFilterLow: parseFloat(document.getElementById('p_ewma_low').value) || 0,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || defaultParams.lockPct) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
@@ -1344,6 +1409,10 @@ function optimizeParam() {
     atrMult: parseFloat(document.getElementById('p_atr_mult').value) || defaultParams.atrMult,
     volFilterLow: parseInt(document.getElementById('p_vol_low').value) || 0,
     volFilterHigh: parseInt(document.getElementById('p_vol_high').value) || 100,
+    volTarget: parseInt(document.getElementById('p_vol_target').value) || 0,
+    volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) || defaultParams.volTargetCap,
+    ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) || 0,
+    ewmaFilterLow: parseFloat(document.getElementById('p_ewma_low').value) || 0,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || defaultParams.lockPct) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
@@ -1417,7 +1486,7 @@ function optimizeParam() {
         <th class="num">' + meta.label + '</th><th class="num">最终权益</th><th class="num">收益</th><th class="num">笔数</th><th class="num">持仓覆盖率</th><th class="num">胜率</th><th class="num">盈亏比</th><th class="num">回撤</th><th class="num">均PnL</th>\
       </tr>' + rows + '</table></div>';
     status.textContent = '优化完成 | ' + values.length + '个值 | 最优 ' + meta.label + '=' + best.v + suffix + ' → ' + fmt(best.endEq);
-    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip', volFilterLow:'p_vol_low', volFilterHigh:'p_vol_high' };
+    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip', volFilterLow:'p_vol_low', volFilterHigh:'p_vol_high', volTarget:'p_vol_target', volTargetCap:'p_vol_target_cap', ewmaFilterHigh:'p_ewma_high', ewmaFilterLow:'p_ewma_low' };
     const el = document.getElementById(idMap[paramKey]);
     if (meta.unit) el.value = best.v.toFixed(1);
     else el.value = best.v;
