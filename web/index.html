@@ -135,27 +135,30 @@ tr:hover td { background: #1a2a3a; }
       <option value="lockPct">锁定%</option>
       <option value="maxPos">仓位%</option>
       <option value="skipCount">跳过次</option>
+      <option value="priceSlopeTh">逆势挡</option>
+      <option value="slopeDays">逆势窗</option>
     </select>
     <button class="btn" onclick="optimizeParam()" style="background:#8854d0;color:#fff;">优化</button>
     <span class="status" id="status">就绪</span>
   </div>
 
   <div class="params" id="paramBar">
-    <div class="param-group"><label>Lookback:</label><input type="number" id="p_lookback" value="21" min="5" max="60"></div>
-    <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" value="0.1" min="0" max="10" step="0.1" class="wide"></div>
-    <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" value="100" min="5" max="100" step="5" class="wide"></div>
-    <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" value="15" min="5" max="50" class="wide"></div>
-    <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" value="1" min="0" max="10" step="0.1" class="wide"></div>
-    <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" value="50" min="0" max="100" step="5" class="wide"></div>
-    <div class="param-group"><label>ATR周期:</label><input type="number" id="p_atr_period" value="14" min="5" max="60" step="1" class="wide"></div>
-    <div class="param-group"><label>入场ATR倍:</label><input type="number" id="p_entry_atr" value="1.5" min="0.5" max="5" step="0.1" class="wide"></div>
-    <div class="param-group"><label>追踪ATR倍:</label><input type="number" id="p_atr_mult" value="1" min="0.5" max="5" step="0.1" class="wide"></div>
-    <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" value="0" min="0" max="10" step="1" class="wide"></div>
-    <div class="param-group"><label>本金:</label><input type="number" id="p_capital" value="100000" min="10000" step="10000" class="wide"></div>
-    <div class="param-group"><label>封顶(万):</label><input type="number" id="p_cap_limit" value="100" min="0" step="10" class="wide"></div>
-	    <div class="param-group"><label>波动过滤%:</label><input type="number" id="p_vol_low" value="5" min="0" max="50" step="5" class="wide" title="低于此百分位不开"> <input type="number" id="p_vol_high" value="95" min="50" max="100" step="5" class="wide" title="高于此百分位不开"></div>
-	    <div class="param-group"><label>目标化:</label><input type="number" id="p_vol_target" value="0" min="0" max="1" step="1" class="wide" title="1=开, 仓位按EWMA波动比值缩放"> <label>上限:</label><input type="number" id="p_vol_target_cap" value="2" min="1" max="5" step="0.5" class="wide" title="缩放上限, 波动低时最多放大到此倍数"></div>
-	    <div class="param-group"><label>EWMA挡高:</label><input type="number" id="p_ewma_high" value="1.2" min="0" max="2" step="0.1" class="wide" title="当期/长期EWMA比值高于此值挡掉, 0=关"> <label>挡低:</label><input type="number" id="p_ewma_low" value="0.75" min="0" max="1" step="0.05" class="wide" title="比值低于此值挡掉, 0=关"></div>
+    <div class="param-group"><label>Lookback:</label><input type="number" id="p_lookback" min="5" max="60"></div>
+    <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" min="0" max="10" step="0.1" class="wide"></div>
+    <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" min="5" max="100" step="5" class="wide"></div>
+    <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" min="5" max="50" class="wide"></div>
+    <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" min="0" max="10" step="0.1" class="wide"></div>
+    <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" min="0" max="100" step="5" class="wide"></div>
+    <div class="param-group"><label>ATR周期:</label><input type="number" id="p_atr_period" min="5" max="60" step="1" class="wide"></div>
+    <div class="param-group"><label>入场ATR倍:</label><input type="number" id="p_entry_atr" min="0.5" max="5" step="0.1" class="wide"></div>
+    <div class="param-group"><label>追踪ATR倍:</label><input type="number" id="p_atr_mult" min="0.5" max="5" step="0.1" class="wide"></div>
+    <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" min="0" max="10" step="1" class="wide"></div>
+    <div class="param-group"><label>本金:</label><input type="number" id="p_capital" min="10000" step="10000" class="wide"></div>
+    <div class="param-group"><label>封顶(万):</label><input type="number" id="p_cap_limit" min="0" step="10" class="wide"></div>
+	    <div class="param-group"><label>波动过滤%:</label><input type="number" id="p_vol_low" min="0" max="50" step="5" class="wide" title="低于此百分位不开"> <input type="number" id="p_vol_high" min="50" max="100" step="5" class="wide" title="高于此百分位不开"></div>
+	    <div class="param-group"><label>目标化:</label><input type="number" id="p_vol_target" min="0" max="1" step="1" class="wide" title="1=开, 仓位按EWMA波动比值缩放"> <label>上限:</label><input type="number" id="p_vol_target_cap" min="1" max="5" step="0.5" class="wide" title="缩放上限, 波动低时最多放大到此倍数"></div>
+	    <div class="param-group"><label>EWMA挡高:</label><input type="number" id="p_ewma_high" min="0" max="2" step="0.1" class="wide" title="当期/长期EWMA比值高于此值挡掉, 0=关"> <label>挡低:</label><input type="number" id="p_ewma_low" min="0" max="1" step="0.05" class="wide" title="比值低于此值挡掉, 0=关"></div>
+	    <div class="param-group"><label>逆势挡:</label><input type="number" id="p_slope_th" min="0" max="0.01" step="0.001" class="wide" title="价格斜率阈值: 斜率<-此值不做多, >此值不做空, 0=关"> <label>窗:</label><input type="number" id="p_slope_days" min="5" max="60" step="1" class="wide" style="width:64px" title="判断逆势的斜率窗口天数"></div>
     <div class="param-group"><label>开始:</label><input type="date" id="p_start" style="width:120px;padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font:12px sans-serif;"></div>
     <div class="param-group"><label>结束:</label><input type="date" id="p_end" style="width:120px;padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font:12px sans-serif;"></div>
     <div class="param-group" style="border-left:1px solid #2d3436;padding-left:12px;">
@@ -166,7 +169,7 @@ tr:hover td { background: #1a2a3a; }
       <div class="param-group"><label>收盘:</label><input type="number" id="p_manual_px" class="wide" step="1"></div>
       <div class="param-group"><label>最高:</label><input type="number" id="p_manual_hi" class="wide" step="1"></div>
       <div class="param-group"><label>最低:</label><input type="number" id="p_manual_lo" class="wide" step="1"></div>
-      <div class="param-group"><label>OI偏度:</label><input type="number" id="p_manual_skew" value="" step="0.01" min="-1" max="1" class="wide" placeholder="默认沿用"></div>
+      <div class="param-group"><label>OI偏度:</label><input type="number" id="p_manual_skew" step="0.01" min="-1" max="1" class="wide" placeholder="默认沿用"></div>
     </div>
   </div>
 
@@ -249,6 +252,8 @@ let defaultParams = {
   volTargetCap: 2,
   ewmaFilterHigh: 1.2,
   ewmaFilterLow: 0.75,
+  priceSlopeTh: 0,
+  slopeDays: 30,
   capital: 100000,
   capLimit: 200,
   skipCount: 0,
@@ -332,7 +337,7 @@ async function switchSymbol(sym) {
     document.getElementById('p_start').value = d[0].d;
     document.getElementById('p_end').value = new Date().toISOString().slice(0, 10);
   }
-  await loadParams(sym);
+  if (!await loadParams(sym)) setParamValues(defaultParams);
   runBacktest();
 }
 
@@ -471,7 +476,7 @@ function computeNextDirPred(fullData, params) {
 function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, btEnd) {
   btStart = btStart || 0;
   btEnd = btEnd || data.length;
-  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, volFilterLow: VOL_FL, volFilterHigh: VOL_FH, volTarget: VT, volTargetCap: VT_CAP, ewmaFilterHigh: EWF_H, ewmaFilterLow: EWF_L, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
+  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, volFilterLow: VOL_FL, volFilterHigh: VOL_FH, volTarget: VT, volTargetCap: VT_CAP, ewmaFilterHigh: EWF_H, ewmaFilterLow: EWF_L, priceSlopeTh: SLOPE_TH, slopeDays: SLOPE_DAYS, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
   const preStart = Math.max(0, firstIdx - LBK);
   let eq = CAP, peakEq = CAP, maxDd = 0, pos = null, posDays = 0;
   const trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
@@ -504,6 +509,16 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
       fastVol[i] = Math.sqrt(fv);
       slowVol[i] = Math.sqrt(sv);
     }
+  }
+
+  // 收盘价回归斜率(按价格归一化): 逆势过滤用, 窗口[前 SLOPE_DAYS 天]只含当日收盘, 无前视
+  const _SD = Math.max(2, SLOPE_DAYS || 20);
+  const priceSlope = new Float64Array(fullData.length);
+  for (let _i = _SD; _i < fullData.length; _i++) {
+    let _sx = 0, _sy = 0, _sxx = 0, _sxy = 0;
+    for (let _j = _i - _SD + 1; _j <= _i; _j++) { const _c = fullData[_j].c; _sx += _j; _sy += _c; _sxx += _j * _j; _sxy += _j * _c; }
+    const _den = _SD * _sxx - _sx * _sx;
+    priceSlope[_i] = _den > 0 ? (_SD * _sxy - _sx * _sy) / _den / fullData[_i].c : 0;
   }
 
   for (let _di = 0; _di < data.length; _di++) {
@@ -600,6 +615,11 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
             const _ratio = _fv / _sv;
             if ((EWF_H > 0 && _ratio > EWF_H) || (EWF_L > 0 && _ratio < EWF_L)) td = null;
           }
+        }
+        // 价格斜率过滤: 30日收盘价回归斜率方向与信号相左则不开仓 (用昨日收盘, 无前视)
+        if (td && SLOPE_TH > 0) {
+          const _sl = priceSlope[_fullIdx - 1];
+          if ((td === 'long' && _sl < -SLOPE_TH) || (td === 'short' && _sl > SLOPE_TH)) td = null;
         }
         if (td) {
           const dn = op * mult * MR;
@@ -751,24 +771,26 @@ function runBacktest() {
   result.innerHTML = '<div class="loading">计算中...</div>';
 
   const params = {
-    lookback: parseInt(document.getElementById('p_lookback').value) || defaultParams.lookback,
-    minPct: (parseFloat(document.getElementById('p_min_pct').value) || defaultParams.minPct) / 100,
-    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || defaultParams.maxPos) / 100,
-    margin: (parseFloat(document.getElementById('p_margin').value) || defaultParams.margin) / 100,
+    lookback: parseInt(document.getElementById('p_lookback').value) ?? defaultParams.lookback,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) ?? defaultParams.minPct) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) ?? defaultParams.maxPos) / 100,
+    margin: (parseFloat(document.getElementById('p_margin').value) ?? defaultParams.margin) / 100,
     beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? defaultParams.beTh : v)() / 100,
-    entryAtrMult: parseFloat(document.getElementById('p_entry_atr').value) || defaultParams.entryAtrMult,
-    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || defaultParams.atrPeriod,
-    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || defaultParams.atrMult,
-    volFilterLow: parseInt(document.getElementById('p_vol_low').value) || 0,
-    volFilterHigh: parseInt(document.getElementById('p_vol_high').value) || 100,
-    volTarget: parseInt(document.getElementById('p_vol_target').value) || 0,
-    volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) || defaultParams.volTargetCap,
-    ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) || 0,
-    ewmaFilterLow: parseFloat(document.getElementById('p_ewma_low').value) || 0,
-    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || defaultParams.lockPct) / 100,
-    capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
-    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
-    skipCount: parseInt(document.getElementById('p_skip').value) || defaultParams.skipCount,
+    entryAtrMult: parseFloat(document.getElementById('p_entry_atr').value) ?? defaultParams.entryAtrMult,
+    atrPeriod: parseInt(document.getElementById('p_atr_period').value) ?? defaultParams.atrPeriod,
+    atrMult: parseFloat(document.getElementById('p_atr_mult').value) ?? defaultParams.atrMult,
+    volFilterLow: parseInt(document.getElementById('p_vol_low').value) ?? defaultParams.volFilterLow,
+    volFilterHigh: parseInt(document.getElementById('p_vol_high').value) ?? defaultParams.volFilterHigh,
+    volTarget: parseInt(document.getElementById('p_vol_target').value) ?? defaultParams.volTarget,
+    volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) ?? defaultParams.volTargetCap,
+    ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) ?? defaultParams.ewmaFilterHigh,
+    ewmaFilterLow: parseFloat(document.getElementById('p_ewma_low').value) ?? defaultParams.ewmaFilterLow,
+    priceSlopeTh: parseFloat(document.getElementById('p_slope_th').value) ?? defaultParams.priceSlopeTh,
+    slopeDays: parseInt(document.getElementById('p_slope_days').value) ?? 30,
+    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) ?? defaultParams.lockPct) / 100,
+    capital: parseFloat(document.getElementById('p_capital').value) ?? defaultParams.capital,
+    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) ?? defaultParams.capLimit) * 10000,
+    skipCount: parseInt(document.getElementById('p_skip').value) ?? defaultParams.skipCount,
   };
   params.mult = cfg.mult;
   const MULT = cfg.mult;
@@ -912,8 +934,7 @@ function runBacktest() {
         <label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label>\
-        <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>\
-        <label style="cursor:pointer;"><input type="checkbox" id="t_regime" checked onchange="toggleChartLine()"> <span style="color:#9aa5b1">单边/震荡</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期仓</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+        <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期仓</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th></tr>' + yrHtml + '</table></div>\
@@ -1182,24 +1203,27 @@ function round1(v) { return Math.round(v*10)/10; }
 function round2(v) { return Math.round(v*100)/100; }
 
 function setParamValues(p) {
-  document.getElementById('p_lookback').value = p.lookback;
-  document.getElementById('p_min_pct').value = p.minPct;
-  document.getElementById('p_max_pos').value = p.maxPos;
-  document.getElementById('p_margin').value = p.margin;
-  if (p.beTh !== undefined) document.getElementById('p_be_th').value = p.beTh;
-  if (p.entryAtrMult !== undefined) document.getElementById('p_entry_atr').value = p.entryAtrMult;
-  document.getElementById('p_capital').value = Math.round(p.capital);
-  if (p.capLimit !== undefined) document.getElementById('p_cap_limit').value = Math.round(p.capLimit / 10000);
-  if (p.lockPct !== undefined) document.getElementById('p_lock_pct').value = p.lockPct;
-  if (p.skipCount !== undefined) document.getElementById('p_skip').value = p.skipCount;
-  if (p.atrPeriod !== undefined) document.getElementById('p_atr_period').value = p.atrPeriod;
-  if (p.atrMult !== undefined) document.getElementById('p_atr_mult').value = p.atrMult;
-  if (p.volFilterLow !== undefined) document.getElementById('p_vol_low').value = p.volFilterLow;
-  if (p.volFilterHigh !== undefined) document.getElementById('p_vol_high').value = p.volFilterHigh;
-  if (p.volTarget !== undefined) document.getElementById('p_vol_target').value = p.volTarget;
-  if (p.volTargetCap !== undefined) document.getElementById('p_vol_target_cap').value = p.volTargetCap;
-  if (p.ewmaFilterHigh !== undefined) document.getElementById('p_ewma_high').value = p.ewmaFilterHigh;
-  if (p.ewmaFilterLow !== undefined) document.getElementById('p_ewma_low').value = p.ewmaFilterLow;
+  const f = Object.assign({}, defaultParams, p || {});   // 缺失字段用默认补齐
+  document.getElementById('p_lookback').value = f.lookback;
+  document.getElementById('p_min_pct').value = f.minPct;
+  document.getElementById('p_max_pos').value = f.maxPos;
+  document.getElementById('p_margin').value = f.margin;
+  document.getElementById('p_be_th').value = f.beTh;
+  document.getElementById('p_entry_atr').value = f.entryAtrMult;
+  document.getElementById('p_capital').value = Math.round(f.capital);
+  document.getElementById('p_cap_limit').value = Math.round(f.capLimit / 10000);
+  document.getElementById('p_lock_pct').value = f.lockPct;
+  document.getElementById('p_skip').value = f.skipCount;
+  document.getElementById('p_atr_period').value = f.atrPeriod;
+  document.getElementById('p_atr_mult').value = f.atrMult;
+  document.getElementById('p_vol_low').value = f.volFilterLow;
+  document.getElementById('p_vol_high').value = f.volFilterHigh;
+  document.getElementById('p_vol_target').value = f.volTarget;
+  document.getElementById('p_vol_target_cap').value = f.volTargetCap;
+  document.getElementById('p_ewma_high').value = f.ewmaFilterHigh;
+  document.getElementById('p_ewma_low').value = f.ewmaFilterLow;
+  document.getElementById('p_slope_th').value = f.priceSlopeTh;
+  document.getElementById('p_slope_days').value = f.slopeDays;
 }
 
 async function saveParams() {
@@ -1228,6 +1252,8 @@ async function saveParams() {
       vol_target_cap: parseFloat(document.getElementById('p_vol_target_cap').value) || null,
       ewma_filter_high: parseFloat(document.getElementById('p_ewma_high').value) || null,
       ewma_filter_low: parseFloat(document.getElementById('p_ewma_low').value) || null,
+      price_slope_th: parseFloat(document.getElementById('p_slope_th').value) || null,
+      slope_days: parseInt(document.getElementById('p_slope_days').value) || null,
       start_date: document.getElementById('p_start').value || null,
       end_date: document.getElementById('p_end').value || null,
     };
@@ -1266,6 +1292,8 @@ async function loadParams(sym) {
         volTargetCap: r.params.vol_target_cap,
         ewmaFilterHigh: r.params.ewma_filter_high,
         ewmaFilterLow: r.params.ewma_filter_low,
+        priceSlopeTh: r.params.price_slope_th,
+        slopeDays: r.params.slope_days,
       });
       if (r.params.start_date) document.getElementById('p_start').value = r.params.start_date;
       if (r.params.end_date) document.getElementById('p_end').value = r.params.end_date;
@@ -1293,24 +1321,26 @@ function runMonteCarlo() {
   if (data.length < 2) { alert('数据不足'); return; }
   const firstIdx = fullData.findIndex(r => r.d === data[0].d);
   const params = {
-    lookback: parseInt(document.getElementById('p_lookback').value) || defaultParams.lookback,
-    minPct: (parseFloat(document.getElementById('p_min_pct').value) || defaultParams.minPct) / 100,
-    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || defaultParams.maxPos) / 100,
-    margin: (parseFloat(document.getElementById('p_margin').value) || defaultParams.margin) / 100,
+    lookback: parseInt(document.getElementById('p_lookback').value) ?? defaultParams.lookback,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) ?? defaultParams.minPct) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) ?? defaultParams.maxPos) / 100,
+    margin: (parseFloat(document.getElementById('p_margin').value) ?? defaultParams.margin) / 100,
     beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? defaultParams.beTh : v)() / 100,
-    entryAtrMult: parseFloat(document.getElementById('p_entry_atr').value) || defaultParams.entryAtrMult,
-    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || defaultParams.atrPeriod,
-    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || defaultParams.atrMult,
-    volFilterLow: parseInt(document.getElementById('p_vol_low').value) || 0,
-    volFilterHigh: parseInt(document.getElementById('p_vol_high').value) || 100,
-    volTarget: parseInt(document.getElementById('p_vol_target').value) || 0,
-    volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) || defaultParams.volTargetCap,
-    ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) || 0,
-    ewmaFilterLow: parseFloat(document.getElementById('p_ewma_low').value) || 0,
-    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || defaultParams.lockPct) / 100,
-    capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
-    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
-    skipCount: parseInt(document.getElementById('p_skip').value) || defaultParams.skipCount,
+    entryAtrMult: parseFloat(document.getElementById('p_entry_atr').value) ?? defaultParams.entryAtrMult,
+    atrPeriod: parseInt(document.getElementById('p_atr_period').value) ?? defaultParams.atrPeriod,
+    atrMult: parseFloat(document.getElementById('p_atr_mult').value) ?? defaultParams.atrMult,
+    volFilterLow: parseInt(document.getElementById('p_vol_low').value) ?? defaultParams.volFilterLow,
+    volFilterHigh: parseInt(document.getElementById('p_vol_high').value) ?? defaultParams.volFilterHigh,
+    volTarget: parseInt(document.getElementById('p_vol_target').value) ?? defaultParams.volTarget,
+    volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) ?? defaultParams.volTargetCap,
+    ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) ?? defaultParams.ewmaFilterHigh,
+    ewmaFilterLow: parseFloat(document.getElementById('p_ewma_low').value) ?? defaultParams.ewmaFilterLow,
+    priceSlopeTh: parseFloat(document.getElementById('p_slope_th').value) ?? defaultParams.priceSlopeTh,
+    slopeDays: parseInt(document.getElementById('p_slope_days').value) ?? 30,
+    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) ?? defaultParams.lockPct) / 100,
+    capital: parseFloat(document.getElementById('p_capital').value) ?? defaultParams.capital,
+    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) ?? defaultParams.capLimit) * 10000,
+    skipCount: parseInt(document.getElementById('p_skip').value) ?? defaultParams.skipCount,
   };
   params.mult = cfg.mult;
   const nextDirPred = computeNextDirPred(fullData, params);
@@ -1401,6 +1431,8 @@ const OPT_PARAMS = {
   beTh:       { label: '保本%',       range: [0.5, 5, 0.1], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 75, 5], unit: '%' },
   skipCount:  { label: '跳过次',      range: [0, 5, 1] },
+  priceSlopeTh: { label: '逆势挡',    range: [0, 0.01, 0.001], prec: 3 },
+  slopeDays:  { label: '逆势窗',      range: [10, 60, 5] },
 };
 
 function optimizeParam() {
@@ -1422,24 +1454,26 @@ function optimizeParam() {
   const firstIdx = fullData.findIndex(r => r.d === data[0].d);
 
   const p = {
-    lookback: parseInt(document.getElementById('p_lookback').value) || defaultParams.lookback,
-    minPct: (parseFloat(document.getElementById('p_min_pct').value) || defaultParams.minPct) / 100,
-    maxPos: (parseFloat(document.getElementById('p_max_pos').value) || defaultParams.maxPos) / 100,
-    margin: (parseFloat(document.getElementById('p_margin').value) || defaultParams.margin) / 100,
+    lookback: parseInt(document.getElementById('p_lookback').value) ?? defaultParams.lookback,
+    minPct: (parseFloat(document.getElementById('p_min_pct').value) ?? defaultParams.minPct) / 100,
+    maxPos: (parseFloat(document.getElementById('p_max_pos').value) ?? defaultParams.maxPos) / 100,
+    margin: (parseFloat(document.getElementById('p_margin').value) ?? defaultParams.margin) / 100,
     beTh: ((v = parseFloat(document.getElementById('p_be_th').value)) => isNaN(v) ? defaultParams.beTh : v)() / 100,
-    entryAtrMult: parseFloat(document.getElementById('p_entry_atr').value) || defaultParams.entryAtrMult,
-    atrPeriod: parseInt(document.getElementById('p_atr_period').value) || defaultParams.atrPeriod,
-    atrMult: parseFloat(document.getElementById('p_atr_mult').value) || defaultParams.atrMult,
-    volFilterLow: parseInt(document.getElementById('p_vol_low').value) || 0,
-    volFilterHigh: parseInt(document.getElementById('p_vol_high').value) || 100,
-    volTarget: parseInt(document.getElementById('p_vol_target').value) || 0,
-    volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) || defaultParams.volTargetCap,
-    ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) || 0,
-    ewmaFilterLow: parseFloat(document.getElementById('p_ewma_low').value) || 0,
-    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) || defaultParams.lockPct) / 100,
-    capital: parseFloat(document.getElementById('p_capital').value) || defaultParams.capital,
-    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) || defaultParams.capLimit) * 10000,
-    skipCount: parseInt(document.getElementById('p_skip').value) || defaultParams.skipCount,
+    entryAtrMult: parseFloat(document.getElementById('p_entry_atr').value) ?? defaultParams.entryAtrMult,
+    atrPeriod: parseInt(document.getElementById('p_atr_period').value) ?? defaultParams.atrPeriod,
+    atrMult: parseFloat(document.getElementById('p_atr_mult').value) ?? defaultParams.atrMult,
+    volFilterLow: parseInt(document.getElementById('p_vol_low').value) ?? defaultParams.volFilterLow,
+    volFilterHigh: parseInt(document.getElementById('p_vol_high').value) ?? defaultParams.volFilterHigh,
+    volTarget: parseInt(document.getElementById('p_vol_target').value) ?? defaultParams.volTarget,
+    volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) ?? defaultParams.volTargetCap,
+    ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) ?? defaultParams.ewmaFilterHigh,
+    ewmaFilterLow: parseFloat(document.getElementById('p_ewma_low').value) ?? defaultParams.ewmaFilterLow,
+    priceSlopeTh: parseFloat(document.getElementById('p_slope_th').value) ?? defaultParams.priceSlopeTh,
+    slopeDays: parseInt(document.getElementById('p_slope_days').value) ?? 30,
+    lockPct: (parseFloat(document.getElementById('p_lock_pct').value) ?? defaultParams.lockPct) / 100,
+    capital: parseFloat(document.getElementById('p_capital').value) ?? defaultParams.capital,
+    capLimit: (parseFloat(document.getElementById('p_cap_limit').value) ?? defaultParams.capLimit) * 10000,
+    skipCount: parseInt(document.getElementById('p_skip').value) ?? defaultParams.skipCount,
     mult: cfg.mult,
   };
 
@@ -1449,7 +1483,7 @@ function optimizeParam() {
 
   setTimeout(function() {
     const values = [];
-    for (let v = min; v <= max + 1e-10; v = Math.round((v + step) * 100) / 100) {
+    for (let v = min; v <= max + 1e-10; v = Math.round((v + step) * 1000) / 1000) {
       const pp = Object.assign({}, p);
       if (paramKey === 'minPct') pp.minPct = v / 100;
       else if (paramKey === 'maxPos') pp.maxPos = v / 100;
@@ -1461,6 +1495,8 @@ function optimizeParam() {
       else if (paramKey === 'lockPct') pp.lockPct = v / 100;
       else if (paramKey === 'volFilterLow' || paramKey === 'volFilterHigh') pp[paramKey] = v;
       else if (paramKey === 'skipCount') pp.skipCount = v;
+      else if (paramKey === 'priceSlopeTh') pp.priceSlopeTh = v;
+      else if (paramKey === 'slopeDays') pp.slopeDays = v;
 
       const ppNextDir = computeNextDirPred(fullData, pp);
       const core = _runCore(data, fullData, firstIdx, pp, cfg.mult, ppNextDir);
@@ -1509,9 +1545,10 @@ function optimizeParam() {
         <th class="num">' + meta.label + '</th><th class="num">最终权益</th><th class="num">收益</th><th class="num">笔数</th><th class="num">持仓覆盖率</th><th class="num">胜率</th><th class="num">盈亏比</th><th class="num">回撤</th><th class="num">均PnL</th>\
       </tr>' + rows + '</table></div>';
     status.textContent = '优化完成 | ' + values.length + '个值 | 最优 ' + meta.label + '=' + best.v + suffix + ' → ' + fmt(best.endEq);
-    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip', volFilterLow:'p_vol_low', volFilterHigh:'p_vol_high', volTarget:'p_vol_target', volTargetCap:'p_vol_target_cap', ewmaFilterHigh:'p_ewma_high', ewmaFilterLow:'p_ewma_low' };
+    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip', volFilterLow:'p_vol_low', volFilterHigh:'p_vol_high', volTarget:'p_vol_target', volTargetCap:'p_vol_target_cap', ewmaFilterHigh:'p_ewma_high', ewmaFilterLow:'p_ewma_low', priceSlopeTh:'p_slope_th', slopeDays:'p_slope_days' };
     const el = document.getElementById(idMap[paramKey]);
-    if (meta.unit) el.value = best.v.toFixed(1);
+    if (meta.prec) el.value = best.v.toFixed(meta.prec);
+    else if (meta.unit) el.value = best.v.toFixed(1);
     else el.value = best.v;
   }, 50);
 }
@@ -1545,18 +1582,6 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   const n = data.length;
   const mpOff = calcMpRebase(data);
   const rollSeg = calcRollSegStart(data);
-
-  // 单边/震荡 分类: 收盘价30日回归斜率, 斜率>0.2%/天=单边上涨, <-0.2%/天=单边下跌, 其余=震荡
-  const _closes = new Float64Array(n);
-  for (let i = 0; i < n; i++) _closes[i] = data[i].c;
-  const _regimeArr = new Uint8Array(n); // 0=range 1=up 2=down
-  for (let i = 30; i < n; i++) {
-    let sx = 0, sy = 0, sxx = 0, sxy = 0;
-    for (let j = i - 29; j <= i; j++) { sx += j; sy += _closes[j]; sxx += j * j; sxy += j * _closes[j]; }
-    const sl = (30 * sxy - sx * sy) / (30 * sxx - sx * sx);
-    const perDay = sl / _closes[i];
-    _regimeArr[i] = perDay > 0.002 ? 1 : perDay < -0.002 ? 2 : 0;
-  }
 
   const subCanvas = document.getElementById('subChart');
   var _subGex, _subSkewD, _subMinG, _subMaxG, _subMinS, _subMaxS;
@@ -1894,23 +1919,6 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     ctx.fillStyle = '#0f1923';
     ctx.fillRect(0, 0, W, H);
 
-    // 单边/震荡 背景色带 (绿=单边上涨, 红=单边下跌, 无色=震荡)
-    if (document.getElementById('t_regime').checked) {
-      const _bandColors = ['', 'rgba(46,204,113,0.08)', 'rgba(231,76,60,0.08)'];
-      let i0 = start;
-      while (i0 < end) {
-        const _rg = _regimeArr[i0];
-        let i1 = i0;
-        while (i1 < end && _regimeArr[i1] === _rg) i1++;
-        const _col = _bandColors[_rg];
-        if (_col) {
-          ctx.fillStyle = _col;
-          ctx.fillRect(toX(i0), pad.top, (i1 - i0) * state.barW, ch);
-        }
-        i0 = i1;
-      }
-    }
-
     ctx.strokeStyle = '#1a2a3a';
     ctx.lineWidth = 1;
     for (let i = 0; i <= 8; i++) {
@@ -2149,13 +2157,6 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('BE下穿MP 下跌', lx+20, ly+8); lx += 130;
     ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.moveTo(lx+8, ly-3); ctx.lineTo(lx+4, ly+tSz-1); ctx.lineTo(lx+12, ly+tSz-1); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('BE上穿MP 上涨', lx+20, ly+8);
-    // 第三行：单边/震荡背景色带
-    lx = legX; ly = legY2 + 36;
-    ctx.fillStyle = 'rgba(46,204,113,0.5)'; ctx.fillRect(lx, ly-5, 16, 9);
-    ctx.fillStyle = '#c8d6e5'; ctx.fillText('单边上涨', lx+20, ly+3); lx += 85;
-    ctx.fillStyle = 'rgba(231,76,60,0.5)'; ctx.fillRect(lx, ly-5, 16, 9);
-    ctx.fillStyle = '#c8d6e5'; ctx.fillText('单边下跌', lx+20, ly+3); lx += 85;
-    ctx.fillStyle = '#576574'; ctx.fillText('无色=震荡', lx+20, ly+3);
     ctx.restore();
 
     if (stopCurve && stopCurve.length === n) {
@@ -3253,7 +3254,8 @@ window.onload = async function() {
   const ok = await loadAllData();
   if (ok) {
     const sym = CURRENT_SYM;
-    if (!await loadParams(sym)) setParamValues(defaultParams);
+    setParamValues(defaultParams);
+    await loadParams(sym);
     const d = ALL_DATA[sym];
     if (d) {
       document.getElementById('p_start').value = d[0].d;

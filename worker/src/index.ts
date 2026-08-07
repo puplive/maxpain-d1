@@ -221,6 +221,7 @@ export default {
         vol_filter_low?: number; vol_filter_high?: number;
         vol_target?: number; vol_target_cap?: number;
         ewma_filter_high?: number; ewma_filter_low?: number;
+        price_slope_th?: number; slope_days?: number;
         start_date?: string; end_date?: string;
       } = await request.json();
       const { symbol } = body;
@@ -234,9 +235,9 @@ export default {
          (symbol, lookback, min_pct, max_pos, margin, be_th, entry_stop, entry_atr,
           atr_period, atr_mult, lock_pct, capital, cap_limit, skip_count, mom_days,
           vol_filter_low, vol_filter_high, vol_target, vol_target_cap,
-          ewma_filter_high, ewma_filter_low,
+          ewma_filter_high, ewma_filter_low, price_slope_th, slope_days,
           start_date, end_date, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
       ).bind(
         symbol.toUpperCase(),
         body.lookback ?? null, body.min_pct ?? null, body.max_pos ?? null, body.margin ?? null,
@@ -246,6 +247,7 @@ export default {
         body.vol_filter_low ?? 0, body.vol_filter_high ?? 100,
         body.vol_target ?? 0, body.vol_target_cap ?? 2,
         body.ewma_filter_high ?? 0, body.ewma_filter_low ?? 0,
+        body.price_slope_th ?? 0, body.slope_days ?? 30,
         body.start_date ?? null, body.end_date ?? null
       ).run();
       return new Response(JSON.stringify({ ok: true }), {

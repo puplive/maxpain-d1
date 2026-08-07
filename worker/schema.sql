@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS backtest_params (
   vol_target_cap REAL DEFAULT 2,
   ewma_filter_high REAL DEFAULT 0,
   ewma_filter_low REAL DEFAULT 0,
+  price_slope_th REAL DEFAULT 0,
+  slope_days INTEGER DEFAULT 30,
   start_date TEXT,
   end_date TEXT,
   updated_at TEXT DEFAULT (datetime('now'))
