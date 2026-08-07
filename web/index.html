@@ -242,7 +242,7 @@ let defaultParams = {
   maxPos: 50,
   margin: 15,
   beTh: 1,
-  entryAtrMult: 1,
+  entryAtrMult: 2,
   atrPeriod: 14,
   atrMult: 1.3,
   lockPct: 50,
@@ -460,15 +460,6 @@ function computeNextDirPred(fullData, params) {
     let nd = null;
     if (td === 'up') nd = 'long';
     else if (td === 'down') nd = 'short';
-    if (nd) {
-      const r = fullData[i];
-      if ((nd === 'long' && r.bec !== null && r.c >= r.bec) || (nd === 'short' && r.bep !== null && r.c <= r.bep)) nd = null;
-    }
-    if (nd && i > 0) {
-      const prev = fullData[i-1], cur = fullData[i];
-      if (nd === 'long' && prev.bec != null && cur.bec != null && prev.bec > prev.mp && cur.bec <= cur.mp) nd = null;
-      if (nd === 'short' && prev.bep != null && cur.bep != null && prev.bep < prev.mp && cur.bep >= cur.mp) nd = null;
-    }
     preds[i] = nd;
   }
   return preds;
@@ -1203,7 +1194,9 @@ function round1(v) { return Math.round(v*10)/10; }
 function round2(v) { return Math.round(v*100)/100; }
 
 function setParamValues(p) {
-  const f = Object.assign({}, defaultParams, p || {});   // 缺失字段用默认补齐
+  const clean = {};
+  if (p) for (const k in p) if (p[k] != null && !isNaN(p[k])) clean[k] = p[k];
+  const f = Object.assign({}, defaultParams, clean);   // 缺失/空值字段用默认补齐
   document.getElementById('p_lookback').value = f.lookback;
   document.getElementById('p_min_pct').value = f.minPct;
   document.getElementById('p_max_pos').value = f.maxPos;
@@ -1232,28 +1225,30 @@ async function saveParams() {
   const orig = btn.textContent;
   btn.textContent = '保存中...'; btn.disabled = true;
   try {
+    const num = id => { const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? null : v; };
+    const numI = id => { const v = parseInt(document.getElementById(id).value, 10); return isNaN(v) ? null : v; };
     const p = {
       symbol: sym,
-      lookback: parseInt(document.getElementById('p_lookback').value) || null,
-      min_pct: parseFloat(document.getElementById('p_min_pct').value) || null,
-      max_pos: parseFloat(document.getElementById('p_max_pos').value) || null,
-      margin: parseFloat(document.getElementById('p_margin').value) || null,
-      be_th: parseFloat(document.getElementById('p_be_th').value) || null,
-      entry_atr: parseFloat(document.getElementById('p_entry_atr').value) || null,
-      atr_period: parseInt(document.getElementById('p_atr_period').value) || null,
-      atr_mult: parseFloat(document.getElementById('p_atr_mult').value) || null,
-      lock_pct: parseFloat(document.getElementById('p_lock_pct').value) || null,
-      capital: parseFloat(document.getElementById('p_capital').value) || null,
-      cap_limit: parseFloat(document.getElementById('p_cap_limit').value) || 0,
-      skip_count: parseInt(document.getElementById('p_skip').value) || null,
-      vol_filter_low: parseInt(document.getElementById('p_vol_low').value) || 0,
-      vol_filter_high: parseInt(document.getElementById('p_vol_high').value) || 100,
-      vol_target: parseInt(document.getElementById('p_vol_target').value) || 0,
-      vol_target_cap: parseFloat(document.getElementById('p_vol_target_cap').value) || null,
-      ewma_filter_high: parseFloat(document.getElementById('p_ewma_high').value) || null,
-      ewma_filter_low: parseFloat(document.getElementById('p_ewma_low').value) || null,
-      price_slope_th: parseFloat(document.getElementById('p_slope_th').value) || null,
-      slope_days: parseInt(document.getElementById('p_slope_days').value) || null,
+      lookback: numI('p_lookback'),
+      min_pct: num('p_min_pct'),
+      max_pos: num('p_max_pos'),
+      margin: num('p_margin'),
+      be_th: num('p_be_th'),
+      entry_atr: num('p_entry_atr'),
+      atr_period: numI('p_atr_period'),
+      atr_mult: num('p_atr_mult'),
+      lock_pct: num('p_lock_pct'),
+      capital: num('p_capital'),
+      cap_limit: num('p_cap_limit') ?? 0,
+      skip_count: numI('p_skip'),
+      vol_filter_low: num('p_vol_low') ?? 0,
+      vol_filter_high: num('p_vol_high') ?? 100,
+      vol_target: num('p_vol_target') ?? 0,
+      vol_target_cap: num('p_vol_target_cap'),
+      ewma_filter_high: num('p_ewma_high'),
+      ewma_filter_low: num('p_ewma_low'),
+      price_slope_th: num('p_slope_th'),
+      slope_days: numI('p_slope_days'),
       start_date: document.getElementById('p_start').value || null,
       end_date: document.getElementById('p_end').value || null,
     };
