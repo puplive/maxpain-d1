@@ -357,6 +357,7 @@ function emaDirection(arr, period, buffer) {
 }
 
 // MP vs EMA(lookback日) 偏离 (%): 判断方向用的斜率, 回踩门控与图表悬停共用
+// 返回 { pct: 偏离%, ema: EMA值 } 或 null (历史不足/EMA<=0)
 function calcMpDevPct(fullData, mpOff, rollSeg, i, lookback) {
   const h = dirMpHist(fullData, mpOff, rollSeg, i, lookback);
   if (!h || h.length < lookback) return null;
@@ -364,7 +365,8 @@ function calcMpDevPct(fullData, mpOff, rollSeg, i, lookback) {
   let e = vals[0];
   const k = 2 / (lookback + 1);
   for (let j = 1; j < vals.length; j++) e = vals[j] * k + e * (1 - k);
-  return e > 0 ? (vals[vals.length - 1] - e) / e * 100 : null;
+  if (e <= 0 || !isFinite(vals[vals.length - 1])) return null;
+  return { pct: (vals[vals.length - 1] - e) / e * 100, ema: e };
 }
 
 function emaChange(arr, period) {
@@ -630,8 +632,8 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
           // 回踩开仓: |昨日MP偏离%|<=阈值 → 限价挂MP (开盘已破MP按开盘价, 否则低/高点触及MP成交); |偏离|>阈值 → 追开盘价
           let entryPx = op;
           if (PB_SLOPE_TH_PCT > 0 && _fullIdx > 1) {
-            const _s = calcMpDevPct(fullData, mpOff, rollSeg, _fullIdx - 1, LBK);
-            if (_s != null && isFinite(_s) && Math.abs(_s) <= PB_SLOPE_TH_PCT) {
+            const _dev = calcMpDevPct(fullData, mpOff, rollSeg, _fullIdx - 1, LBK);
+            if (_dev && Math.abs(_dev.pct) <= PB_SLOPE_TH_PCT) {
               if (td === 'long') {
                 if (op <= mp) entryPx = op;
                 else if (lo <= mp) entryPx = mp;
@@ -1829,7 +1831,9 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     const subHist = dirMpHist(data, mpOff, rollSeg, idx, params.lookback);
     const { dir: trendDir } = emaDirection(subHist, params.lookback, params.minPct);
     // MP偏离 (判断方向用的斜率, 与回踩门控同源)
-    const _mpDevPct = calcMpDevPct(data, mpOff, rollSeg, idx, params.lookback)?.toFixed(1) ?? null;
+    const _dev = calcMpDevPct(data, mpOff, rollSeg, idx, params.lookback);
+    const _mpDevPct = _dev ? _dev.pct.toFixed(1) : null;
+    const _mpEma = _dev ? _dev.ema : null;
     const _proj = linearProjected(subHist, params.lookback);
     const _slopePct = _proj !== null ? (_proj / (subHist[subHist.length - 1] || 1) * 100).toFixed(1) : null;
     const _slopeText = _slopePct !== null ? ' <span style="color:#576574;font-size:11px">斜率' + (_slopePct > 0 ? '+' : '') + _slopePct + '%</span>' : '';
@@ -1883,7 +1887,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       <div class="row"><span class="label">最高/最低</span><span class="val">' + row.h.toFixed(0) + ' / ' + row.l.toFixed(0) + '</span></div>\
       <div class="row"><span class="label">近月连续/期权期货</span><span class="val" style="font-size:11px"><span style="color:#a29bfe">' + (row.nc != null ? row.nc.toFixed(0) : '-') + '</span> / <span style="color:#f368e0">' + (row.oc != null ? row.oc.toFixed(0) : '-') + '</span></span></div>\
       <div class="row"><span class="label">到期日/天数</span><span class="val" style="color:#8395a7;font-size:11px">' + (row.expiry ? row.expiry + ' ' + row.dte + '天' : '-') + '</span></div>\
-      <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">MP/EMA</span><span class="val" style="color:#e8c84a">' + row.mp + ' ' + (idx>0?(row.mp-data[idx-1].mp>0?'+':'')+(row.mp-data[idx-1].mp):'') + ' / ' + _mpEma.toFixed(0) + '</span></div>\
+      <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">MP/EMA</span><span class="val" style="color:#e8c84a">' + row.mp + ' ' + (idx>0?(row.mp-data[idx-1].mp>0?'+':'')+(row.mp-data[idx-1].mp):'') + ' / ' + (_mpEma != null ? _mpEma.toFixed(0) : '-') + '</span></div>\
       <div class="row"><span class="label">MP趋势</span><span class="val">' + trendText + '</span></div>\
       <div class="row"><span class="label">收盘斜率</span><span class="val" style="color:#576574;font-size:11px">' + (_closeSlope !== null ? _closeSlope + '%' : '-') + '</span></div>\
       <div class="row"><span class="label">BE斜率</span><span class="val" style="color:#576574;font-size:11px">' + (_becSlope !== null ? '看涨 ' + _becSlope + '%' : '') + ' ' + (_bepSlope !== null ? '看跌 ' + _bepSlope + '%' : '') + '</span></div>\
