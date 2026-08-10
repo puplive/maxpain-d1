@@ -137,6 +137,7 @@ tr:hover td { background: #1a2a3a; }
       <option value="skipCount">跳过次</option>
       <option value="priceSlopeTh">逆势挡</option>
       <option value="slopeDays">逆势窗</option>
+      <option value="pbSlopeTh">回踩斜率%</option>
     </select>
     <button class="btn" onclick="optimizeParam()" style="background:#8854d0;color:#fff;">优化</button>
     <span class="status" id="status">就绪</span>
@@ -159,6 +160,7 @@ tr:hover td { background: #1a2a3a; }
 	    <div class="param-group"><label>目标化:</label><input type="number" id="p_vol_target" min="0" max="1" step="1" class="wide" title="1=开, 仓位按EWMA波动比值缩放"> <label>上限:</label><input type="number" id="p_vol_target_cap" min="1" max="5" step="0.5" class="wide" title="缩放上限, 波动低时最多放大到此倍数"></div>
 	    <div class="param-group"><label>EWMA挡高:</label><input type="number" id="p_ewma_high" min="0" max="2" step="0.1" class="wide" title="当期/长期EWMA比值高于此值挡掉, 0=关"> <label>挡低:</label><input type="number" id="p_ewma_low" min="0" max="1" step="0.05" class="wide" title="比值低于此值挡掉, 0=关"></div>
 	    <div class="param-group"><label>逆势挡:</label><input type="number" id="p_slope_th" min="0" max="0.01" step="0.001" class="wide" title="价格斜率阈值: 斜率<-此值不做多, >此值不做空, 0=关"> <label>窗:</label><input type="number" id="p_slope_days" min="5" max="60" step="1" class="wide" style="width:64px" title="判断逆势的斜率窗口天数"></div>
+	    <div class="param-group"><label>回踩斜率%:</label><input type="number" id="p_pb_slope_th" min="0" max="5" step="0.5" class="wide" title="MP趋势|斜率|≤此值 时回踩MP开仓(开盘已破MP按开盘价, 否则低/高点触及MP成交), >此值追开盘价; 0=关(始终开盘价)"></div>
     <div class="param-group"><label>开始:</label><input type="date" id="p_start" style="width:120px;padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font:12px sans-serif;"></div>
     <div class="param-group"><label>结束:</label><input type="date" id="p_end" style="width:120px;padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font:12px sans-serif;"></div>
     <div class="param-group" style="border-left:1px solid #2d3436;padding-left:12px;">
@@ -254,6 +256,7 @@ let defaultParams = {
   ewmaFilterLow: 0.75,
   priceSlopeTh: 0,
   slopeDays: 30,
+  pbSlopeTh: 0,
   capital: 100000,
   capLimit: 200,
   skipCount: 0,
@@ -351,6 +354,17 @@ function emaDirection(arr, period, buffer) {
   if (last > ema * (1 + buffer)) return { dir: 'up' };
   if (last < ema * (1 - buffer)) return { dir: 'down' };
   return { dir: null };
+}
+
+// MP vs EMA(lookback日) 偏离 (%): 判断方向用的斜率, 回踩门控与图表悬停共用
+function calcMpDevPct(fullData, mpOff, rollSeg, i, lookback) {
+  const h = dirMpHist(fullData, mpOff, rollSeg, i, lookback);
+  if (!h || h.length < lookback) return null;
+  const vals = h.slice(-lookback);
+  let e = vals[0];
+  const k = 2 / (lookback + 1);
+  for (let j = 1; j < vals.length; j++) e = vals[j] * k + e * (1 - k);
+  return e > 0 ? (vals[vals.length - 1] - e) / e * 100 : null;
 }
 
 function emaChange(arr, period) {
@@ -467,7 +481,7 @@ function computeNextDirPred(fullData, params) {
 function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, btEnd) {
   btStart = btStart || 0;
   btEnd = btEnd || data.length;
-  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, volFilterLow: VOL_FL, volFilterHigh: VOL_FH, volTarget: VT, volTargetCap: VT_CAP, ewmaFilterHigh: EWF_H, ewmaFilterLow: EWF_L, priceSlopeTh: SLOPE_TH, slopeDays: SLOPE_DAYS, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
+  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, volFilterLow: VOL_FL, volFilterHigh: VOL_FH, volTarget: VT, volTargetCap: VT_CAP, ewmaFilterHigh: EWF_H, ewmaFilterLow: EWF_L, priceSlopeTh: SLOPE_TH, slopeDays: SLOPE_DAYS, pbSlopeTh: PB_SLOPE_TH_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
   const preStart = Math.max(0, firstIdx - LBK);
   let eq = CAP, peakEq = CAP, maxDd = 0, pos = null, posDays = 0;
   const trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
@@ -613,39 +627,57 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
           if ((td === 'long' && _sl < -SLOPE_TH) || (td === 'short' && _sl > SLOPE_TH)) td = null;
         }
         if (td) {
-          const dn = op * mult * MR;
-          if (dn > 0) {
-            let alloc = eq < 500000 ? eq : eq * MAX_POS;
-            if (CAP_LIMIT > 0) alloc = Math.min(alloc, CAP_LIMIT);
-            // 波动率目标化: 仓位按 长期EWMA波动/当期EWMA波动 缩放 (用昨日估计, 无前视)
-            if (VT > 0) {
-              const _fi = _fullIdx - 1;
-              const _fv = _fi >= 1 ? fastVol[_fi] : NaN;
-              const _sv = _fi >= 1 ? slowVol[_fi] : NaN;
-              if (isFinite(_fv) && _fv > 1e-9) {
-                const _sc = Math.min(VT_CAP > 0 ? VT_CAP : 2, Math.max(0.2, _sv / _fv));
-                alloc *= _sc;
+          // 回踩开仓: |昨日MP偏离%|<=阈值 → 限价挂MP (开盘已破MP按开盘价, 否则低/高点触及MP成交); |偏离|>阈值 → 追开盘价
+          let entryPx = op;
+          if (PB_SLOPE_TH_PCT > 0 && _fullIdx > 1) {
+            const _s = calcMpDevPct(fullData, mpOff, rollSeg, _fullIdx - 1, LBK);
+            if (_s != null && isFinite(_s) && Math.abs(_s) <= PB_SLOPE_TH_PCT) {
+              if (td === 'long') {
+                if (op <= mp) entryPx = op;
+                else if (lo <= mp) entryPx = mp;
+                else entryPx = null;   // 当日未触及MP, 不成交
+              } else {
+                if (op >= mp) entryPx = op;
+                else if (hi >= mp) entryPx = mp;
+                else entryPx = null;
               }
             }
-            const qty = Math.floor(alloc / dn);
-            if (qty >= 1) {
-              const enAtr = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
-              pos = { direction: td, entryPx: op, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: op, beActive: false, entryTrend: td === 'long' ? 'up' : 'down', entryStopLevel: td === 'long' ? op - (isNaN(enAtr) ? op * 0.005 : enAtr * ENTRY_ATR) : op + (isNaN(enAtr) ? op * 0.005 : enAtr * ENTRY_ATR) };
-              if (td === 'long') {
-                const stop2 = op - (isNaN(enAtr) ? op * 0.005 : enAtr * ENTRY_ATR);
-                if (lo < stop2) {
-                  const pnl2 = (stop2 - op) * qty * mult;
-                  trades.push({ entry: d, exit: d, entryPx: op, exitPx: stop2, dir: td, qty, pnl: pnl2 - 10 * qty * 2, reason: stop2 === op ? '保本出场' : '止损', entryReason: '趋势多', hold: 0 });
-                  eq += pnl2 - 10 * qty * 2;
-                  pos = null;
+          }
+          if (entryPx !== null) {
+            const dn = entryPx * mult * MR;
+            if (dn > 0) {
+              let alloc = eq < 500000 ? eq : eq * MAX_POS;
+              if (CAP_LIMIT > 0) alloc = Math.min(alloc, CAP_LIMIT);
+              // 波动率目标化: 仓位按 长期EWMA波动/当期EWMA波动 缩放 (用昨日估计, 无前视)
+              if (VT > 0) {
+                const _fi = _fullIdx - 1;
+                const _fv = _fi >= 1 ? fastVol[_fi] : NaN;
+                const _sv = _fi >= 1 ? slowVol[_fi] : NaN;
+                if (isFinite(_fv) && _fv > 1e-9) {
+                  const _sc = Math.min(VT_CAP > 0 ? VT_CAP : 2, Math.max(0.2, _sv / _fv));
+                  alloc *= _sc;
                 }
-              } else {
-                const stop2 = op + (isNaN(enAtr) ? op * 0.005 : enAtr * ENTRY_ATR);
-                if (hi > stop2) {
-                  const pnl2 = (op - stop2) * qty * mult;
-                  trades.push({ entry: d, exit: d, entryPx: op, exitPx: stop2, dir: td, qty, pnl: pnl2 - 10 * qty * 2, reason: stop2 === op ? '保本出场' : '止损', entryReason: '趋势空', hold: 0 });
-                  eq += pnl2 - 10 * qty * 2;
-                  pos = null;
+              }
+              const qty = Math.floor(alloc / dn);
+              if (qty >= 1) {
+                const enAtr = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
+                pos = { direction: td, entryPx: entryPx, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: entryPx, beActive: false, entryTrend: td === 'long' ? 'up' : 'down', entryStopLevel: td === 'long' ? entryPx - (isNaN(enAtr) ? entryPx * 0.005 : enAtr * ENTRY_ATR) : entryPx + (isNaN(enAtr) ? entryPx * 0.005 : enAtr * ENTRY_ATR) };
+                if (td === 'long') {
+                  const stop2 = entryPx - (isNaN(enAtr) ? entryPx * 0.005 : enAtr * ENTRY_ATR);
+                  if (lo < stop2) {
+                    const pnl2 = (stop2 - entryPx) * qty * mult;
+                    trades.push({ entry: d, exit: d, entryPx: entryPx, exitPx: stop2, dir: td, qty, pnl: pnl2 - 10 * qty * 2, reason: stop2 === entryPx ? '保本出场' : '止损', entryReason: '趋势多', hold: 0 });
+                    eq += pnl2 - 10 * qty * 2;
+                    pos = null;
+                  }
+                } else {
+                  const stop2 = entryPx + (isNaN(enAtr) ? entryPx * 0.005 : enAtr * ENTRY_ATR);
+                  if (hi > stop2) {
+                    const pnl2 = (entryPx - stop2) * qty * mult;
+                    trades.push({ entry: d, exit: d, entryPx: entryPx, exitPx: stop2, dir: td, qty, pnl: pnl2 - 10 * qty * 2, reason: stop2 === entryPx ? '保本出场' : '止损', entryReason: '趋势空', hold: 0 });
+                    eq += pnl2 - 10 * qty * 2;
+                    pos = null;
+                  }
                 }
               }
             }
@@ -778,6 +810,7 @@ function runBacktest() {
     ewmaFilterLow: parseFloat(document.getElementById('p_ewma_low').value) ?? defaultParams.ewmaFilterLow,
     priceSlopeTh: parseFloat(document.getElementById('p_slope_th').value) ?? defaultParams.priceSlopeTh,
     slopeDays: parseInt(document.getElementById('p_slope_days').value) ?? 30,
+    pbSlopeTh: parseFloat(document.getElementById('p_pb_slope_th').value) ?? defaultParams.pbSlopeTh,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) ?? defaultParams.lockPct) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) ?? defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) ?? defaultParams.capLimit) * 10000,
@@ -1217,6 +1250,7 @@ function setParamValues(p) {
   document.getElementById('p_ewma_low').value = f.ewmaFilterLow;
   document.getElementById('p_slope_th').value = f.priceSlopeTh;
   document.getElementById('p_slope_days').value = f.slopeDays;
+  document.getElementById('p_pb_slope_th').value = f.pbSlopeTh;
 }
 
 async function saveParams() {
@@ -1249,6 +1283,7 @@ async function saveParams() {
       ewma_filter_low: num('p_ewma_low'),
       price_slope_th: num('p_slope_th'),
       slope_days: numI('p_slope_days'),
+      pb_slope_th: num('p_pb_slope_th') ?? 0,
       start_date: document.getElementById('p_start').value || null,
       end_date: document.getElementById('p_end').value || null,
     };
@@ -1289,6 +1324,7 @@ async function loadParams(sym) {
         ewmaFilterLow: r.params.ewma_filter_low,
         priceSlopeTh: r.params.price_slope_th,
         slopeDays: r.params.slope_days,
+        pbSlopeTh: r.params.pb_slope_th ?? 0,
       });
       if (r.params.start_date) document.getElementById('p_start').value = r.params.start_date;
       if (r.params.end_date) document.getElementById('p_end').value = r.params.end_date;
@@ -1332,6 +1368,7 @@ function runMonteCarlo() {
     ewmaFilterLow: parseFloat(document.getElementById('p_ewma_low').value) ?? defaultParams.ewmaFilterLow,
     priceSlopeTh: parseFloat(document.getElementById('p_slope_th').value) ?? defaultParams.priceSlopeTh,
     slopeDays: parseInt(document.getElementById('p_slope_days').value) ?? 30,
+    pbSlopeTh: parseFloat(document.getElementById('p_pb_slope_th').value) ?? defaultParams.pbSlopeTh,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) ?? defaultParams.lockPct) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) ?? defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) ?? defaultParams.capLimit) * 10000,
@@ -1428,6 +1465,7 @@ const OPT_PARAMS = {
   skipCount:  { label: '跳过次',      range: [0, 5, 1] },
   priceSlopeTh: { label: '逆势挡',    range: [0, 0.01, 0.001], prec: 3 },
   slopeDays:  { label: '逆势窗',      range: [10, 60, 5] },
+  pbSlopeTh:  { label: '回踩斜率%',   range: [0, 3, 0.5], unit: '%' },
 };
 
 function optimizeParam() {
@@ -1465,6 +1503,7 @@ function optimizeParam() {
     ewmaFilterLow: parseFloat(document.getElementById('p_ewma_low').value) ?? defaultParams.ewmaFilterLow,
     priceSlopeTh: parseFloat(document.getElementById('p_slope_th').value) ?? defaultParams.priceSlopeTh,
     slopeDays: parseInt(document.getElementById('p_slope_days').value) ?? 30,
+    pbSlopeTh: parseFloat(document.getElementById('p_pb_slope_th').value) ?? defaultParams.pbSlopeTh,
     lockPct: (parseFloat(document.getElementById('p_lock_pct').value) ?? defaultParams.lockPct) / 100,
     capital: parseFloat(document.getElementById('p_capital').value) ?? defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) ?? defaultParams.capLimit) * 10000,
@@ -1492,6 +1531,7 @@ function optimizeParam() {
       else if (paramKey === 'skipCount') pp.skipCount = v;
       else if (paramKey === 'priceSlopeTh') pp.priceSlopeTh = v;
       else if (paramKey === 'slopeDays') pp.slopeDays = v;
+      else if (paramKey === 'pbSlopeTh') pp.pbSlopeTh = v;
 
       const ppNextDir = computeNextDirPred(fullData, pp);
       const core = _runCore(data, fullData, firstIdx, pp, cfg.mult, ppNextDir);
@@ -1540,7 +1580,7 @@ function optimizeParam() {
         <th class="num">' + meta.label + '</th><th class="num">最终权益</th><th class="num">收益</th><th class="num">笔数</th><th class="num">持仓覆盖率</th><th class="num">胜率</th><th class="num">盈亏比</th><th class="num">回撤</th><th class="num">均PnL</th>\
       </tr>' + rows + '</table></div>';
     status.textContent = '优化完成 | ' + values.length + '个值 | 最优 ' + meta.label + '=' + best.v + suffix + ' → ' + fmt(best.endEq);
-    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip', volFilterLow:'p_vol_low', volFilterHigh:'p_vol_high', volTarget:'p_vol_target', volTargetCap:'p_vol_target_cap', ewmaFilterHigh:'p_ewma_high', ewmaFilterLow:'p_ewma_low', priceSlopeTh:'p_slope_th', slopeDays:'p_slope_days' };
+    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip', volFilterLow:'p_vol_low', volFilterHigh:'p_vol_high', volTarget:'p_vol_target', volTargetCap:'p_vol_target_cap', ewmaFilterHigh:'p_ewma_high', ewmaFilterLow:'p_ewma_low', priceSlopeTh:'p_slope_th', slopeDays:'p_slope_days', pbSlopeTh:'p_pb_slope_th' };
     const el = document.getElementById(idMap[paramKey]);
     if (meta.prec) el.value = best.v.toFixed(meta.prec);
     else if (meta.unit) el.value = best.v.toFixed(1);
@@ -1788,12 +1828,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     const vrDir = row.vr != null ? (row.vr > 1 ? '涨' : row.vr < 1 ? '跌' : '—') : '';
     const subHist = dirMpHist(data, mpOff, rollSeg, idx, params.lookback);
     const { dir: trendDir } = emaDirection(subHist, params.lookback, params.minPct);
-    // MP EMA & 偏离
-    const _mpEmaVals = subHist.slice(-params.lookback);
-    let _mpEma = _mpEmaVals.length > 0 ? _mpEmaVals[0] : row.mp;
-    const _k = 2 / (params.lookback + 1);
-    for (let _ei = 1; _ei < _mpEmaVals.length; _ei++) { _mpEma = _mpEmaVals[_ei] * _k + _mpEma * (1 - _k); }
-    const _mpDevPct = _mpEma > 0 ? ((row.mp - _mpEma) / _mpEma * 100).toFixed(1) : null;
+    // MP偏离 (判断方向用的斜率, 与回踩门控同源)
+    const _mpDevPct = calcMpDevPct(data, mpOff, rollSeg, idx, params.lookback)?.toFixed(1) ?? null;
     const _proj = linearProjected(subHist, params.lookback);
     const _slopePct = _proj !== null ? (_proj / (subHist[subHist.length - 1] || 1) * 100).toFixed(1) : null;
     const _slopeText = _slopePct !== null ? ' <span style="color:#576574;font-size:11px">斜率' + (_slopePct > 0 ? '+' : '') + _slopePct + '%</span>' : '';
