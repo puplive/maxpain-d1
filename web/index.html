@@ -138,6 +138,7 @@ tr:hover td { background: #1a2a3a; }
       <option value="priceSlopeTh">逆势挡</option>
       <option value="slopeDays">逆势窗</option>
       <option value="pbSlopeTh">回踩斜率%</option>
+      <option value="volWindow">分位窗口</option>
     </select>
     <button class="btn" onclick="optimizeParam()" style="background:#8854d0;color:#fff;">优化</button>
     <span class="status" id="status">就绪</span>
@@ -157,6 +158,7 @@ tr:hover td { background: #1a2a3a; }
     <div class="param-group"><label>本金:</label><input type="number" id="p_capital" min="10000" step="10000" class="wide"></div>
     <div class="param-group"><label>封顶(万):</label><input type="number" id="p_cap_limit" min="0" step="10" class="wide"></div>
 	    <div class="param-group"><label>波动过滤%:</label><input type="number" id="p_vol_low" min="0" max="50" step="5" class="wide" title="低于此百分位不开"> <input type="number" id="p_vol_high" min="50" max="100" step="5" class="wide" title="高于此百分位不开"></div>
+	    <div class="param-group"><label>分位窗口:</label><input type="number" id="p_vol_window" min="0" step="5" class="wide" title="ATR/价格 分位统计的历史天数, 0=全部历史"></div>
 	    <div class="param-group"><label>目标化:</label><input type="number" id="p_vol_target" min="0" max="1" step="1" class="wide" title="1=开, 仓位按EWMA波动比值缩放"> <label>上限:</label><input type="number" id="p_vol_target_cap" min="1" max="5" step="0.5" class="wide" title="缩放上限, 波动低时最多放大到此倍数"></div>
 	    <div class="param-group"><label>EWMA挡高:</label><input type="number" id="p_ewma_high" min="0" max="2" step="0.1" class="wide" title="当期/长期EWMA比值高于此值挡掉, 0=关"> <label>挡低:</label><input type="number" id="p_ewma_low" min="0" max="1" step="0.05" class="wide" title="比值低于此值挡掉, 0=关"></div>
 	    <div class="param-group"><label>逆势挡:</label><input type="number" id="p_slope_th" min="0" max="0.01" step="0.001" class="wide" title="价格斜率阈值: 斜率<-此值不做多, >此值不做空, 0=关"> <label>窗:</label><input type="number" id="p_slope_days" min="5" max="60" step="1" class="wide" style="width:64px" title="判断逆势的斜率窗口天数"></div>
@@ -257,6 +259,7 @@ let defaultParams = {
   priceSlopeTh: 0,
   slopeDays: 30,
   pbSlopeTh: 0,
+  volWindow: 0,
   capital: 100000,
   capLimit: 200,
   skipCount: 0,
@@ -483,7 +486,7 @@ function computeNextDirPred(fullData, params) {
 function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, btEnd) {
   btStart = btStart || 0;
   btEnd = btEnd || data.length;
-  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, volFilterLow: VOL_FL, volFilterHigh: VOL_FH, volTarget: VT, volTargetCap: VT_CAP, ewmaFilterHigh: EWF_H, ewmaFilterLow: EWF_L, priceSlopeTh: SLOPE_TH, slopeDays: SLOPE_DAYS, pbSlopeTh: PB_SLOPE_TH_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
+  const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, volFilterLow: VOL_FL, volFilterHigh: VOL_FH, volWindow: VOL_WIN, volTarget: VT, volTargetCap: VT_CAP, ewmaFilterHigh: EWF_H, ewmaFilterLow: EWF_L, priceSlopeTh: SLOPE_TH, slopeDays: SLOPE_DAYS, pbSlopeTh: PB_SLOPE_TH_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
   const preStart = Math.max(0, firstIdx - LBK);
   let eq = CAP, peakEq = CAP, maxDd = 0, pos = null, posDays = 0;
   const trades = [], eqCurve = [{ d: data[0].d, eq: CAP }], stopCurve = [];
@@ -607,8 +610,9 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
         if (VOL_FL > 0 || VOL_FH < 100) {
           const curR = _atrRatio[_fullIdx - 1];  // 用昨日的ATR/价格,避免使用进场当天收盘数据
           if (!isNaN(curR)) {
+            const _winLo = VOL_WIN > 0 ? Math.max(0, _fullIdx - 1 - VOL_WIN) : 0;  // 分位窗口, 0=全部历史
             let _vcnt = 0, _vblw = 0;
-            for (let _ri = 0; _ri < _fullIdx - 1; _ri++) { const _rv = _atrRatio[_ri]; if (!isNaN(_rv)) { _vcnt++; if (_rv < curR) _vblw++; } }
+            for (let _ri = _winLo; _ri < _fullIdx - 1; _ri++) { const _rv = _atrRatio[_ri]; if (!isNaN(_rv)) { _vcnt++; if (_rv < curR) _vblw++; } }
             const _vpct = _vcnt > 0 ? _vblw / _vcnt * 100 : 50;
             if (_vpct < VOL_FL || _vpct > VOL_FH) td = null;
           }
@@ -806,6 +810,7 @@ function runBacktest() {
     atrMult: parseFloat(document.getElementById('p_atr_mult').value) ?? defaultParams.atrMult,
     volFilterLow: parseInt(document.getElementById('p_vol_low').value) ?? defaultParams.volFilterLow,
     volFilterHigh: parseInt(document.getElementById('p_vol_high').value) ?? defaultParams.volFilterHigh,
+    volWindow: parseInt(document.getElementById('p_vol_window').value) ?? defaultParams.volWindow,
     volTarget: parseInt(document.getElementById('p_vol_target').value) ?? defaultParams.volTarget,
     volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) ?? defaultParams.volTargetCap,
     ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) ?? defaultParams.ewmaFilterHigh,
@@ -881,13 +886,40 @@ function runBacktest() {
     byYr[y].ts.push(t);
     if (t.dir === 'long') byYr[y].lc++; else byYr[y].sc++;
   });
+  // 权益曲线回撤段: 从峰值回落到重新创新高, 按开始年份归属
+  const ddByYr = {};
+  {
+    let pk = -Infinity, pkD = null, segStart = null, segPeak = -Infinity, segTr = -Infinity;
+    const closeSeg = (endD, unrecovered) => {
+      if (segStart !== null && segPeak > 0 && segTr < segPeak) {
+        const y = segStart.slice(0, 4);
+        if (!ddByYr[y]) ddByYr[y] = [];
+        ddByYr[y].push({ depth: (segPeak - segTr) / segPeak * 100, days: Math.max(1, Math.round((new Date(endD) - new Date(segStart)) / 864e5)), unrecovered: !!unrecovered });
+      }
+      segStart = null;
+    };
+    eqCurve.forEach(({ d, eq }) => {
+      if (eq > pk) { pk = eq; pkD = d; closeSeg(d); }
+      else if (segStart === null) { segStart = pkD; segPeak = pk; segTr = eq; }
+      else if (eq < segTr) segTr = eq;
+    });
+    closeSeg(eqCurve[eqCurve.length - 1].d, true);
+  }
+  const yrDd = {};
+  Object.keys(ddByYr).forEach(y => {
+    const segs = ddByYr[y];
+    const mx = segs.reduce((a, b) => (b.days > a.days ? b : a), segs[0]);
+    yrDd[y] = { depth: Math.max.apply(null, segs.map(s => s.depth)), days: mx.days, unrecovered: mx.unrecovered };
+  });
   let yrCumPnl = 0;
   const yrHtml = Object.keys(byYr).sort().map(y => {
     const g = byYr[y], pnl = g.ts.reduce((s, t) => s + t.pnl, 0);
     const startEq = CAP + yrCumPnl;
     yrCumPnl += pnl;
     const annRet = startEq > 0 ? pnl / startEq * 100 : 0;
-    return '<tr><td>' + y + '</td><td class="num">' + g.ts.length + '</td><td class="center">' + g.lc + '/' + g.sc + '</td><td class="num ' + cls(pnl) + '">' + fmt(pnl) + '</td><td class="num ' + cls(annRet) + '">' + round1(annRet) + '%</td><td class="num ' + cls(pnl/g.ts.length) + '">' + fmt(Math.round(pnl/g.ts.length)) + '</td><td class="num">' + round1(g.ts.filter(t=>t.pnl>0).length/g.ts.length*100) + '%</td></tr>';
+    const dd = yrDd[y];
+    const ddCell = dd ? '<td class="num neg">-' + round1(dd.depth) + '%</td><td class="num">' + dd.days + '天' + (dd.unrecovered ? '+' : '') + '</td>' : '<td class="num">-</td><td class="num">-</td>';
+    return '<tr><td>' + y + '</td><td class="num">' + g.ts.length + '</td><td class="center">' + g.lc + '/' + g.sc + '</td><td class="num ' + cls(pnl) + '">' + fmt(pnl) + '</td><td class="num ' + cls(annRet) + '">' + round1(annRet) + '%</td><td class="num ' + cls(pnl/g.ts.length) + '">' + fmt(Math.round(pnl/g.ts.length)) + '</td><td class="num">' + round1(g.ts.filter(t=>t.pnl>0).length/g.ts.length*100) + '%</td>' + ddCell + '</tr>';
   }).join('');
 
   const byMo = {};
@@ -963,7 +995,7 @@ function runBacktest() {
         <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期仓</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
-    <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th></tr>' + yrHtml + '</table></div>\
+    <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">最大回撤</th><th class="num">最长回撤期</th></tr>' + yrHtml + '</table></div>\
     <div class="section"><h2>按月份（跨年合并）</h2><table><tr><th>月份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + moHtml + '</table></div>\
     <div class="section"><h2>按退出原因</h2><table><tr><th>原因</th><th class="num">笔数</th><th class="num">占比</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">均持仓</th></tr>' + rsHtml + '</table></div>\
     <div class="section"><h2>按持仓天数</h2><table><tr><th>持仓</th><th class="num">笔数</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + holdHtml + '</table></div>\
@@ -1253,6 +1285,7 @@ function setParamValues(p) {
   document.getElementById('p_slope_th').value = f.priceSlopeTh;
   document.getElementById('p_slope_days').value = f.slopeDays;
   document.getElementById('p_pb_slope_th').value = f.pbSlopeTh;
+  document.getElementById('p_vol_window').value = f.volWindow;
 }
 
 async function saveParams() {
@@ -1286,6 +1319,7 @@ async function saveParams() {
       price_slope_th: num('p_slope_th'),
       slope_days: numI('p_slope_days'),
       pb_slope_th: num('p_pb_slope_th') ?? 0,
+      vol_window: numI('p_vol_window') ?? 0,
       start_date: document.getElementById('p_start').value || null,
       end_date: document.getElementById('p_end').value || null,
     };
@@ -1327,6 +1361,7 @@ async function loadParams(sym) {
         priceSlopeTh: r.params.price_slope_th,
         slopeDays: r.params.slope_days,
         pbSlopeTh: r.params.pb_slope_th ?? 0,
+        volWindow: r.params.vol_window ?? 0,
       });
       if (r.params.start_date) document.getElementById('p_start').value = r.params.start_date;
       if (r.params.end_date) document.getElementById('p_end').value = r.params.end_date;
@@ -1364,6 +1399,7 @@ function runMonteCarlo() {
     atrMult: parseFloat(document.getElementById('p_atr_mult').value) ?? defaultParams.atrMult,
     volFilterLow: parseInt(document.getElementById('p_vol_low').value) ?? defaultParams.volFilterLow,
     volFilterHigh: parseInt(document.getElementById('p_vol_high').value) ?? defaultParams.volFilterHigh,
+    volWindow: parseInt(document.getElementById('p_vol_window').value) ?? defaultParams.volWindow,
     volTarget: parseInt(document.getElementById('p_vol_target').value) ?? defaultParams.volTarget,
     volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) ?? defaultParams.volTargetCap,
     ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) ?? defaultParams.ewmaFilterHigh,
@@ -1468,6 +1504,7 @@ const OPT_PARAMS = {
   priceSlopeTh: { label: '逆势挡',    range: [0, 0.01, 0.001], prec: 3 },
   slopeDays:  { label: '逆势窗',      range: [10, 60, 5] },
   pbSlopeTh:  { label: '回踩斜率%',   range: [0, 3, 0.5], unit: '%' },
+  volWindow:  { label: '分位窗口',    range: [0, 250, 10], unit: '天' },
 };
 
 function optimizeParam() {
@@ -1499,6 +1536,7 @@ function optimizeParam() {
     atrMult: parseFloat(document.getElementById('p_atr_mult').value) ?? defaultParams.atrMult,
     volFilterLow: parseInt(document.getElementById('p_vol_low').value) ?? defaultParams.volFilterLow,
     volFilterHigh: parseInt(document.getElementById('p_vol_high').value) ?? defaultParams.volFilterHigh,
+    volWindow: parseInt(document.getElementById('p_vol_window').value) ?? defaultParams.volWindow,
     volTarget: parseInt(document.getElementById('p_vol_target').value) ?? defaultParams.volTarget,
     volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) ?? defaultParams.volTargetCap,
     ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) ?? defaultParams.ewmaFilterHigh,
@@ -1534,6 +1572,7 @@ function optimizeParam() {
       else if (paramKey === 'priceSlopeTh') pp.priceSlopeTh = v;
       else if (paramKey === 'slopeDays') pp.slopeDays = v;
       else if (paramKey === 'pbSlopeTh') pp.pbSlopeTh = v;
+      else if (paramKey === 'volWindow') pp.volWindow = v;
 
       const ppNextDir = computeNextDirPred(fullData, pp);
       const core = _runCore(data, fullData, firstIdx, pp, cfg.mult, ppNextDir);
@@ -1582,7 +1621,7 @@ function optimizeParam() {
         <th class="num">' + meta.label + '</th><th class="num">最终权益</th><th class="num">收益</th><th class="num">笔数</th><th class="num">持仓覆盖率</th><th class="num">胜率</th><th class="num">盈亏比</th><th class="num">回撤</th><th class="num">均PnL</th>\
       </tr>' + rows + '</table></div>';
     status.textContent = '优化完成 | ' + values.length + '个值 | 最优 ' + meta.label + '=' + best.v + suffix + ' → ' + fmt(best.endEq);
-    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip', volFilterLow:'p_vol_low', volFilterHigh:'p_vol_high', volTarget:'p_vol_target', volTargetCap:'p_vol_target_cap', ewmaFilterHigh:'p_ewma_high', ewmaFilterLow:'p_ewma_low', priceSlopeTh:'p_slope_th', slopeDays:'p_slope_days', pbSlopeTh:'p_pb_slope_th' };
+    const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip', volFilterLow:'p_vol_low', volFilterHigh:'p_vol_high', volWindow:'p_vol_window', volTarget:'p_vol_target', volTargetCap:'p_vol_target_cap', ewmaFilterHigh:'p_ewma_high', ewmaFilterLow:'p_ewma_low', priceSlopeTh:'p_slope_th', slopeDays:'p_slope_days', pbSlopeTh:'p_pb_slope_th' };
     const el = document.getElementById(idMap[paramKey]);
     if (meta.prec) el.value = best.v.toFixed(meta.prec);
     else if (meta.unit) el.value = best.v.toFixed(1);

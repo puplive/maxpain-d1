@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS backtest_params (
   price_slope_th REAL DEFAULT 0,
   slope_days INTEGER DEFAULT 30,
   pb_slope_th REAL DEFAULT 0,
+  vol_window INTEGER DEFAULT 0,
   start_date TEXT,
   end_date TEXT,
   updated_at TEXT DEFAULT (datetime('now'))
