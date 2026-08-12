@@ -795,7 +795,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, revIdx, b
           ? Math.max(atrStop, pos.entryStopLevel)
           : Math.min(atrStop, pos.entryStopLevel);
       }
-      stopCurve.push({ d, stop: _s, breakLevel: _breakLevel });
+      stopCurve.push({ d, stop: _s, breakLevel: _breakLevel, start: pos.entryDate === d });
     } else {
       stopCurve.push({ d, stop: null, breakLevel: null });
     }
@@ -2338,17 +2338,30 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     if (stopCurve && stopCurve.length === n) {
       ctx.save();
       ctx.strokeStyle = '#ff9f43';
+      ctx.fillStyle = '#ff9f43';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
       ctx.globalAlpha = 0.8;
-      ctx.beginPath();
-      let scStarted = false;
-      for (let i = start; i < end && i < n; i++) {
-        if (stopCurve[i].stop === null) { scStarted = false; continue; }
-        const x = toX(i), y = toY(stopCurve[i].stop);
-        if (!scStarted) { ctx.moveTo(x, y); scStarted = true; } else ctx.lineTo(x, y);
+      // 按连续段绘制: 新开仓日(start)和空仓日(null)断开; 单日持仓只有孤立一点, 画圆点保证可见
+      let i = start;
+      while (i < end && i < n) {
+        if (stopCurve[i].stop === null) { i++; continue; }
+        let runEnd = i;
+        while (runEnd + 1 < end && runEnd + 1 < n && stopCurve[runEnd + 1].stop !== null && !stopCurve[runEnd + 1].start) runEnd++;
+        if (runEnd === i) {
+          // 单日持仓: 只有一个止损点, 画一小段虚线保持止损线样式可见
+          const sx = toX(i), sy = toY(stopCurve[i].stop);
+          ctx.beginPath(); ctx.moveTo(sx - 7, sy); ctx.lineTo(sx + 7, sy); ctx.stroke();
+        } else {
+          ctx.beginPath();
+          for (let k = i; k <= runEnd; k++) {
+            const x = toX(k), y = toY(stopCurve[k].stop);
+            if (k === i) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+        i = runEnd + 1;
       }
-      ctx.stroke();
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
       ctx.restore();
