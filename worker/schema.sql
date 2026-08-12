@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS backtest_params (
   slope_days INTEGER DEFAULT 30,
   pb_slope_th REAL DEFAULT 0,
   vol_window INTEGER DEFAULT 0,
+  acc_window INTEGER DEFAULT 3,
+  acc_streak INTEGER DEFAULT 3,
+  acc_mode TEXT DEFAULT 'off',
   start_date TEXT,
   end_date TEXT,
   updated_at TEXT DEFAULT (datetime('now'))

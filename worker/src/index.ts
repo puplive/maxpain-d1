@@ -223,6 +223,7 @@ export default {
         ewma_filter_high?: number; ewma_filter_low?: number;
         price_slope_th?: number; slope_days?: number; pb_slope_th?: number;
         vol_window?: number;
+        acc_window?: number; acc_streak?: number; acc_mode?: string;
         start_date?: string; end_date?: string;
       } = await request.json();
       const { symbol } = body;
@@ -237,8 +238,8 @@ export default {
           atr_period, atr_mult, lock_pct, capital, cap_limit, skip_count, mom_days,
           vol_filter_low, vol_filter_high, vol_target, vol_target_cap,
           ewma_filter_high, ewma_filter_low, price_slope_th, slope_days, pb_slope_th,
-          vol_window, start_date, end_date, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+          vol_window, acc_window, acc_streak, acc_mode, start_date, end_date, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
       ).bind(
         symbol.toUpperCase(),
         body.lookback ?? null, body.min_pct ?? null, body.max_pos ?? null, body.margin ?? null,
@@ -250,6 +251,7 @@ export default {
         body.ewma_filter_high ?? 0, body.ewma_filter_low ?? 0,
         body.price_slope_th ?? 0, body.slope_days ?? 30, body.pb_slope_th ?? 0,
         body.vol_window ?? 0,
+        body.acc_window ?? 3, body.acc_streak ?? 3, body.acc_mode ?? 'off',
         body.start_date ?? null, body.end_date ?? null
       ).run();
       return new Response(JSON.stringify({ ok: true }), {

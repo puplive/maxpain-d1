@@ -163,6 +163,13 @@ tr:hover td { background: #1a2a3a; }
 	    <div class="param-group"><label>EWMA挡高:</label><input type="number" id="p_ewma_high" min="0" max="2" step="0.1" class="wide" title="当期/长期EWMA比值高于此值挡掉, 0=关"> <label>挡低:</label><input type="number" id="p_ewma_low" min="0" max="1" step="0.05" class="wide" title="比值低于此值挡掉, 0=关"></div>
 	    <div class="param-group"><label>逆势挡:</label><input type="number" id="p_slope_th" min="0" max="0.01" step="0.001" class="wide" title="价格斜率阈值: 斜率<-此值不做多, >此值不做空, 0=关"> <label>窗:</label><input type="number" id="p_slope_days" min="5" max="60" step="1" class="wide" style="width:64px" title="判断逆势的斜率窗口天数"></div>
 	    <div class="param-group"><label>回踩斜率%:</label><input type="number" id="p_pb_slope_th" min="0" max="5" step="0.5" class="wide" title="MP趋势|斜率|≤此值 时回踩MP开仓(开盘已破MP按开盘价, 否则低/高点触及MP成交), >此值追开盘价; 0=关(始终开盘价)"></div>
+    <div class="param-group"><label>标记窗口:</label><input type="number" id="p_acc_win" min="1" max="60" step="1" class="wide" title="近N日累计涨跌点数(按信号方向对齐, 等价单手N日PnL)作为每日判定"></div>
+    <div class="param-group"><label>连续:</label><input type="number" id="p_acc_streak" min="1" max="30" step="1" class="wide" title="连续N天累计为负才亮!标记, 转正即停"></div>
+    <div class="param-group"><label>标记模式:</label><select id="p_acc_mode" style="padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font-size:12px;">
+      <option value="off">正常</option>
+      <option value="skip">拦截</option>
+      <option value="rev">反向</option>
+    </select></div>
     <div class="param-group"><label>开始:</label><input type="date" id="p_start" style="width:120px;padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font:12px sans-serif;"></div>
     <div class="param-group"><label>结束:</label><input type="date" id="p_end" style="width:120px;padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font:12px sans-serif;"></div>
     <div class="param-group" style="border-left:1px solid #2d3436;padding-left:12px;">
@@ -260,6 +267,9 @@ let defaultParams = {
   slopeDays: 30,
   pbSlopeTh: 0,
   volWindow: 0,
+  accWindow: 3,
+  accStreak: 3,
+  accMode: 'off',
   capital: 100000,
   capLimit: 200,
   skipCount: 0,
@@ -483,7 +493,65 @@ function computeNextDirPred(fullData, params) {
   }
   return preds;
 }
-function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, btEnd) {
+
+// 图表标记: 当日信号方向下近accWindow日累计涨跌点数为负 → 画"!"徽章 (不要求连续, 每个负窗口日都画)
+function computeAccBadIdx(fullData, nextDirPred, accWindow) {
+  const n = fullData.length;
+  const W = Math.max(1, accWindow || 3);
+  const idx = [];
+  for (let i = 0; i < n; i++) {
+    const p = nextDirPred[i - 1];
+    if (p && i >= W) {
+      const cum = fullData[i].c - fullData[i - W].c;
+      if ((p === 'long' ? cum : -cum) < 0) idx.push(i);
+    }
+  }
+  return idx;
+}
+
+// 开仓门控判定: 当日信号方向(前收决定、当日开盘执行的信号 pred[i-1]) 下, 近accWindow日累计涨跌点数 = 方向×(c[i]-c[i-accWindow]), 等价于单手accWindow日PnL
+// 连续accStreak个交易日累计为负 → 返回该日index (标记开始); 累计转正即停
+function computeAccWarnIdx(fullData, nextDirPred, accWindow, accStreak) {
+  const n = fullData.length;
+  const W = Math.max(1, accWindow || 3);
+  const S = Math.max(1, accStreak || 3);
+  const neg = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const p = nextDirPred[i - 1];
+    if (p && i >= W) {
+      const cum = fullData[i].c - fullData[i - W].c;
+      neg[i] = (p === 'long' ? cum : -cum) < 0 ? 1 : 0;
+    }
+  }
+  const idx = [];
+  let stk = 0;
+  for (let i = 0; i < n; i++) {
+    stk = neg[i] ? stk + 1 : 0;
+    if (stk >= S) idx.push(i);
+  }
+  return idx;
+}
+
+// 按标记模式门控开仓: 有标记的次日(i日标记 → i+1日入场用pred[i]) 拦掉或反向
+// mode: 'off'=正常不拦截 / 'skip'=不开仓 / 'rev'=反向开仓
+// 返回 { preds, revIdx } — revIdx = 被反向的pred下标集合(用于_rumCore跳过方向反转离场)
+function gatePreds(nextDirPred, warnIdx, mode) {
+  const revIdx = new Set();
+  if (mode !== 'skip' && mode !== 'rev') return { preds: nextDirPred, revIdx };
+  const np = nextDirPred.slice();
+  const warnSet = new Set(warnIdx);
+  for (let i = 0; i < np.length; i++) {
+    if (warnSet.has(i)) {
+      if (mode === 'skip') np[i] = null;
+      else {
+        if (np[i] !== null) revIdx.add(i);
+        np[i] = np[i] === 'long' ? 'short' : (np[i] === 'short' ? 'long' : null);
+      }
+    }
+  }
+  return { preds: np, revIdx };
+}
+function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, revIdx, btStart, btEnd) {
   btStart = btStart || 0;
   btEnd = btEnd || data.length;
   const { lookback: LBK, minPct: MIN_PCT, maxPos: MAX_POS, margin: MR, beTh: BE_TH, entryAtrMult: ENTRY_ATR, atrPeriod: ATR_PERIOD, atrMult: ATR_MULT, lockPct: LOCK_PCT, volFilterLow: VOL_FL, volFilterHigh: VOL_FH, volWindow: VOL_WIN, volTarget: VT, volTargetCap: VT_CAP, ewmaFilterHigh: EWF_H, ewmaFilterLow: EWF_L, priceSlopeTh: SLOPE_TH, slopeDays: SLOPE_DAYS, pbSlopeTh: PB_SLOPE_TH_PCT, capital: CAP, capLimit: CAP_LIMIT, skipCount: SKIP } = params;
@@ -548,12 +616,13 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
         trades.push({ entry: pos.entryDate, exit: d, entryPx: pos.entryPx, exitPx: prevClose, dir: pos.direction, qty: pos.qty, pnl: rollPnl - rollFee, reason: '换月', entryReason: pos.entryReason, hold: (new Date(d) - new Date(pos.entryDate)) / 864e5 });
         eq += rollPnl - rollFee;
         const rAtr = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
-        pos = { direction: pos.direction, entryPx: op, entryDate: d, qty: pos.qty, entryReason: pos.entryReason, peakPx: op, beActive: false, entryTrend: pos.direction === 'long' ? 'up' : 'down', entryStopLevel: pos.direction === 'long' ? op - (isNaN(rAtr) ? op * 0.005 : rAtr * ENTRY_ATR) : op + (isNaN(rAtr) ? op * 0.005 : rAtr * ENTRY_ATR) };
+        pos = { direction: pos.direction, entryPx: op, entryDate: d, qty: pos.qty, entryReason: pos.entryReason, peakPx: op, beActive: false, entryTrend: pos.direction === 'long' ? 'up' : 'down', entryStopLevel: pos.direction === 'long' ? op - (isNaN(rAtr) ? op * 0.005 : rAtr * ENTRY_ATR) : op + (isNaN(rAtr) ? op * 0.005 : rAtr * ENTRY_ATR), reversed: pos.reversed };
       } else {
       let exitPx = null;
 
-      if (!exitPx) {
+      if (!exitPx && !pos.reversed) {
         // 方向判断用 换月后复权补齐的lookback MP (截至昨日)
+        // 反向开仓的单子跳过方向反转出场(它是逆势开的, 趋势未变时会立刻误触发), 交给追踪止损/保本管理
         const { dir: currDir } = _fullIdx > 0 ? emaDirection(dirMpHist(fullData, mpOff, rollSeg, _fullIdx - 1, LBK), LBK, MIN_PCT) : { dir: null };
         if (currDir !== pos.entryTrend && currDir !== null) { exitPx = row.o; reason = '方向反转'; }
       }
@@ -667,7 +736,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, btStart, 
               const qty = Math.floor(alloc / dn);
               if (qty >= 1) {
                 const enAtr = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
-                pos = { direction: td, entryPx: entryPx, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: entryPx, beActive: false, entryTrend: td === 'long' ? 'up' : 'down', entryStopLevel: td === 'long' ? entryPx - (isNaN(enAtr) ? entryPx * 0.005 : enAtr * ENTRY_ATR) : entryPx + (isNaN(enAtr) ? entryPx * 0.005 : enAtr * ENTRY_ATR) };
+                pos = { direction: td, entryPx: entryPx, entryDate: d, qty, entryReason: td === 'long' ? '趋势多' : '趋势空', peakPx: entryPx, beActive: false, entryTrend: td === 'long' ? 'up' : 'down', entryStopLevel: td === 'long' ? entryPx - (isNaN(enAtr) ? entryPx * 0.005 : enAtr * ENTRY_ATR) : entryPx + (isNaN(enAtr) ? entryPx * 0.005 : enAtr * ENTRY_ATR), reversed: revIdx ? revIdx.has(_fullIdx - 1) : false };
                 if (td === 'long') {
                   const stop2 = entryPx - (isNaN(enAtr) ? entryPx * 0.005 : enAtr * ENTRY_ATR);
                   if (lo < stop2) {
@@ -811,6 +880,9 @@ function runBacktest() {
     volFilterLow: parseInt(document.getElementById('p_vol_low').value) ?? defaultParams.volFilterLow,
     volFilterHigh: parseInt(document.getElementById('p_vol_high').value) ?? defaultParams.volFilterHigh,
     volWindow: parseInt(document.getElementById('p_vol_window').value) ?? defaultParams.volWindow,
+    accWindow: parseInt(document.getElementById('p_acc_win').value) ?? defaultParams.accWindow,
+    accStreak: parseInt(document.getElementById('p_acc_streak').value) ?? defaultParams.accStreak,
+    accMode: document.getElementById('p_acc_mode').value || defaultParams.accMode,
     volTarget: parseInt(document.getElementById('p_vol_target').value) ?? defaultParams.volTarget,
     volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) ?? defaultParams.volTargetCap,
     ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) ?? defaultParams.ewmaFilterHigh,
@@ -828,7 +900,12 @@ function runBacktest() {
 
   const firstIdx = 0;
   const nextDirPred = computeNextDirPred(fullData, params);
-  const core = _runCore(data, fullData, 0, params, MULT, nextDirPred, btStartIdx, btEndIdx);
+  // 图表标记: 近accWindow日累计涨跌点数为负的每个交易日都画"!"(不要求连续)
+  // 开仓门控: 连续accStreak天为负才按模式处理 (off=正常 / skip=不开 / rev=反向)
+  const accBadIdx = computeAccBadIdx(fullData, nextDirPred, params.accWindow);
+  const accWarnIdx = computeAccWarnIdx(fullData, nextDirPred, params.accWindow, params.accStreak);
+  const { preds: tradingPred, revIdx } = gatePreds(nextDirPred, accWarnIdx, params.accMode);
+  const core = _runCore(data, fullData, 0, params, MULT, tradingPred, revIdx, btStartIdx, btEndIdx);
   // Pre-compute analysis for every candle for dynamic hover
   window._analysisCache = [];
   for (let i = 0; i < data.length; i++) {
@@ -855,6 +932,7 @@ function runBacktest() {
     const a = o.tot > 0 ? round1(o.corr / o.tot * 100) : null;
     return a !== null ? h + '天:' + a + '%' : '';
   }).filter(Boolean).join(' | ');
+
 
   if (trades.length === 0) {
     result.innerHTML = '<div class="error">无交易产生</div>';
@@ -1248,8 +1326,10 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
   status.textContent = '完成 | 数据: ' + data[0].d + ' ~ ' + data[data.length-1].d + ' | ' + trades.length + '笔交易' + capInfo;
   btn.disabled = false;
   setTimeout(function() {
-    drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurve, CAP);
-    drawEquityCurve(eqCurve, CAP);
+    drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurve, CAP, accBadIdx);
+    // 收盘价序列与 eqCurve 对齐: eqCurve[0]=基线(数据首日), eqCurve[k]=第k-1日收盘权益
+    const eqCloses = eqCurve.map((_, k) => k === 0 ? data[0].c : data[k - 1].c);
+    drawEquityCurve(eqCurve, CAP, eqCloses);
   }, 0);
 }
 
@@ -1286,6 +1366,9 @@ function setParamValues(p) {
   document.getElementById('p_slope_days').value = f.slopeDays;
   document.getElementById('p_pb_slope_th').value = f.pbSlopeTh;
   document.getElementById('p_vol_window').value = f.volWindow;
+  document.getElementById('p_acc_win').value = f.accWindow;
+  document.getElementById('p_acc_streak').value = f.accStreak;
+  document.getElementById('p_acc_mode').value = f.accMode;
 }
 
 async function saveParams() {
@@ -1320,6 +1403,9 @@ async function saveParams() {
       slope_days: numI('p_slope_days'),
       pb_slope_th: num('p_pb_slope_th') ?? 0,
       vol_window: numI('p_vol_window') ?? 0,
+      acc_window: numI('p_acc_win') ?? 3,
+      acc_streak: numI('p_acc_streak') ?? 3,
+      acc_mode: document.getElementById('p_acc_mode').value || 'off',
       start_date: document.getElementById('p_start').value || null,
       end_date: document.getElementById('p_end').value || null,
     };
@@ -1362,6 +1448,9 @@ async function loadParams(sym) {
         slopeDays: r.params.slope_days,
         pbSlopeTh: r.params.pb_slope_th ?? 0,
         volWindow: r.params.vol_window ?? 0,
+        accWindow: r.params.acc_window ?? 3,
+        accStreak: r.params.acc_streak ?? 3,
+        accMode: r.params.acc_mode ?? 'off',
       });
       if (r.params.start_date) document.getElementById('p_start').value = r.params.start_date;
       if (r.params.end_date) document.getElementById('p_end').value = r.params.end_date;
@@ -1400,6 +1489,9 @@ function runMonteCarlo() {
     volFilterLow: parseInt(document.getElementById('p_vol_low').value) ?? defaultParams.volFilterLow,
     volFilterHigh: parseInt(document.getElementById('p_vol_high').value) ?? defaultParams.volFilterHigh,
     volWindow: parseInt(document.getElementById('p_vol_window').value) ?? defaultParams.volWindow,
+    accWindow: parseInt(document.getElementById('p_acc_win').value) ?? defaultParams.accWindow,
+    accStreak: parseInt(document.getElementById('p_acc_streak').value) ?? defaultParams.accStreak,
+    accMode: document.getElementById('p_acc_mode').value || defaultParams.accMode,
     volTarget: parseInt(document.getElementById('p_vol_target').value) ?? defaultParams.volTarget,
     volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) ?? defaultParams.volTargetCap,
     ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) ?? defaultParams.ewmaFilterHigh,
@@ -1414,7 +1506,9 @@ function runMonteCarlo() {
   };
   params.mult = cfg.mult;
   const nextDirPred = computeNextDirPred(fullData, params);
-  const core = _runCore(data, fullData, firstIdx, params, cfg.mult, nextDirPred);
+  const accWarnIdx = computeAccWarnIdx(fullData, nextDirPred, params.accWindow, params.accStreak);
+  const { preds: tradingPred, revIdx } = gatePreds(nextDirPred, accWarnIdx, params.accMode);
+  const core = _runCore(data, fullData, firstIdx, params, cfg.mult, tradingPred, revIdx);
   const trades = core.trades;
   if (!trades || trades.length < 10) { alert('交易笔数不足（至少10笔）'); return; }
   const result = document.getElementById('result');
@@ -1537,6 +1631,9 @@ function optimizeParam() {
     volFilterLow: parseInt(document.getElementById('p_vol_low').value) ?? defaultParams.volFilterLow,
     volFilterHigh: parseInt(document.getElementById('p_vol_high').value) ?? defaultParams.volFilterHigh,
     volWindow: parseInt(document.getElementById('p_vol_window').value) ?? defaultParams.volWindow,
+    accWindow: parseInt(document.getElementById('p_acc_win').value) ?? defaultParams.accWindow,
+    accStreak: parseInt(document.getElementById('p_acc_streak').value) ?? defaultParams.accStreak,
+    accMode: document.getElementById('p_acc_mode').value || defaultParams.accMode,
     volTarget: parseInt(document.getElementById('p_vol_target').value) ?? defaultParams.volTarget,
     volTargetCap: parseFloat(document.getElementById('p_vol_target_cap').value) ?? defaultParams.volTargetCap,
     ewmaFilterHigh: parseFloat(document.getElementById('p_ewma_high').value) ?? defaultParams.ewmaFilterHigh,
@@ -1575,7 +1672,9 @@ function optimizeParam() {
       else if (paramKey === 'volWindow') pp.volWindow = v;
 
       const ppNextDir = computeNextDirPred(fullData, pp);
-      const core = _runCore(data, fullData, firstIdx, pp, cfg.mult, ppNextDir);
+      const ppAccWarn = computeAccWarnIdx(fullData, ppNextDir, pp.accWindow, pp.accStreak);
+      const { preds: ppTrading, revIdx: ppRev } = gatePreds(ppNextDir, ppAccWarn, pp.accMode);
+      const core = _runCore(data, fullData, firstIdx, pp, cfg.mult, ppTrading, ppRev);
       if (core.trades.length === 0) continue;
       const wins = core.trades.filter(t => t.pnl > 0);
       const losses = core.trades.filter(t => t.pnl <= 0);
@@ -1641,7 +1740,7 @@ function resetParams() {
   toggleManual();
 }
 
-function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurve, cap) {
+function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurve, cap, accWarnIdx) {
   const infoEl = document.getElementById('chartInfo');
   const canvas = document.getElementById('chart');
   if (!canvas) return;
@@ -2230,7 +2329,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.moveTo(lx+8, ly+tSz+1); ctx.lineTo(lx+4, ly-1); ctx.lineTo(lx+12, ly-1); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('BE下穿MP 下跌', lx+20, ly+8); lx += 130;
     ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.moveTo(lx+8, ly-3); ctx.lineTo(lx+4, ly+tSz-1); ctx.lineTo(lx+12, ly+tSz-1); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#c8d6e5'; ctx.fillText('BE上穿MP 上涨', lx+20, ly+8);
+    ctx.fillStyle = '#c8d6e5'; ctx.fillText('BE上穿MP 上涨', lx+20, ly+8); lx += 95;
+    // 累计涨跌点数转负标记
+    ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 11px sans-serif'; ctx.fillText('!', lx + 4, ly + 8);
+    ctx.fillStyle = '#c8d6e5'; ctx.font = '11px sans-serif'; ctx.fillText((params.accWindow || 3) + '日累计亏损', lx + 12, ly + 8);
     ctx.restore();
 
     if (stopCurve && stopCurve.length === n) {
@@ -2380,6 +2482,30 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.restore();
     }
 
+    // 累计涨跌点数(近accWindow日)连续accStreak天为负 → 主图底部红色"!"徽章
+    if (accWarnIdx && accWarnIdx.length) {
+      ctx.font = 'bold ' + Math.max(7, Math.min(10, state.barW * 0.6)) + 'px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const cy = pad.top + ch - 10;
+      let ai = 0;
+      while (ai < accWarnIdx.length && accWarnIdx[ai] < start) ai++;
+      for (; ai < accWarnIdx.length && accWarnIdx[ai] < end; ai++) {
+        const i = accWarnIdx[ai];
+        const x = toX(i);
+        ctx.beginPath();
+        ctx.arc(x, cy, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#e74c3c';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.fillText('!', x, cy);
+      }
+      ctx.textBaseline = 'alphabetic';
+    }
+
     const lastVis = Math.min(end - 1, n - 1);
     ctx.fillStyle = '#e8c84a';
     ctx.font = '11px sans-serif';
@@ -2430,13 +2556,16 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     }
     ctx.textBaseline = 'alphabetic';
 
-    // 期货/期权同一合约月标记: K线图底部边界线(H-36)上点小红点
-    ctx.fillStyle = '#e74c3c';
+    // 期货/期权同一合约月标记: K线图底部边界线(H-36)上画红色短横线
+    ctx.strokeStyle = '#e74c3c';
+    ctx.lineWidth = 1.5;
     for (let i = start; i < end && i < n; i++) {
       if (sameContractMonth(data[i].fut_contract, data[i].opt_contract)) {
+        const x = toX(i);
         ctx.beginPath();
-        ctx.arc(toX(i), H - 36, 2, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(x - 3, H - 36);
+        ctx.lineTo(x + 3, H - 36);
+        ctx.stroke();
       }
     }
 
@@ -3232,13 +3361,14 @@ function toggleChartLine() {
   if (window._chartRender) window._chartRender();
 }
 
-function drawEquityCurve(eqCurve, cap) {
+function drawEquityCurve(eqCurve, cap, closes) {
   const canvas = document.getElementById('eqChart');
   if (!canvas || !eqCurve || eqCurve.length < 2) return;
-  if (!canvas._eqData) canvas._eqData = { hoverIdx: -1, curve: [], cap: 0 };
+  if (!canvas._eqData) canvas._eqData = { hoverIdx: -1, curve: [], cap: 0, closes: [] };
   const data = canvas._eqData;
   data.curve = eqCurve;
   data.cap = cap;
+  data.closes = closes || null;
 
   const W = canvas.clientWidth || 600;
   const H = 200;
@@ -3277,6 +3407,22 @@ function drawEquityCurve(eqCurve, cap) {
     ctx.strokeStyle = '#54a0ff'; ctx.lineWidth = 1.5; ctx.beginPath();
     for (let i = 0; i < curve.length; i++) { const x = toX(i), y = toY(curve[i].eq); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
     ctx.stroke();
+    // 收盘价折线(自有归一化刻度, 与权益曲线同区域叠加)
+    const _closes = data.closes;
+    if (_closes && _closes.length === curve.length) {
+      let cMin = Infinity, cMax = -Infinity;
+      for (const v of _closes) { if (v < cMin) cMin = v; if (v > cMax) cMax = v; }
+      if (isFinite(cMin) && isFinite(cMax) && cMax >= cMin) {
+        const cRng = cMax - cMin || 1; cMin -= cRng * 0.05; cMax += cRng * 0.05;
+        const toYc = v => pad.top + ch - (v - cMin) / (cMax - cMin) * ch;
+        ctx.strokeStyle = '#ff9f43'; ctx.lineWidth = 1; ctx.globalAlpha = 0.9; ctx.beginPath();
+        for (let i = 0; i < _closes.length; i++) { const x = toX(i), y = toYc(_closes[i]); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+        ctx.stroke(); ctx.globalAlpha = 1;
+        const lastC = _closes[_closes.length - 1];
+        ctx.fillStyle = '#ff9f43'; ctx.textAlign = 'left'; ctx.font = '10px sans-serif';
+        ctx.fillText('收盘 ' + (lastC >= 100 ? lastC.toFixed(0) : lastC.toFixed(2)), pad.left + 4, pad.top - 2);
+      }
+    }
     ctx.fillStyle = '#576574'; ctx.textAlign = 'center'; ctx.font = '10px sans-serif';
     for (const di of [0, Math.floor(curve.length / 2), curve.length - 1]) ctx.fillText(curve[di].d, toX(di), pad.top + ch + 16);
     const last = curve[curve.length - 1].eq;
@@ -3302,6 +3448,14 @@ function drawEquityCurve(eqCurve, cap) {
       ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - eqW, hy - 9, eqW, 18);
       ctx.fillStyle = '#54a0ff'; ctx.textAlign = 'right'; ctx.font = 'bold 11px sans-serif';
       ctx.fillText(eqText, W - pad.right - 5, hy + 5);
+      const _cl = data.closes;
+      if (_cl && _cl[hoverIdx] !== undefined) {
+        const cText = '收盘 ' + (_cl[hoverIdx] >= 100 ? _cl[hoverIdx].toFixed(0) : _cl[hoverIdx].toFixed(2));
+        const cW = ctx.measureText(cText).width + 14;
+        ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - cW, hy - 27, cW, 18);
+        ctx.fillStyle = '#ff9f43'; ctx.textAlign = 'right'; ctx.font = '10px sans-serif';
+        ctx.fillText(cText, W - pad.right - 5, hy - 13);
+      }
     }
   }
 
