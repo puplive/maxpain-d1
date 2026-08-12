@@ -1342,7 +1342,7 @@ function round2(v) { return Math.round(v*100)/100; }
 
 function setParamValues(p) {
   const clean = {};
-  if (p) for (const k in p) if (p[k] != null && !isNaN(p[k])) clean[k] = p[k];
+  if (p) for (const k in p) if (p[k] != null && (typeof p[k] === 'string' || !isNaN(p[k]))) clean[k] = p[k];
   const f = Object.assign({}, defaultParams, clean);   // 缺失/空值字段用默认补齐
   document.getElementById('p_lookback').value = f.lookback;
   document.getElementById('p_min_pct').value = f.minPct;
