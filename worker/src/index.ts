@@ -144,7 +144,7 @@ export default {
          (symbol, date, open, close, high, low, mp, co, po, bec, bep, vr, ivs, gex, expiry, dte, nc, oc, oc_chain,
           oi_total, oi_pcr, oi_max_strike, vol_call, vol_put, vol_total, fut_vol, fut_oi, fut_turnover, atm_iv)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
 
       const batch = data.map((r) =>
@@ -239,7 +239,7 @@ export default {
           vol_filter_low, vol_filter_high, vol_target, vol_target_cap,
           ewma_filter_high, ewma_filter_low, price_slope_th, slope_days, pb_slope_th,
           vol_window, acc_window, acc_streak, acc_mode, start_date, end_date, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
       ).bind(
         symbol.toUpperCase(),
         body.lookback ?? null, body.min_pct ?? null, body.max_pos ?? null, body.margin ?? null,
