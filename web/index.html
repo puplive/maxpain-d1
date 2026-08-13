@@ -25,6 +25,12 @@ h1 small { font-size: 13px; color: #576574; font-weight: normal; }
 .sym-btn { padding: 8px 14px; border: 1px solid #2d3436; border-radius: 6px; background: #1a2a3a; color: #c8d6e5; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .sym-btn:hover { border-color: #54a0ff; }
 .sym-btn::after { content: '▾'; font-size: 10px; color: #576574; }
+/* 期权成熟品种快速栏 */
+.mature-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.mature-bar .mature-label { font-size: 12px; color: #576574; white-space: nowrap; }
+.mature-sym { padding: 4px 12px; border: 1px solid #2d3436; border-radius: 6px; background: #1a2a3a; color: #c8d6e5; font-size: 12px; cursor: pointer; transition: all .15s; white-space: nowrap; }
+.mature-sym:hover { border-color: #54a0ff; color: #54a0ff; }
+.mature-sym.active { border-color: #e8c84a; color: #e8c84a; background: #e8c84a11; }
 /* 模态弹框 */
 .modal-overlay { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; }
 .modal-overlay.open { display: flex; }
@@ -117,6 +123,10 @@ tr:hover td { background: #1a2a3a; }
 
   <div class="refresh-bar" id="refreshBar">
     <span id="dataStatus">加载数据中...</span>
+  </div>
+
+  <div class="mature-bar" id="matureBar">
+    <span class="mature-label">期权成熟品种</span>
   </div>
 
   <div class="controls">
@@ -247,6 +257,8 @@ const SYM_CFG = {
 let ALL_DATA = {};
 let SYMBOLS = [];
 let CURRENT_SYM = '';
+// 期权成熟品种（快速切换栏，写死）：MP 跟随价格、非长期不动的品种
+const MATURE_SYMS = ['TA', 'SA', 'V', 'AG', 'AU', 'P', 'I', 'MA', 'PG'];
 let defaultParams = {
   lookback: 21,
   minPct: 0.1,
@@ -321,6 +333,7 @@ async function loadAllData() {
   }
   CURRENT_SYM = firstSym;
   document.getElementById('symBtn').textContent = SYM_CFG[firstSym].name + ' (' + firstSym + ')';
+  renderMatureBar();
 
   // 只加载第一个品种的数据
   const data = await loadData(firstSym);
@@ -338,10 +351,24 @@ function updateSymBtn(sym) {
   document.getElementById('symBtn').textContent = cfg ? (cfg.name + ' (' + sym + ')') : sym;
 }
 
+function renderMatureBar() {
+  const bar = document.getElementById('matureBar');
+  if (!bar) return;
+  const avail = MATURE_SYMS.filter(s => SYMBOLS.includes(s));
+  let html = '<span class="mature-label">期权成熟品种</span>';
+  for (const sym of avail) {
+    const cfg = SYM_CFG[sym];
+    const active = sym === CURRENT_SYM ? ' active' : '';
+    html += '<button class="mature-sym' + active + '" onclick="switchSymbol(\'' + sym + '\')">' + cfg.name + ' (' + sym + ')</button>';
+  }
+  bar.innerHTML = html;
+}
+
 async function switchSymbol(sym) {
   if (!sym) return;
   CURRENT_SYM = sym;
   updateSymBtn(sym);
+  renderMatureBar();
   localStorage.setItem('maxpain_symbol', sym);
   if (!ALL_DATA[sym]) {
     document.getElementById('dataStatus').textContent = '加载 ' + sym + ' ...';
@@ -1070,6 +1097,7 @@ function runBacktest() {
         <label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label>\
+        <label style="cursor:pointer;"><input type="checkbox" id="t_roll" checked onchange="toggleChartLine()"> <span style="color:#ff9f43">换月</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期仓</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
@@ -1759,6 +1787,27 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   const mpOff = calcMpRebase(data);
   const rollSeg = calcRollSegStart(data);
 
+  // 换月高峰期: 主力合约交割月的前一个月 (如 09合约→8月). 移仓是交易者自主行为, 只画估计区间, 不追踪精确换月日.
+  const rollRegions = (function(){
+    const regions = [];
+    if (!n) return regions;
+    let runStart = -1;
+    for (let i = 0; i <= n; i++) {
+      const fc = i < n ? data[i].fut_contract : null;
+      let inPeak = false;
+      if (fc) {
+        const dm = parseInt(fc.slice(-2), 10);
+        if (dm >= 1 && dm <= 12) inPeak = parseInt(data[i].d.slice(5, 7), 10) === (dm === 1 ? 12 : dm - 1);
+      }
+      if (inPeak && runStart < 0) runStart = i;
+      if (!inPeak && runStart >= 0) {
+        regions.push({ s: runStart, e: i - 1, to: data[runStart].fut_contract });
+        runStart = -1;
+      }
+    }
+    return regions;
+  })();
+
   const subCanvas = document.getElementById('subChart');
   var _subGex, _subSkewD, _subMinG, _subMaxG, _subMinS, _subMaxS;
   var _subVr, _subMinV, _subMaxV;
@@ -2106,6 +2155,26 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     for (let i = 0; i <= 8; i++) {
       const y = pad.top + (ch / 8) * i;
       ctx.fillText((maxP - (range / 8) * i).toFixed(0), pad.left - 6, y + 4);
+    }
+
+    // 换月高峰期色带: 交割月前一个月
+    if (document.getElementById('t_roll').checked) {
+      ctx.save();
+      for (let ri = 0; ri < rollRegions.length; ri++) {
+        const r = rollRegions[ri];
+        const x0 = Math.max(start, r.s), x1 = Math.min(end - 1, r.e);
+        if (x0 > x1) continue;
+        const px0 = toX(x0) - state.barW / 2, px1 = toX(x1) + state.barW / 2;
+        ctx.fillStyle = 'rgba(255,165,0,0.06)';
+        ctx.fillRect(px0, pad.top, px1 - px0, ch);
+        if (px0 >= pad.left) {
+          ctx.fillStyle = '#e8c84a';
+          ctx.font = '10px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(r.to + ' 换月', px0 + 3, pad.top + 10);
+        }
+      }
+      ctx.restore();
     }
 
     if (state.hoverIdx >= start && state.hoverIdx < end) {
@@ -2549,7 +2618,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.fillText(data[i].d.slice(0, 7), toX(i), H - 10);
     }
 
-    // 期货换月标记: 空心三角 + "换"字, 悬在蜡烛图底部边缘下 (H-36)
+    // 期货换月标记: 空心三角 + "换"字, 悬在蜡烛图顶部边缘下 (pad.top)
     ctx.strokeStyle = '#fdcb6e';
     ctx.fillStyle = '#fdcb6e';
     ctx.lineWidth = 0.5;
@@ -2560,12 +2629,12 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       if (i > 0 && data[i].fut_contract && data[i - 1].fut_contract && data[i].fut_contract !== data[i - 1].fut_contract) {
         const x = toX(i);
         ctx.beginPath();
-        ctx.moveTo(x, H - 36);
-        ctx.lineTo(x - 4.5, H - 45);
-        ctx.lineTo(x + 4.5, H - 45);
+        ctx.moveTo(x, pad.top + 12);
+        ctx.lineTo(x - 4.5, pad.top + 2);
+        ctx.lineTo(x + 4.5, pad.top + 2);
         ctx.closePath();
         ctx.stroke();
-        ctx.fillText('换', x, H - 42.5);
+        ctx.fillText('换', x, pad.top + 5.5);
       }
     }
     ctx.textBaseline = 'alphabetic';
