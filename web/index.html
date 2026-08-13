@@ -259,7 +259,7 @@ let defaultParams = {
   lockPct: 50,
   volFilterLow: 5,
   volFilterHigh: 95,
-  volTarget: 0,
+  volTarget: 1,
   volTargetCap: 2,
   ewmaFilterHigh: 1.2,
   ewmaFilterLow: 0.75,
@@ -1327,9 +1327,10 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
   btn.disabled = false;
   setTimeout(function() {
     drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurve, CAP, accBadIdx);
-    // 收盘价序列与 eqCurve 对齐: eqCurve[0]=基线(数据首日), eqCurve[k]=第k-1日收盘权益
+    // 收盘价/波动率序列与 eqCurve 对齐: eqCurve[0]=基线(数据首日), eqCurve[k]=第k-1日
     const eqCloses = eqCurve.map((_, k) => k === 0 ? data[0].c : data[k - 1].c);
-    drawEquityCurve(eqCurve, CAP, eqCloses);
+    const eqVols = eqCurve.map((_, k) => k === 0 ? (core.fastVol[1] || core.fastVol[0] || 0) : core.fastVol[k - 1] || 0);
+    drawEquityCurve(eqCurve, CAP, eqCloses, eqVols);
   }, 0);
 }
 
@@ -3374,14 +3375,15 @@ function toggleChartLine() {
   if (window._chartRender) window._chartRender();
 }
 
-function drawEquityCurve(eqCurve, cap, closes) {
+function drawEquityCurve(eqCurve, cap, closes, vols) {
   const canvas = document.getElementById('eqChart');
   if (!canvas || !eqCurve || eqCurve.length < 2) return;
-  if (!canvas._eqData) canvas._eqData = { hoverIdx: -1, curve: [], cap: 0, closes: [] };
+  if (!canvas._eqData) canvas._eqData = { hoverIdx: -1, curve: [], cap: 0, closes: [], vols: [] };
   const data = canvas._eqData;
   data.curve = eqCurve;
   data.cap = cap;
   data.closes = closes || null;
+  data.vols = vols || null;
 
   const W = canvas.clientWidth || 600;
   const H = 200;
@@ -3436,6 +3438,26 @@ function drawEquityCurve(eqCurve, cap, closes) {
         ctx.fillText('收盘 ' + (lastC >= 100 ? lastC.toFixed(0) : lastC.toFixed(2)), pad.left + 4, pad.top - 2);
       }
     }
+    // 波动率折线(自有归一化刻度, 与权益曲线同区域叠加)
+    const _vols = data.vols;
+    if (_vols && _vols.length === curve.length) {
+      let vMin = Infinity, vMax = -Infinity;
+      for (const v of _vols) { if (!(v > 0)) continue; if (v < vMin) vMin = v; if (v > vMax) vMax = v; }
+      if (isFinite(vMin) && isFinite(vMax) && vMax > 0) {
+        const vRng = vMax - vMin || 1; vMin -= vRng * 0.05; vMax += vRng * 0.05;
+        const toYv = v => pad.top + ch - (v - vMin) / (vMax - vMin) * ch;
+        ctx.strokeStyle = '#a55eea'; ctx.lineWidth = 1; ctx.globalAlpha = 0.85; ctx.beginPath();
+        for (let i = 0; i < _vols.length; i++) {
+          const v = _vols[i]; if (!(v > 0)) continue;
+          const x = toX(i), y = toYv(v);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke(); ctx.globalAlpha = 1;
+        const lastV = _vols[_vols.length - 1];
+        ctx.fillStyle = '#a55eea'; ctx.textAlign = 'left'; ctx.font = '10px sans-serif';
+        ctx.fillText('波动 ' + (lastV * 100).toFixed(1) + '%', pad.left + 4, pad.top + 12);
+      }
+    }
     ctx.fillStyle = '#576574'; ctx.textAlign = 'center'; ctx.font = '10px sans-serif';
     for (const di of [0, Math.floor(curve.length / 2), curve.length - 1]) ctx.fillText(curve[di].d, toX(di), pad.top + ch + 16);
     const last = curve[curve.length - 1].eq;
@@ -3462,12 +3484,22 @@ function drawEquityCurve(eqCurve, cap, closes) {
       ctx.fillStyle = '#54a0ff'; ctx.textAlign = 'right'; ctx.font = 'bold 11px sans-serif';
       ctx.fillText(eqText, W - pad.right - 5, hy + 5);
       const _cl = data.closes;
+      let tOff = 27;
       if (_cl && _cl[hoverIdx] !== undefined) {
         const cText = '收盘 ' + (_cl[hoverIdx] >= 100 ? _cl[hoverIdx].toFixed(0) : _cl[hoverIdx].toFixed(2));
         const cW = ctx.measureText(cText).width + 14;
-        ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - cW, hy - 27, cW, 18);
+        ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - cW, hy - tOff, cW, 18);
         ctx.fillStyle = '#ff9f43'; ctx.textAlign = 'right'; ctx.font = '10px sans-serif';
-        ctx.fillText(cText, W - pad.right - 5, hy - 13);
+        ctx.fillText(cText, W - pad.right - 5, hy - tOff + 14);
+        tOff += 14;
+      }
+      const _v = data.vols;
+      if (_v && _v[hoverIdx] !== undefined && _v[hoverIdx] > 0) {
+        const vText = '波动 ' + (_v[hoverIdx] * 100).toFixed(1) + '%';
+        const vW = ctx.measureText(vText).width + 14;
+        ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - vW, hy - tOff, vW, 18);
+        ctx.fillStyle = '#a55eea'; ctx.textAlign = 'right'; ctx.font = '10px sans-serif';
+        ctx.fillText(vText, W - pad.right - 5, hy - tOff + 14);
       }
     }
   }
