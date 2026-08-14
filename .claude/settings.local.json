@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk -F',' 'NR==2{print \"列数:\",NF} END{print \"总行数:\",NR}' file/gfex/ALLFUTURES2026.csv)",
+      "Bash(awk -F',' 'NR==2{print \"列数:\",NF} END{print \"总行数:\",NR}' file/gfex/ALLOPTIONS2026.csv)",
+      "Bash(python3 -c ' *)",
+      "Bash(python scripts/convert_gfex.py)",
+      "Bash(python3 -c \"import json; print\\(sorted\\(json.load\\(open\\('data/shfe/2026.json'\\)\\).keys\\(\\)\\)\\)\")",
+      "Bash(python3 -c \"import json; print\\(sorted\\(json.load\\(open\\('data/dce/2026.json'\\)\\).keys\\(\\)\\)\\)\")",
+      "Bash(python scripts/build_web_data.py)",
+      "Bash(time python *)",
+      "Bash(python scripts/convert_cffex.py)",
+      "Bash(awk '{print $10, $11, $12}')",
+      "Bash(awk '{print \"running\", $10, $11}')",
+      "Bash(awk '{print \"running cpu=\", $10}')",
+      "Bash(node -e ' *)",
+      "Bash(sed -i '' 's/if\\(np\\\\[i\\\\].dir===/if\\(np[i]\\\\&\\\\&np[i].dir===/' /tmp/mp_preds.js)",
+      "Bash(node /tmp/mp_preds.js)",
+      "Bash(python3 -)",
+      "Bash(sed -n '256,270p' web/index.html)",
+      "Bash(sed -n '259,274p' web/train.html)"
+    ]
+  }
+}

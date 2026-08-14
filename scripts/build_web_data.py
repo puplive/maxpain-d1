@@ -67,8 +67,17 @@ SYMBOL_CFG = {
     # INE
     'SC': {'name': '原油',     'exchange': 'ine', 'mult': 1000},
     'NR': {'name': '20号胶',   'exchange': 'ine', 'mult': 10},
+    'BC': {'name': '国际铜',   'exchange': 'ine', 'mult': 5},
+    # CFFEX
+    'IF': {'name': '沪深300',  'exchange': 'cffex', 'mult': 300},
+    'IH': {'name': '上证50',   'exchange': 'cffex', 'mult': 300},
+    'IM': {'name': '中证1000', 'exchange': 'cffex', 'mult': 200},
     # GFEX
-    'BC': {'name': '工业硅',   'exchange': 'gfex', 'mult': 5},
+    'SI': {'name': '工业硅',   'exchange': 'gfex', 'mult': 5},
+    'LC': {'name': '碳酸锂',   'exchange': 'gfex', 'mult': 1},
+    'PS': {'name': '多晶硅',   'exchange': 'gfex', 'mult': 3},
+    'PD': {'name': '钯',       'exchange': 'gfex', 'mult': 1000},
+    'PT': {'name': '铂',       'exchange': 'gfex', 'mult': 1000},
 }
 
 # 各品种合约乘数（跨交易所统一）

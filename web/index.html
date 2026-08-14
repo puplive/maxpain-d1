@@ -257,8 +257,17 @@ const SYM_CFG = {
   // INE 能源中心
   SC: { name: '原油',     mult: 1000, ex: 'INE' },
   NR: { name: '20号胶',   mult: 10, ex: 'INE' },
+  BC: { name: '国际铜',   mult: 5, ex: 'INE' },
+  // CFFEX 中金所
+  IF: { name: '沪深300',   mult: 300, ex: 'CFFEX' },
+  IH: { name: '上证50',    mult: 300, ex: 'CFFEX' },
+  IM: { name: '中证1000',  mult: 200, ex: 'CFFEX' },
   // GFEX 广期所
-  BC: { name: '工业硅',   mult: 5, ex: 'GFEX' },
+  SI: { name: '工业硅',   mult: 5, ex: 'GFEX' },
+  LC: { name: '碳酸锂',   mult: 1, ex: 'GFEX' },
+  PS: { name: '多晶硅',   mult: 3, ex: 'GFEX' },
+  PD: { name: '钯',       mult: 1000, ex: 'GFEX' },
+  PT: { name: '铂',       mult: 1000, ex: 'GFEX' },
 };
 let ALL_DATA = {};
 let SYMBOLS = [];
@@ -2171,11 +2180,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         const x0 = Math.max(start, r.s), x1 = Math.min(end - 1, r.e);
         if (x0 > x1) continue;
         const px0 = toX(x0) - state.barW / 2, px1 = toX(x1) + state.barW / 2;
-        ctx.fillStyle = 'rgba(255,165,0,0.06)';
+        ctx.fillStyle = 'rgba(255, 0, 195, 0.06)';
         ctx.fillRect(px0, pad.top, px1 - px0, ch);
         if (px0 >= pad.left) {
           ctx.fillStyle = '#e8c84a';
-          ctx.font = '10px sans-serif';
+          ctx.font = 'lighter 10px sans-serif';
           ctx.textAlign = 'left';
           ctx.fillText(r.to + ' 换月', px0 + 3, pad.top + 10);
         }
@@ -2214,15 +2223,15 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         const eqv = eqCurve[state.hoverIdx + 1].eq;
         const eqPct = cap > 0 ? (eqv / cap - 1) * 100 : 0;
         const eqText = '收益 ' + Math.round(eqv).toLocaleString() + ' (' + (eqPct >= 0 ? '+' : '') + eqPct.toFixed(1) + '%)';
-        ctx.font = 'bold 11px sans-serif';
+        ctx.font = 'lighter 11px sans-serif';
         const eqW = ctx.measureText(eqText).width;
         let eqX = hx + 8;
         if (eqX + eqW + 12 > W - pad.right) eqX = hx - eqW - 20;
-        ctx.fillStyle = '#1a2a3a';
-        ctx.fillRect(eqX, pad.top + 4, eqW + 12, 18);
+        // ctx.fillStyle = '#1a2a3a';
+        // ctx.fillRect(eqX, pad.top + 4, eqW + 12, 18);
         ctx.fillStyle = '#48dbfb';
         ctx.textAlign = 'left';
-        ctx.fillText(eqText, eqX + 6, pad.top + 17);
+        ctx.fillText(eqText, eqX + 6, pad.top + 25);
       }
       ctx.restore();
     }
@@ -2452,9 +2461,16 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       const upColor = row.c >= opOpen;
       const color = upColor ? '#5cd85a' : '#ff6b6b';
 
-      if (data[i].expiry && data[i].expiry === data[i].d) {
-        ctx.fillStyle = 'rgba(84,160,255,0.15)';
-        ctx.fillRect(x - state.barW * 2, pad.top, state.barW * 4, ch);
+      if (data[i].dte != null && data[i].dte >= 0 && data[i].dte <= 10) {
+        // 期权到期倒计时标记: 顶部彩色数字, 越临近到期越红 (无背景)
+        const _dt = data[i].dte;
+        const _col = _dt <= 2 ? '#ff6b6b' : (_dt <= 5 ? '#fdcb6e' : '#54a0ff');
+        ctx.fillStyle = _col;
+        ctx.font = 'bold 7px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(_dt), x, pad.top - 6);
+        ctx.textBaseline = 'alphabetic';
       }
 
       if (i === state.hoverIdx) {
@@ -2627,8 +2643,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     // 期货换月标记: 空心三角 + "换"字, 悬在蜡烛图顶部边缘下 (pad.top)
     ctx.strokeStyle = '#fdcb6e';
     ctx.fillStyle = '#fdcb6e';
-    ctx.lineWidth = 0.5;
-    ctx.font = 'bold 5px sans-serif';
+    ctx.lineWidth = 0.4;
+    ctx.font = 'lighter 6px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let i = start; i < end && i < n; i++) {
@@ -2636,8 +2652,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         const x = toX(i);
         ctx.beginPath();
         ctx.moveTo(x, pad.top + 12);
-        ctx.lineTo(x - 4.5, pad.top + 2);
-        ctx.lineTo(x + 4.5, pad.top + 2);
+        ctx.lineTo(x - 6, pad.top + 2);
+        ctx.lineTo(x + 6, pad.top + 2);
         ctx.closePath();
         ctx.stroke();
         ctx.fillText('换', x, pad.top + 5.5);
@@ -3623,7 +3639,7 @@ function openSymModal() {
     if (!groups[ex]) groups[ex] = [];
     groups[ex].push(sym);
   }
-  const exNames = { CZCE: '郑商所 (CZCE)', DCE: '大商所 (DCE)', SHFE: '上期所 (SHFE)', INE: '能源中心 (INE)', GFEX: '广期所 (GFEX)' };
+  const exNames = { CZCE: '郑商所 (CZCE)', DCE: '大商所 (DCE)', SHFE: '上期所 (SHFE)', INE: '能源中心 (INE)', CFFEX: '中金所 (CFFEX)', GFEX: '广期所 (GFEX)' };
   let html = '';
   for (const [ex, syms] of Object.entries(groups)) {
     html += '<div class="modal-group"><div class="group-title">' + (exNames[ex] || ex) + '</div><div class="modal-symbols">';

@@ -259,6 +259,17 @@ const SYM_CFG = {
   // INE 能源中心
   SC: { name: '原油',     mult: 1000, ex: 'INE' },
   NR: { name: '20号胶',   mult: 10, ex: 'INE' },
+  BC: { name: '国际铜',   mult: 5, ex: 'INE' },
+  // CFFEX 中金所
+  IF: { name: '沪深300',   mult: 300, ex: 'CFFEX' },
+  IH: { name: '上证50',    mult: 300, ex: 'CFFEX' },
+  IM: { name: '中证1000',  mult: 200, ex: 'CFFEX' },
+  // GFEX 广期所
+  SI: { name: '工业硅',   mult: 5, ex: 'GFEX' },
+  LC: { name: '碳酸锂',   mult: 1, ex: 'GFEX' },
+  PS: { name: '多晶硅',   mult: 3, ex: 'GFEX' },
+  PD: { name: '钯',       mult: 1000, ex: 'GFEX' },
+  PT: { name: '铂',       mult: 1000, ex: 'GFEX' },
 };
 const LOOKBACK = 15;
 const MIN_SEG = 40;
@@ -997,7 +1008,7 @@ function openSymModal() {
     if (!groups[ex]) groups[ex] = [];
     groups[ex].push(sym);
   }
-  const exNames = { CZCE: '郑商所 (CZCE)', DCE: '大商所 (DCE)', SHFE: '上期所 (SHFE)', INE: '能源中心 (INE)' };
+  const exNames = { CZCE: '郑商所 (CZCE)', DCE: '大商所 (DCE)', SHFE: '上期所 (SHFE)', INE: '能源中心 (INE)', CFFEX: '中金所 (CFFEX)', GFEX: '广期所 (GFEX)' };
   let html = '<button class="modal-random" onclick="pickSymbol(\'\')">🎲 随机品种</button>';
   for (const [ex, syms] of Object.entries(groups)) {
     html += '<div class="modal-group"><div class="group-title">' + (exNames[ex] || ex) + '</div><div class="modal-symbols">';
