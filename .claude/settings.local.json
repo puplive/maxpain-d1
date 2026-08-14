@@ -18,7 +18,10 @@
       "Bash(node /tmp/mp_preds.js)",
       "Bash(python3 -)",
       "Bash(sed -n '256,270p' web/index.html)",
-      "Bash(sed -n '259,274p' web/train.html)"
+      "Bash(sed -n '259,274p' web/train.html)",
+      "Bash(cat)",
+      "Bash(python3 /tmp/check_fields.py)",
+      "Bash(python -c ' *)"
     ]
   }
 }
