@@ -237,6 +237,7 @@ const SYM_CFG = {
   CS: { name: '玉米淀粉', mult: 10, ex: 'DCE' },
   LH: { name: '生猪',     mult: 16, ex: 'DCE' },
   LG: { name: '原木',     mult: 90, ex: 'DCE' },
+  JM: { name: '焦煤',     mult: 60, ex: 'DCE' },
   // SHFE 上期所
   CU: { name: '铜',       mult: 5, ex: 'SHFE' },
   AU: { name: '黄金',     mult: 1000, ex: 'SHFE' },
@@ -250,9 +251,14 @@ const SYM_CFG = {
   RU: { name: '橡胶',     mult: 10, ex: 'SHFE' },
   BR: { name: '丁二烯橡胶', mult: 5, ex: 'SHFE' },
   AO: { name: '氧化铝',   mult: 20, ex: 'SHFE' },
+  FU: { name: '燃料油',   mult: 10, ex: 'SHFE' },
+  BU: { name: '沥青',     mult: 10, ex: 'SHFE' },
+  SP: { name: '纸浆',     mult: 10, ex: 'SHFE' },
   // INE 能源中心
   SC: { name: '原油',     mult: 1000, ex: 'INE' },
   NR: { name: '20号胶',   mult: 10, ex: 'INE' },
+  // GFEX 广期所
+  BC: { name: '工业硅',   mult: 5, ex: 'GFEX' },
 };
 let ALL_DATA = {};
 let SYMBOLS = [];
@@ -3617,7 +3623,7 @@ function openSymModal() {
     if (!groups[ex]) groups[ex] = [];
     groups[ex].push(sym);
   }
-  const exNames = { CZCE: '郑商所 (CZCE)', DCE: '大商所 (DCE)', SHFE: '上期所 (SHFE)', INE: '能源中心 (INE)' };
+  const exNames = { CZCE: '郑商所 (CZCE)', DCE: '大商所 (DCE)', SHFE: '上期所 (SHFE)', INE: '能源中心 (INE)', GFEX: '广期所 (GFEX)' };
   let html = '';
   for (const [ex, syms] of Object.entries(groups)) {
     html += '<div class="modal-group"><div class="group-title">' + (exNames[ex] || ex) + '</div><div class="modal-symbols">';

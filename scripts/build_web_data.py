@@ -47,6 +47,28 @@ SYMBOL_CFG = {
     'CS': {'name': '玉米淀粉', 'exchange': 'dce', 'mult': 10},
     'LH': {'name': '生猪',     'exchange': 'dce', 'mult': 16},
     'LG': {'name': '原木',     'exchange': 'dce', 'mult': 90},
+    'JM': {'name': '焦煤',     'exchange': 'dce', 'mult': 60},
+    # SHFE
+    'CU': {'name': '铜',       'exchange': 'shfe', 'mult': 5},
+    'AU': {'name': '黄金',     'exchange': 'shfe', 'mult': 1000},
+    'AG': {'name': '白银',     'exchange': 'shfe', 'mult': 15},
+    'RB': {'name': '螺纹钢',   'exchange': 'shfe', 'mult': 10},
+    'AL': {'name': '铝',       'exchange': 'shfe', 'mult': 5},
+    'ZN': {'name': '锌',       'exchange': 'shfe', 'mult': 5},
+    'PB': {'name': '铅',       'exchange': 'shfe', 'mult': 5},
+    'NI': {'name': '镍',       'exchange': 'shfe', 'mult': 1},
+    'SN': {'name': '锡',       'exchange': 'shfe', 'mult': 1},
+    'RU': {'name': '橡胶',     'exchange': 'shfe', 'mult': 10},
+    'BR': {'name': '丁二烯橡胶','exchange': 'shfe', 'mult': 5},
+    'AO': {'name': '氧化铝',   'exchange': 'shfe', 'mult': 20},
+    'FU': {'name': '燃料油',   'exchange': 'shfe', 'mult': 10},
+    'BU': {'name': '沥青',     'exchange': 'shfe', 'mult': 10},
+    'SP': {'name': '纸浆',     'exchange': 'shfe', 'mult': 10},
+    # INE
+    'SC': {'name': '原油',     'exchange': 'ine', 'mult': 1000},
+    'NR': {'name': '20号胶',   'exchange': 'ine', 'mult': 10},
+    # GFEX
+    'BC': {'name': '工业硅',   'exchange': 'gfex', 'mult': 5},
 }
 
 # 各品种合约乘数（跨交易所统一）
