@@ -1,6 +1,6 @@
 """CFFEX 中金所 CSV → JSON，存入 data/cffex/
 读 file/cffex/{YYYYMM}/{YYYYMMDD}_1.csv (GBK, 期货+期权混在一个文件, 按品种分块)
-用法: python scripts/convert_cffex.py --year 2026
+用法: python scripts/convert_cffex.py --date 2026
 """
 import argparse, datetime, json, os, re, sys, time
 from urllib.error import HTTPError

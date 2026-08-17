@@ -1,6 +1,6 @@
 """GFEX 广期所 CSV → JSON，存入 data/gfex/
 读 file/gfex/ALLFUTURES{year}.csv + ALLOPTIONS{year}.csv
-用法: python scripts/convert_gfex.py --year 2026
+用法: python scripts/convert_gfex.py --date 2026
 """
 import argparse, json, os, re, sys, time
 from urllib.error import HTTPError

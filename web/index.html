@@ -157,7 +157,7 @@ tr:hover td { background: #1a2a3a; }
   <div class="params" id="paramBar">
     <div class="param-group"><label>Lookback:</label><input type="number" id="p_lookback" min="5" max="60"></div>
     <div class="param-group"><label>Min%:</label><input type="number" id="p_min_pct" min="0" max="10" step="0.1" class="wide"></div>
-    <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" min="5" max="100" step="5" class="wide"></div>
+    <div class="param-group"><label>仓位%:</label><input type="number" id="p_max_pos" min="5" max="100" step="10" class="wide"></div>
     <div class="param-group"><label>保证金%:</label><input type="number" id="p_margin" min="5" max="50" class="wide"></div>
     <div class="param-group"><label>保本%:</label><input type="number" id="p_be_th" min="0" max="10" step="0.1" class="wide"></div>
     <div class="param-group"><label>锁定%:</label><input type="number" id="p_lock_pct" min="0" max="100" step="5" class="wide"></div>
@@ -167,12 +167,21 @@ tr:hover td { background: #1a2a3a; }
     <div class="param-group"><label>跳过次:</label><input type="number" id="p_skip" min="0" max="10" step="1" class="wide"></div>
     <div class="param-group"><label>本金:</label><input type="number" id="p_capital" min="10000" step="10000" class="wide"></div>
     <div class="param-group"><label>封顶(万):</label><input type="number" id="p_cap_limit" min="0" step="10" class="wide"></div>
-	    <div class="param-group"><label>波动过滤%:</label><input type="number" id="p_vol_low" min="0" max="50" step="5" class="wide" title="低于此百分位不开"> <input type="number" id="p_vol_high" min="50" max="100" step="5" class="wide" title="高于此百分位不开"></div>
-	    <div class="param-group"><label>分位窗口:</label><input type="number" id="p_vol_window" min="0" step="5" class="wide" title="ATR/价格 分位统计的历史天数, 0=全部历史"></div>
-	    <div class="param-group"><label>目标化:</label><input type="number" id="p_vol_target" min="0" max="1" step="1" class="wide" title="1=开, 仓位按EWMA波动比值缩放"> <label>上限:</label><input type="number" id="p_vol_target_cap" min="1" max="5" step="0.5" class="wide" title="缩放上限, 波动低时最多放大到此倍数"></div>
-	    <div class="param-group"><label>EWMA挡高:</label><input type="number" id="p_ewma_high" min="0" max="2" step="0.1" class="wide" title="当期/长期EWMA比值高于此值挡掉, 0=关"> <label>挡低:</label><input type="number" id="p_ewma_low" min="0" max="1" step="0.05" class="wide" title="比值低于此值挡掉, 0=关"></div>
-	    <div class="param-group"><label>逆势挡:</label><input type="number" id="p_slope_th" min="0" max="0.01" step="0.001" class="wide" title="价格斜率阈值: 斜率<-此值不做多, >此值不做空, 0=关"> <label>窗:</label><input type="number" id="p_slope_days" min="5" max="60" step="1" class="wide" style="width:64px" title="判断逆势的斜率窗口天数"></div>
-	    <div class="param-group"><label>回踩斜率%:</label><input type="number" id="p_pb_slope_th" min="0" max="5" step="0.5" class="wide" title="MP趋势|斜率|≤此值 时回踩MP开仓(开盘已破MP按开盘价, 否则低/高点触及MP成交), >此值追开盘价; 0=关(始终开盘价)"></div>
+    <div class="param-group"><label>波动过滤%:</label><input type="number" id="p_vol_low" min="0" max="50" step="5" class="wide" title="低于此百分位不开"> <input type="number" id="p_vol_high" min="50" max="100" step="5" class="wide" title="高于此百分位不开"></div>
+    <div class="param-group"><label>分位窗口:</label><input type="number" id="p_vol_window" min="0" step="5" class="wide" title="ATR/价格 分位统计的历史天数, 0=全部历史"></div>
+    <div class="param-group">
+      <label>目标化:</label><input type="number" id="p_vol_target" min="0" max="1" step="1" class="wide" title="1=开, 仓位按EWMA波动比值缩放"> 
+      <label>上限:</label><input type="number" id="p_vol_target_cap" min="1" max="5" step="0.5" class="wide" title="缩放上限, 波动低时最多放大到此倍数">
+    </div>
+    <div class="param-group">
+      <label>EWMA挡高:</label><input type="number" id="p_ewma_high" min="0" max="2" step="0.1" class="wide" title="当期/长期EWMA比值高于此值挡掉, 0=关"> 
+      <label>挡低:</label><input type="number" id="p_ewma_low" min="0" max="1" step="0.05" class="wide" title="比值低于此值挡掉, 0=关">
+    </div>
+    <div class="param-group">
+      <label>逆势挡:</label><input type="number" id="p_slope_th" min="0" max="0.01" step="0.001" class="wide" title="价格斜率阈值: 斜率<-此值不做多, >此值不做空, 0=关"> 
+      <label>窗:</label><input type="number" id="p_slope_days" min="5" max="60" step="5" class="wide" style="width:64px" title="判断逆势的斜率窗口天数">
+    </div>
+    <div class="param-group"><label>回踩斜率%:</label><input type="number" id="p_pb_slope_th" min="0" max="5" step="0.5" class="wide" title="MP趋势|斜率|≤此值 时回踩MP开仓(开盘已破MP按开盘价, 否则低/高点触及MP成交), >此值追开盘价; 0=关(始终开盘价)"></div>
     <div class="param-group"><label>标记窗口:</label><input type="number" id="p_acc_win" min="1" max="60" step="1" class="wide" title="近N日累计涨跌点数(按信号方向对齐, 等价单手N日PnL)作为每日判定"></div>
     <div class="param-group"><label>连续:</label><input type="number" id="p_acc_streak" min="1" max="30" step="1" class="wide" title="连续N天累计为负才亮!标记, 转正即停"></div>
     <div class="param-group"><label>标记模式:</label><select id="p_acc_mode" style="padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font-size:12px;">
@@ -275,21 +284,21 @@ let CURRENT_SYM = '';
 // 期权成熟品种（快速切换栏，写死）：MP 跟随价格、非长期不动的品种
 const MATURE_SYMS = ['TA', 'SA', 'V', 'AG', 'AU', 'P', 'I', 'MA', 'PG'];
 let defaultParams = {
-  lookback: 21,
+  lookback: 5,
   minPct: 0.1,
-  maxPos: 50,
+  maxPos: 100,
   margin: 15,
   beTh: 1,
-  entryAtrMult: 2,
-  atrPeriod: 14,
-  atrMult: 1.3,
+  entryAtrMult: 0.5,
+  atrPeriod: 60,
+  atrMult: 0.5,
   lockPct: 50,
   volFilterLow: 5,
   volFilterHigh: 95,
   volTarget: 1,
   volTargetCap: 2,
   ewmaFilterHigh: 1.2,
-  ewmaFilterLow: 0.75,
+  ewmaFilterLow: 0,
   priceSlopeTh: 0,
   slopeDays: 30,
   pbSlopeTh: 0,
