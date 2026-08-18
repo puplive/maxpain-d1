@@ -282,16 +282,16 @@ let ALL_DATA = {};
 let SYMBOLS = [];
 let CURRENT_SYM = '';
 // 期权成熟品种（快速切换栏，写死）：MP 跟随价格、非长期不动的品种
-const MATURE_SYMS = ['TA', 'SA', 'V', 'AG', 'AU', 'P', 'I', 'MA', 'PG'];
+const MATURE_SYMS = ['TA', 'SA', 'V', 'AG', 'AU', 'P', 'I', 'MA', 'PS', 'SI', 'LC'];
 let defaultParams = {
-  lookback: 5,
-  minPct: 0.1,
+  lookback: 20,
+  minPct: 0.9,
   maxPos: 100,
   margin: 15,
   beTh: 1,
-  entryAtrMult: 0.5,
-  atrPeriod: 60,
-  atrMult: 0.5,
+  entryAtrMult: 0.6,
+  atrPeriod: 14,
+  atrMult: 0.6,
   lockPct: 50,
   volFilterLow: 5,
   volFilterHigh: 95,
