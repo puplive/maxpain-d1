@@ -172,6 +172,9 @@ tr:hover td { background: #1a2a3a; }
 
   <div class="action-panel">
     <div class="pos-info" id="posInfo">
+      <div class="row" id="nextSigRow" style="display:none;">
+        <span class="label">下一根信号</span><span class="val" id="nextSigVal">—</span>
+      </div>
       <div class="detail" id="noPos">空仓 — 选择方向开仓</div>
       <div class="row" id="posDetail" style="display:none;">
         <span><span class="tag" id="posDirTag">多</span> <span id="posQty">1</span>手</span>
@@ -328,21 +331,26 @@ async function loadAllData() {
   return true;
 }
 
-function mpTrending(arr, lookback, minPct) {
-  if (!arr || arr.length < lookback + 1) return { dir: null, r2: 0 };
-  const a = arr.slice(-lookback - 1);
-  const n = a.length;
-  let sx = 0, sy = 0, sxy = 0, sx2 = 0;
-  for (let i = 0; i < n; i++) {
-    sx += i; sy += a[i]; sxy += i * a[i]; sx2 += i * i;
-  }
-  const slope = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
-  const projected = slope * (n - 1);
-  const threshold = Math.abs(a[0] * minPct);
-  let dir = null;
-  if (projected > threshold) dir = 'up';
-  else if (projected < -threshold) dir = 'down';
-  return { dir, r2: 0 };
+// 混合方向(与回测 index.html 一致): EMA偏离(带缓冲) AND 窗口净变化(last vs 窗口起点)
+// 过滤"V型假信号": MP 回到起点但未创新高(净变化=0)时不给方向
+function mpDirection(arr, period, buffer) {
+  if (!arr || arr.length < period) return { dir: null };
+  const vals = arr.slice(-period);
+  const first = vals[0];
+  const last = vals[vals.length - 1];
+  let ema = first;
+  const k = 2 / (period + 1);
+  for (let i = 1; i < vals.length; i++) { ema = vals[i] * k + ema * (1 - k); }
+  if (last > ema * (1 + buffer) && last > first) return { dir: 'up' };
+  if (last < ema * (1 - buffer) && last < first) return { dir: 'down' };
+  return { dir: null };
+}
+
+// 下一根信号的混合方向(用截至当前揭示的MP窗口): 与回测 index.html 入场信号一致
+function nextSignal() {
+  if (!segment.length || visibleIdx < LOOKBACK) return null;
+  const hist = segment.slice(0, visibleIdx + 1).map(r => r.mp).filter(v => v != null);
+  return mpDirection(hist, LOOKBACK, 0.01).dir;
 }
 
 function linearProjected(arr, lookback) {
@@ -607,6 +615,17 @@ function updateUI() {
       document.getElementById('noPos').textContent = '空仓 — 选择方向开仓';
     }
     document.getElementById('posDetail').style.display = 'none';
+  }
+
+  // 下一根信号 (与回测一致的混合方向: EMA偏离 AND 净变化)
+  const nsRow = document.getElementById('nextSigRow');
+  const nsVal = document.getElementById('nextSigVal');
+  if (state === 'playing') {
+    const d = nextSignal();
+    nsRow.style.display = 'flex';
+    nsVal.innerHTML = d === 'up' ? '<span class="pos">多 ▲</span>' : d === 'down' ? '<span class="neg">空 ▼</span>' : '<span style="color:#576574">无 —</span>';
+  } else {
+    nsRow.style.display = 'none';
   }
 
   // Progress
@@ -966,11 +985,16 @@ function drawChart() {
       }
     }
     const mpHist = segment.slice(0, idx + 1).map(r => r.mp).filter(v => v != null);
-    const { dir: trendDir } = mpTrending(mpHist, LOOKBACK, 0.01);
+    const { dir: trendDir } = mpDirection(mpHist, LOOKBACK, 0.01);
     const _mpProj = linearProjected(mpHist, LOOKBACK);
     const _mpSlopePct = _mpProj != null ? (_mpProj / (mpHist[mpHist.length - 1] || 1) * 100).toFixed(1) : null;
+    // 窗口净变化(混合方向第二条件): MP last vs 窗口起点
+    const _w = mpHist.slice(-LOOKBACK);
+    const _wf = _w[0], _wl = _w[_w.length - 1];
+    const _net = (_wf != null && _wl != null) ? _wl - _wf : null;
+    const _netText = _net !== null ? ' <span style="color:#576574;font-size:11px">净变' + (_net > 0 ? '+' : '') + _net + '</span>' : '';
     const trendText = (trendDir === 'up' ? '<span class="pos">↑ 上涨</span>' : trendDir === 'down' ? '<span class="neg">↓ 下跌</span>' : '<span style="color:#576574">— 震荡</span>')
-      + (_mpSlopePct !== null ? ' <span style="color:#576574;font-size:11px">' + _mpSlopePct + '%</span>' : '');
+      + (_mpSlopePct !== null ? ' <span style="color:#576574;font-size:11px">' + _mpSlopePct + '%</span>' : '') + _netText;
     const closeHist = segment.slice(0, idx + 1).map(r => r.c).filter(v => v != null);
     const _closeProj = linearProjected(closeHist, LOOKBACK);
     const _closeSlope = _closeProj != null ? (_closeProj / (closeHist[closeHist.length - 1] || 1) * 100).toFixed(1) : null;

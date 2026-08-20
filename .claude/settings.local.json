@@ -21,7 +21,18 @@
       "Bash(sed -n '259,274p' web/train.html)",
       "Bash(cat)",
       "Bash(python3 /tmp/check_fields.py)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(node revcmp.js)",
+      "Bash(node -e \" const r = require\\('/dev/stdin'\\); \")",
+      "Bash(node dircmp.js)",
+      "Bash(node verify_hybrid.js)",
+      "Bash(node turndir.js)",
+      "Bash(node turndir2.js)",
+      "Bash(node hybrid2.js)",
+      "Bash(node consist.js)",
+      "Bash(node hybrid3.js)",
+      "Bash(node verify_ta817.js)",
+      "Bash(node test_genanalysis.js)"
     ]
   }
 }

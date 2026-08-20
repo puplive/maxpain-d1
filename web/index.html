@@ -282,7 +282,7 @@ let ALL_DATA = {};
 let SYMBOLS = [];
 let CURRENT_SYM = '';
 // 期权成熟品种（快速切换栏，写死）：MP 跟随价格、非长期不动的品种
-const MATURE_SYMS = ['TA', 'SA', 'V', 'AG', 'AU', 'P', 'I', 'MA', 'PS', 'SI', 'LC'];
+const MATURE_SYMS = ['TA', 'SA', 'AG', 'AU', 'P', 'PS', 'SI', 'LC'];
 let defaultParams = {
   lookback: 10,
   minPct: 0.9,
@@ -420,6 +420,21 @@ function emaDirection(arr, period, buffer) {
   return { dir: null };
 }
 
+// 混合方向(入场/趋势判断用): EMA偏离(带缓冲) AND 窗口净变化(复权后 last vs 窗口起点 first)
+// 过滤"V型假信号": MP 回到起点但未创新高(净变化=0)时不给方向, 如 8-17 TA 5800->5700->5800
+function mpDirection(arr, period, buffer) {
+  if (!arr || arr.length < period) return { dir: null };
+  const vals = arr.slice(-period);
+  const first = vals[0];
+  const last = vals[vals.length - 1];
+  let ema = first;
+  const k = 2 / (period + 1);
+  for (let i = 1; i < vals.length; i++) { ema = vals[i] * k + ema * (1 - k); }
+  if (last > ema * (1 + buffer) && last > first) return { dir: 'up' };
+  if (last < ema * (1 - buffer) && last < first) return { dir: 'down' };
+  return { dir: null };
+}
+
 // MP vs EMA(lookback日) 偏离 (%): 判断方向用的斜率, 回踩门控与图表悬停共用
 // 返回 { pct: 偏离%, ema: EMA值 } 或 null (历史不足/EMA<=0)
 function calcMpDevPct(fullData, mpOff, rollSeg, i, lookback) {
@@ -536,7 +551,7 @@ function computeNextDirPred(fullData, params) {
   const rollSeg = calcRollSegStart(fullData);
   for (let i = 0; i < n; i++) {
     const mpHist = dirMpHist(fullData, off, rollSeg, i, params.lookback);
-    const { dir: td } = emaDirection(mpHist, params.lookback, params.minPct);
+    const { dir: td } = mpDirection(mpHist, params.lookback, params.minPct);
     let nd = null;
     if (td === 'up') nd = 'long';
     else if (td === 'down') nd = 'short';
@@ -1122,7 +1137,7 @@ function runBacktest() {
         <label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_roll" checked onchange="toggleChartLine()"> <span style="color:#ff9f43">换月</span></label>\
-        <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期仓</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+        <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期货成交量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期货持仓量</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">最大回撤</th><th class="num">最长回撤期</th></tr>' + yrHtml + '</table></div>\
@@ -1144,7 +1159,7 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
   const rollSeg = calcRollSegStart(fullData);
   const mpFirst = Math.max(0, fullData.findIndex(x => x.d === data[0].d));
   const mpHist = dirMpHist(fullData, mpOff, rollSeg, Math.min(fullData.length - 1, mpFirst + idx), params.lookback);
-  const { dir: trendDir } = emaDirection(mpHist, params.lookback, params.minPct);
+  const { dir: trendDir } = mpDirection(mpHist, params.lookback, params.minPct);
   const lastPredIdx = fullData.findIndex(x => x.d === r.d);
   const nd = lastPredIdx >= 0 ? nextDirPred[lastPredIdx] : null;
   const prevR = idx > 0 ? data[idx - 1] : null;
@@ -1189,6 +1204,12 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
 
   // 明日推演
   const projFactors = [];
+  // 混合方向条件(与入场一致): EMA偏离 AND 窗口净变化(复权后 last vs 窗口起点)
+  const _mpF = mpHist[0], _mpL = mpHist[mpHist.length - 1];
+  const _netChg = (_mpF != null && _mpL != null) ? _mpL - _mpF : null;
+  projFactors.push('净变化确认: ' + (_netChg !== null
+    ? 'MP ' + _mpL + ' vs 起点 ' + _mpF + ' (净' + (_netChg > 0 ? '+' : '') + _netChg + ')' + (_netChg > 0 ? ',偏多条件' : _netChg < 0 ? ',偏空条件' : ',未过前值→无方向')
+    : '数据不足'));
   if (trendDir === 'up' && r.gex > 0 && r.vr > 1) projFactors.push('GEX转正+量比偏多,短期有上行动力');
   if (trendDir === 'up' && spread < 0) projFactors.push('MP趋势向上但价格在MP下方,有回归引力');
   if (trendDir === 'down' && r.gex < 0 && r.vr < 1) projFactors.push('GEX为负+量比偏空,短期有下行压力');
@@ -1203,7 +1224,7 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
       // 开仓执行条件(与回测一致,全部用今日收盘可知数据)
       if ((nd === 'long' && _st.skipLong > 0) || (nd === 'short' && _st.skipShort > 0)) {
         const _n = nd === 'long' ? _st.skipLong : _st.skipShort;
-        _conds.push('冷静期:剩' + _n + '天 ✗');
+        _conds.push('冷静期:剩' + _n + '次 ✗');
         _blocked = '获利后冷静期未结束';
       } else {
         _conds.push('冷静期:未触发 ✓');
@@ -1308,7 +1329,7 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
   for (let i = evStart; i < evEnd; i++) {
     const d = data[i];
     const sub = dirMpHist(fullData, mpOff, rollSeg, Math.min(fullData.length - 1, mpFirst + i), params.lookback);
-    const { dir: td } = emaDirection(sub, params.lookback, params.minPct);
+    const { dir: td } = mpDirection(sub, params.lookback, params.minPct);
     const dayTrades = evTradeMap[d.d] || [];
     const evs = [];
     for (const t of dayTrades) evs.push(t.type === 'entry' ? '开' : '平');
@@ -1866,8 +1887,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       { key: 'skew', label: '偏度差', color: '#48dbfb' },
       { key: 'vr', label: '量比', color: '#ff9f43' },
       { key: 'iv', label: 'IV偏度', color: '#2ecc71' },
-      { key: 'futVol', label: '期量', color: '#54a0ff' },
-      { key: 'futOi', label: '期仓', color: '#f368e0' },
+      { key: 'futVol', label: '期货成交量', color: '#54a0ff' },
+      { key: 'futOi', label: '期货持仓量', color: '#f368e0' },
       { key: 'atr', label: 'ATR', color: '#e84393' },
       { key: 'mpConf', label: 'MP置信', color: '#00b894' },
     ];
@@ -2041,7 +2062,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     const oiDir = absSkew < 0.3 ? (parseFloat(oiSkew) > 0 ? '涨' : '跌') : (parseFloat(oiSkew) > 0 ? '跌⚠' : '涨⚠');
     const vrDir = row.vr != null ? (row.vr > 1 ? '涨' : row.vr < 1 ? '跌' : '—') : '';
     const subHist = dirMpHist(data, mpOff, rollSeg, idx, params.lookback);
-    const { dir: trendDir } = emaDirection(subHist, params.lookback, params.minPct);
+    const { dir: trendDir } = mpDirection(subHist, params.lookback, params.minPct);
     // MP偏离 (判断方向用的斜率, 与回踩门控同源)
     const _dev = calcMpDevPct(data, mpOff, rollSeg, idx, params.lookback);
     const _mpDevPct = _dev ? _dev.pct.toFixed(1) : null;
@@ -2049,8 +2070,12 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     const _proj = linearProjected(subHist, params.lookback);
     const _slopePct = _proj !== null ? (_proj / (subHist[subHist.length - 1] || 1) * 100).toFixed(1) : null;
     const _slopeText = _slopePct !== null ? ' <span style="color:#576574;font-size:11px">斜率' + (_slopePct > 0 ? '+' : '') + _slopePct + '%</span>' : '';
+    // 窗口净变化(混合方向第二条件): MP last vs 窗口起点
+    const _subF = subHist[0], _subL = subHist[subHist.length - 1];
+    const _net = (_subF != null && _subL != null) ? _subL - _subF : null;
+    const _netText = _net !== null ? ' <span style="color:#576574;font-size:11px">净变' + (_net > 0 ? '+' : '') + _net + '</span>' : '';
     const trendText = (trendDir === 'up' ? '<span class="pos">↑涨</span>' : trendDir === 'down' ? '<span class="neg">↓跌</span>' : '<span style="color:#576574">—震</span>')
-      + (_mpDevPct !== null ? ' <span style="color:#576574;font-size:11px">' + (_mpDevPct > 0 ? '+' : '') + _mpDevPct + '%</span>' : '') + _slopeText;
+      + (_mpDevPct !== null ? ' <span style="color:#576574;font-size:11px">' + (_mpDevPct > 0 ? '+' : '') + _mpDevPct + '%</span>' : '') + _slopeText + _netText;
     const _bepHist = data.slice(0, idx + 1).map(r => r.bep).filter(v => v != null);
     const _becHist = data.slice(0, idx + 1).map(r => r.bec).filter(v => v != null);
     const _closeHist = data.slice(0, idx + 1).map(r => r.c);
