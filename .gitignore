@@ -5,3 +5,4 @@ data.json
 .DS_Store
 file
 .wrangler/
+.claude/

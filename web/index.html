@@ -25,6 +25,15 @@ h1 small { font-size: 13px; color: #576574; font-weight: normal; }
 .sym-btn { padding: 8px 14px; border: 1px solid #2d3436; border-radius: 6px; background: #1a2a3a; color: #c8d6e5; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .sym-btn:hover { border-color: #54a0ff; }
 .sym-btn::after { content: '▾'; font-size: 10px; color: #576574; }
+/* 优化参数多选下拉 */
+.opt-wrap { position: relative; display: inline-block; }
+.opt-panel { position: absolute; top: calc(100% + 6px); right: 0; z-index: 100; background: #1a2a3a; border: 1px solid #2d3436; border-radius: 8px; padding: 6px 0; min-width: 220px; max-height: 340px; overflow: auto; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+.opt-panel .opt-hint { font-size: 11px; color: #576574; padding: 0 12px 8px; border-bottom: 1px solid #2d3436; margin-bottom: 6px; }
+.opt-panel label { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 13px; color: #c8d6e5; cursor: pointer; }
+.opt-panel label:hover { background: #22354a; }
+.opt-panel label input { accent-color: #54a0ff; }
+.opt-panel .opt-range { color: #576574; font-size: 11px; margin-left: auto; white-space: nowrap; }
+#optCount { color: #54a0ff; font-size: 11px; margin-left: 4px; }
 /* 期权成熟品种快速栏 */
 .mature-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .mature-bar .mature-label { font-size: 12px; color: #576574; white-space: nowrap; }
@@ -135,21 +144,10 @@ tr:hover td { background: #1a2a3a; }
     <button class="btn" onclick="resetParams()" style="background:#2d3436;">重置参数</button>
     <button class="btn" onclick="runMonteCarlo()" style="background:#e8c84a;color:#0f1923;">蒙特卡洛</button>
     <button class="btn" id="saveBtn" onclick="saveParams()" style="background:#2ecc71;color:#0f1923;">保存参数</button>
-    <select id="optParam" style="padding:6px 10px;border:1px solid #2d3436;border-radius:6px;background:#1a2a3a;color:#c8d6e5;font-size:12px;">
-      <option value="lookback">Lookback</option>
-      <option value="minPct">Min%</option>
-      <option value="atrPeriod">ATR周期</option>
-      <option value="entryAtrMult">入场ATR倍</option>
-      <option value="atrMult">追踪ATR倍</option>
-      <option value="beTh">保本%</option>
-      <option value="lockPct">锁定%</option>
-      <option value="maxPos">仓位%</option>
-      <option value="skipCount">跳过次</option>
-      <option value="priceSlopeTh">逆势挡</option>
-      <option value="slopeDays">逆势窗</option>
-      <option value="pbSlopeTh">回踩斜率%</option>
-      <option value="volWindow">分位窗口</option>
-    </select>
+    <div class="opt-wrap" id="optWrap">
+      <button id="optBtn" class="sym-btn" onclick="toggleOptPanel()">优化参数<span id="optCount"></span></button>
+      <div id="optPanel" class="opt-panel" style="display:none;"></div>
+    </div>
     <button class="btn" onclick="optimizeParam()" style="background:#8854d0;color:#fff;">优化</button>
     <span class="status" id="status">就绪</span>
   </div>
@@ -282,7 +280,7 @@ let ALL_DATA = {};
 let SYMBOLS = [];
 let CURRENT_SYM = '';
 // 期权成熟品种（快速切换栏，写死）：MP 跟随价格、非长期不动的品种
-const MATURE_SYMS = ['TA', 'SA', 'AG', 'AU', 'P', 'PS', 'SI', 'LC'];
+const MATURE_SYMS = ['TA', 'SA', 'FG', 'AG', 'AU', 'P', 'PS', 'SI', 'LC'];
 let defaultParams = {
   lookback: 10,
   minPct: 0.9,
@@ -1131,9 +1129,10 @@ function runBacktest() {
       <span class="line-toggles" style="font-size:11px;font-weight:normal;display:inline-flex;gap:8px;margin-left:12px;align-items:center;vertical-align:middle;">\
         <span style="color:#576574;">显示:</span>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_mp" checked onchange="toggleChartLine()"> <span style="color:#e8c84a">MP</span></label>\
-        <label style="cursor:pointer;"><input type="checkbox" id="t_ema" checked onchange="toggleChartLine()"> <span style="color:#54a0ff">EMA</span></label>\
-        <label style="cursor:pointer;"><input type="checkbox" id="t_bec" checked onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label>\
-        <label style="cursor:pointer;"><input type="checkbox" id="t_bep" checked onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label>\
+        <label style="cursor:pointer;"><input type="checkbox" id="t_ema" onchange="toggleChartLine()"> <span style="color:#54a0ff">EMA</span></label>\
+        <label style="cursor:pointer;"><input type="checkbox" id="t_atrband" onchange="toggleChartLine()"> <span style="color:#00cec9">ATR带</span></label>\
+        <label style="cursor:pointer;"><input type="checkbox" id="t_bec" onchange="toggleChartLine()"> <span style="color:#2ecc71">看涨BE</span></label>\
+        <label style="cursor:pointer;"><input type="checkbox" id="t_bep" onchange="toggleChartLine()"> <span style="color:#e74c3c">看跌BE</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_roll" checked onchange="toggleChartLine()"> <span style="color:#ff9f43">换月</span></label>\
@@ -1660,20 +1659,62 @@ function runMonteCarlo() {
 }
 
 const OPT_PARAMS = {
-  lookback:   { label: 'Lookback',    range: [5, 60, 1] },
-  minPct:     { label: 'Min%',        range: [0.1, 5, 0.1], unit: '%' },
-  entryAtrMult:  { label: '入场ATR倍',   range: [0.5, 3, 0.1] },
-  atrPeriod:  { label: 'ATR周期',     range: [5, 120, 1] },
-  atrMult:    { label: '追踪ATR倍',     range: [0.5, 10, 0.1] },
+  lookback:   { label: 'Lookback',    range: [5, 30, 1] },
+  minPct:     { label: 'Min%',        range: [0.1, 3, 0.1], unit: '%' },
   maxPos:     { label: '仓位%',       range: [5, 100, 5], unit: '%' },
   beTh:       { label: '保本%',       range: [0.5, 5, 0.1], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 75, 5], unit: '%' },
+  atrPeriod:  { label: 'ATR周期',     range: [5, 120, 1] },
+  entryAtrMult:  { label: '入场ATR倍',   range: [0.5, 3, 0.1] },
+  atrMult:    { label: '追踪ATR倍',     range: [0.5, 3, 0.1] },
   skipCount:  { label: '跳过次',      range: [0, 5, 1] },
+  volWindow:  { label: '分位窗口',    range: [0, 250, 10], unit: '天' },
   priceSlopeTh: { label: '逆势挡',    range: [0, 0.01, 0.001], prec: 3 },
   slopeDays:  { label: '逆势窗',      range: [10, 60, 5] },
   pbSlopeTh:  { label: '回踩斜率%',   range: [0, 3, 0.5], unit: '%' },
-  volWindow:  { label: '分位窗口',    range: [0, 250, 10], unit: '天' },
+  ewmaFilterHigh: { label: 'EWMA挡高', range: [0, 2, 0.1] },
+  ewmaFilterLow:  { label: 'EWMA挡低', range: [0, 1, 0.1] },
 };
+
+/* ---- 优化参数多选 ---- */
+const optSelection = new Set(['lookback']);   // 默认选中 lookback
+
+function buildOptPanel() {
+  const panel = document.getElementById('optPanel');
+  let html = '<div class="opt-hint">联合优化所选参数(网格扫描)</div>';
+  for (const key of Object.keys(OPT_PARAMS)) {
+    const m = OPT_PARAMS[key], r = m.range;
+    html += '<label><input type="checkbox" value="' + key + '"' + (optSelection.has(key) ? ' checked' : '') + ' onchange="onOptToggle(this)">' + m.label + '<span class="opt-range">' + r[0] + '~' + r[1] + ' x' + r[2] + '</span></label>';
+  }
+  panel.innerHTML = html;
+  refreshOptCount();
+}
+function onOptToggle(cb) {
+  if (cb.checked) optSelection.add(cb.value); else optSelection.delete(cb.value);
+  refreshOptCount();
+}
+function refreshOptCount() {
+  const el = document.getElementById('optCount');
+  el.textContent = optSelection.size ? '(' + optSelection.size + ')' : '';
+}
+function toggleOptPanel() {
+  const p = document.getElementById('optPanel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+function getOptSelection() { return Array.from(optSelection); }
+
+function buildOptVals(key, min, max, step) {
+  const out = [];
+  for (let v = min; v <= max + 1e-10; v = Math.round((v + step) * 1000) / 1000) out.push(v);
+  return out;
+}
+function applyOptValue(pp, key, v) {
+  if (key === 'minPct' || key === 'maxPos' || key === 'beTh' || key === 'lockPct') pp[key] = v / 100;
+  else pp[key] = v;
+}
+
+const OPT_MAX_COMBO = 100000;
+let OPT_TOKEN = 0;
 
 function optimizeParam() {
   const sym = CURRENT_SYM;
@@ -1683,8 +1724,9 @@ function optimizeParam() {
   const fullData = ALL_DATA[sym];
   if (!fullData) { status.textContent = '数据未加载'; return; }
 
-  const paramKey = document.getElementById('optParam').value;
-  const meta = OPT_PARAMS[paramKey];
+  const selected = getOptSelection();
+  if (selected.length === 0) { status.textContent = '请先选择要优化的参数'; return; }
+
   const startDate = document.getElementById('p_start').value;
   const endDate = document.getElementById('p_end').value;
   let data = fullData;
@@ -1722,61 +1764,82 @@ function optimizeParam() {
     mult: cfg.mult,
   };
 
-  const [min, max, step] = meta.range;
-  status.textContent = '扫描 ' + meta.label + ' (' + min + '~' + max + ' step=' + step + ')...';
+  // 构建每个参数的取值数组; 组合数超上限则自动加粗最大维度的步长
+  const vals = selected.map(k => buildOptVals(k, OPT_PARAMS[k].range[0], OPT_PARAMS[k].range[1], OPT_PARAMS[k].range[2]));
+  let combos = vals.reduce((s, a) => s * a.length, 1);
+  let coarsened = false, guard = 0;
+  while (combos > OPT_MAX_COMBO && guard++ < 20) {
+    let mi = 0, mlen = 0;
+    vals.forEach((a, i) => { if (a.length > mlen) { mlen = a.length; mi = i; } });
+    const [mn, mx, st] = OPT_PARAMS[selected[mi]].range;
+    vals[mi] = buildOptVals(selected[mi], mn, mx, st * Math.pow(2, guard));
+    combos = vals.reduce((s, a) => s * a.length, 1);
+    coarsened = true;
+  }
+
+  const labels = selected.map(k => OPT_PARAMS[k].label).join('+');
+  status.textContent = '扫描 ' + labels + ' (' + combos + '组合' + (coarsened ? ', 步长已加粗' : '') + ')...';
   result.innerHTML = '<div class="loading">扫描中...</div>';
 
-  setTimeout(function() {
-    const values = [];
-    for (let v = min; v <= max + 1e-10; v = Math.round((v + step) * 1000) / 1000) {
-      const pp = Object.assign({}, p);
-      if (paramKey === 'minPct') pp.minPct = v / 100;
-      else if (paramKey === 'maxPos') pp.maxPos = v / 100;
-      else if (paramKey === 'lookback') pp.lookback = v;
-      else if (paramKey === 'entryAtrMult') pp.entryAtrMult = v;
-      else if (paramKey === 'atrPeriod') pp.atrPeriod = v;
-      else if (paramKey === 'atrMult') pp.atrMult = v;
-      else if (paramKey === 'beTh') pp.beTh = v / 100;
-      else if (paramKey === 'lockPct') pp.lockPct = v / 100;
-      else if (paramKey === 'volFilterLow' || paramKey === 'volFilterHigh') pp[paramKey] = v;
-      else if (paramKey === 'skipCount') pp.skipCount = v;
-      else if (paramKey === 'priceSlopeTh') pp.priceSlopeTh = v;
-      else if (paramKey === 'slopeDays') pp.slopeDays = v;
-      else if (paramKey === 'pbSlopeTh') pp.pbSlopeTh = v;
-      else if (paramKey === 'volWindow') pp.volWindow = v;
+  const token = ++OPT_TOKEN;
+  const values = [];
+  const comboIdx = new Array(selected.length).fill(0);
+  let ci = 0, lastProg = 0;
+  const SLICE_MS = 200;
 
+  function tick() {
+    if (token !== OPT_TOKEN) return;  // 已被新一次优化取代
+    const t0 = Date.now();
+    while (ci < combos && Date.now() - t0 < SLICE_MS) {
+      const pp = Object.assign({}, p);
+      for (let k = 0; k < selected.length; k++) applyOptValue(pp, selected[k], vals[k][comboIdx[k]]);
       const ppNextDir = computeNextDirPred(fullData, pp);
       const ppAccWarn = computeAccWarnIdx(fullData, ppNextDir, pp.accWindow, pp.accStreak);
       const { preds: ppTrading, revIdx: ppRev } = gatePreds(ppNextDir, ppAccWarn, pp.accMode);
       const core = _runCore(data, fullData, firstIdx, pp, cfg.mult, ppTrading, ppRev);
-      if (core.trades.length === 0) continue;
-      const wins = core.trades.filter(t => t.pnl > 0);
-      const losses = core.trades.filter(t => t.pnl <= 0);
-      const lossSum = losses.reduce((s, t) => s + Math.abs(t.pnl), 0);
-      const winSum = wins.reduce((s, t) => s + t.pnl, 0);
-      values.push({
-        v, endEq: Math.round(core.eq),
-        ret: round1((core.eq / p.capital - 1) * 100),
-        trades: core.trades.length,
-        cov: round1(core.posDays / data.length * 100),
-        wr: round1(wins.length / core.trades.length * 100),
-        pf: lossSum > 0 ? round2(winSum / lossSum) : '∞',
-        dd: round1(core.maxDd),
-        avgPnl: Math.round(core.trades.reduce((s, t) => s + t.pnl, 0) / core.trades.length),
-      });
+      if (core.trades.length > 0) {
+        const wins = core.trades.filter(t => t.pnl > 0);
+        const losses = core.trades.filter(t => t.pnl <= 0);
+        const lossSum = losses.reduce((s, t) => s + Math.abs(t.pnl), 0);
+        const winSum = wins.reduce((s, t) => s + t.pnl, 0);
+        values.push({
+          vals: selected.map((k, j) => vals[j][comboIdx[j]]),
+          endEq: Math.round(core.eq),
+          ret: round1((core.eq / p.capital - 1) * 100),
+          trades: core.trades.length,
+          cov: round1(core.posDays / data.length * 100),
+          wr: round1(wins.length / core.trades.length * 100),
+          pf: lossSum > 0 ? round2(winSum / lossSum) : '∞',
+          dd: round1(core.maxDd),
+          avgPnl: Math.round(core.trades.reduce((s, t) => s + t.pnl, 0) / core.trades.length),
+        });
+      }
+      for (let k = selected.length - 1; k >= 0; k--) {
+        comboIdx[k]++;
+        if (comboIdx[k] < vals[k].length) break;
+        comboIdx[k] = 0;
+      }
+      ci++;
+    }
+    if (ci < combos) {
+      if (Date.now() - lastProg > 250) { lastProg = Date.now(); status.textContent = '扫描中 ' + ci + ' / ' + combos + ' 组合...'; }
+      setTimeout(tick, 0);
+      return;
     }
 
     if (values.length === 0) {
-      result.innerHTML = '<div class="error">所有参数值均无交易</div>';
+      result.innerHTML = '<div class="error">所有组合均无交易</div>';
       status.textContent = '无交易'; return;
     }
 
     values.sort((a, b) => b.endEq - a.endEq);
     const best = values[0];
-    const suffix = meta.unit || '';
-    const rows = values.map(function(v) {
+    const head = selected.map(k => '<th class="num">' + OPT_PARAMS[k].label + '</th>').join('')
+      + '<th class="num">最终权益</th><th class="num">收益</th><th class="num">笔数</th><th class="num">持仓覆盖率</th><th class="num">胜率</th><th class="num">盈亏比</th><th class="num">回撤</th><th class="num">均PnL</th>';
+    const show = values.slice(0, 40);
+    const rows = show.map(function(v) {
       return '<tr' + (v === best ? ' style="background:#2d3436;font-weight:700;"' : '') + '>\
-        <td class="num">' + v.v + suffix + '</td>\
+        ' + v.vals.map((val, j) => '<td class="num">' + val + (OPT_PARAMS[selected[j]].unit || '') + '</td>').join('') + '\
         <td class="num ' + cls(v.endEq - p.capital) + '">' + fmt(v.endEq) + '</td>\
         <td class="num ' + cls(v.ret) + '">' + pct(v.ret) + '</td>\
         <td class="num">' + v.trades + '</td>\
@@ -1787,19 +1850,22 @@ function optimizeParam() {
         <td class="num ' + cls(v.avgPnl) + '">' + fmt(v.avgPnl) + '</td>\
       </tr>';
     }).join('');
+    const bestDesc = selected.map((k, j) => OPT_PARAMS[k].label + '=' + best.vals[j] + (OPT_PARAMS[k].unit || '')).join(' | ');
 
-    result.innerHTML = '<div class="section"><h2>' + meta.label + ' 优化结果（按最终权益排序）</h2>\
-      <p style="font-size:12px;color:#576574;margin-bottom:8px;">当前其他参数: lookback=' + p.lookback + ' | min%=' + (p.minPct*100).toFixed(1) + '% | 保本=' + (p.beTh*100).toFixed(1) + '% | 锁定=' + (p.lockPct*100).toFixed(0) + '%</p>\
-      <table><tr>\
-        <th class="num">' + meta.label + '</th><th class="num">最终权益</th><th class="num">收益</th><th class="num">笔数</th><th class="num">持仓覆盖率</th><th class="num">胜率</th><th class="num">盈亏比</th><th class="num">回撤</th><th class="num">均PnL</th>\
-      </tr>' + rows + '</table></div>';
-    status.textContent = '优化完成 | ' + values.length + '个值 | 最优 ' + meta.label + '=' + best.v + suffix + ' → ' + fmt(best.endEq);
+    result.innerHTML = '<div class="section"><h2>' + labels + ' 联合优化结果（按最终权益排序）</h2>\
+      <p style="font-size:12px;color:#576574;margin-bottom:8px;">最优组合: ' + bestDesc + '</p>\
+      <table><tr>' + head + '</tr>' + rows + (values.length > show.length ? '<tr><td colspan="' + (selected.length + 9) + '" style="text-align:center;color:#576574;font-size:12px;">仅显示前 ' + show.length + ' / ' + values.length + ' 个组合</td></tr>' : '') + '</table></div>';
+    status.textContent = '优化完成 | 扫描 ' + values.length + '组合' + (coarsened ? '(步长已加粗)' : '') + ' | 最优 ' + bestDesc + ' → ' + fmt(best.endEq);
     const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip', volFilterLow:'p_vol_low', volFilterHigh:'p_vol_high', volWindow:'p_vol_window', volTarget:'p_vol_target', volTargetCap:'p_vol_target_cap', ewmaFilterHigh:'p_ewma_high', ewmaFilterLow:'p_ewma_low', priceSlopeTh:'p_slope_th', slopeDays:'p_slope_days', pbSlopeTh:'p_pb_slope_th' };
-    const el = document.getElementById(idMap[paramKey]);
-    if (meta.prec) el.value = best.v.toFixed(meta.prec);
-    else if (meta.unit) el.value = best.v.toFixed(1);
-    else el.value = best.v;
-  }, 50);
+    for (let k = 0; k < selected.length; k++) {
+      const key = selected[k], v = best.vals[k], meta = OPT_PARAMS[key];
+      const el = document.getElementById(idMap[key]);
+      if (meta.prec) el.value = v.toFixed(meta.prec);
+      else if (meta.unit) el.value = v.toFixed(1);
+      else el.value = v;
+    }
+  }
+  setTimeout(tick, 0);
 }
 
 function resetParams() {
@@ -1831,6 +1897,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   const n = data.length;
   const mpOff = calcMpRebase(data);
   const rollSeg = calcRollSegStart(data);
+  const mainAtr = calcATR(data, params.atrPeriod);
 
   // 换月高峰期: 主力合约交割月的前一个月 (如 09合约→8月). 移仓是交易者自主行为, 只画估计区间, 不追踪精确换月日.
   const rollRegions = (function(){
@@ -2179,6 +2246,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       const row = data[i];
       minP = Math.min(minP, row.l, row.mp, row.bec ?? Infinity, row.bep ?? Infinity, row.nc ?? Infinity, row.oc ?? Infinity);
       maxP = Math.max(maxP, row.h, row.mp, row.bec ?? -Infinity, row.bep ?? -Infinity, row.nc ?? -Infinity, row.oc ?? -Infinity);
+      const _av = mainAtr[i];
+      if (isFinite(_av)) { minP = Math.min(minP, row.c - _av); maxP = Math.max(maxP, row.c + _av); }
     }
     const range = maxP - minP || 1;
     const padP = range * 0.05;
@@ -2214,7 +2283,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         const x0 = Math.max(start, r.s), x1 = Math.min(end - 1, r.e);
         if (x0 > x1) continue;
         const px0 = toX(x0) - state.barW / 2, px1 = toX(x1) + state.barW / 2;
-        ctx.fillStyle = 'rgba(255, 0, 195, 0.07)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
         ctx.fillRect(px0, pad.top, px1 - px0, ch);
         if (px0 >= pad.left) {
           ctx.fillStyle = '#e8c84a';
@@ -2304,6 +2373,29 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.setLineDash([]);
+    }
+
+    // 收盘价 ± ATR 波动范围辅助线
+    if (document.getElementById('t_atrband').checked) {
+      const bandLines = [
+        { sign: 1, color: 'rgba(46, 204, 113, 0.55)' },
+        { sign: -1, color: 'rgba(231, 76, 60, 0.55)' },
+      ];
+      for (const bl of bandLines) {
+        ctx.strokeStyle = bl.color;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        let bandStarted = false;
+        for (let i = start; i < end && i < n; i++) {
+          const v = data[i].c + bl.sign * mainAtr[i];
+          if (!isFinite(v)) { bandStarted = false; continue; }
+          const x = toX(i), y = toY(v);
+          if (!bandStarted) { ctx.moveTo(x, y); bandStarted = true; } else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
     }
 
     // 收益曲线叠加（自有归一化刻度, 映射到蜡烛图区域; 收益=eqCurve[i+1]）
@@ -3649,6 +3741,12 @@ function drawEquityCurve(eqCurve, cap, closes, vols) {
 }
 
 window.onload = async function() {
+  buildOptPanel();
+  document.addEventListener('click', function(e) {
+    const wrap = document.getElementById('optWrap');
+    const panel = document.getElementById('optPanel');
+    if (wrap && panel && !wrap.contains(e.target)) panel.style.display = 'none';
+  });
   const ok = await loadAllData();
   if (ok) {
     const sym = CURRENT_SYM;

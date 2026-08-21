@@ -9,6 +9,7 @@ import datetime
 import argparse
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import subprocess
 
 # --- 配置部分 ---
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 脚本所在目录父级
@@ -147,8 +148,7 @@ def download_file(url, save_path):
         print(f"下载失败 {url}: {e}")
         return False
        
-import subprocess
-import os
+
 
 def download_with_curl(url, save_path):
     """
@@ -218,11 +218,11 @@ def process_exchange(config, year, month=None):
     #     # 郑商所：使用 curl 命令下载
     #     success = download_with_curl(url, save_path)
     # else:
-    #     # 中金所、广期所：继续使用原来的 requests 方法
-    #     success = download_file(url, save_path)  # 确保你的 download_file 函数存在
+    # 中金所、广期所：继续使用原来的 requests 方法
+    success = download_file(url, save_path)  # 确保你的 download_file 函数存在
     
-    # if not success:
-    #     return
+    if not success:
+        return
     
     # --- 解压逻辑（保持不变） ---
     if config["is_zip"] and save_path.endswith('.zip'):
