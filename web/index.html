@@ -1659,16 +1659,16 @@ function runMonteCarlo() {
 }
 
 const OPT_PARAMS = {
-  lookback:   { label: 'Lookback',    range: [5, 30, 1] },
-  minPct:     { label: 'Min%',        range: [0.1, 3, 0.1], unit: '%' },
+  lookback:   { label: 'Lookback',    range: [5, 60, 1] },
+  minPct:     { label: 'Min%',        range: [0.1, 2, 0.1], unit: '%' },
   maxPos:     { label: '仓位%',       range: [5, 100, 5], unit: '%' },
-  beTh:       { label: '保本%',       range: [0.5, 5, 0.1], unit: '%' },
+  beTh:       { label: '保本%',       range: [0.5, 2, 0.1], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 75, 5], unit: '%' },
   atrPeriod:  { label: 'ATR周期',     range: [5, 120, 1] },
   entryAtrMult:  { label: '入场ATR倍',   range: [0.5, 3, 0.1] },
   atrMult:    { label: '追踪ATR倍',     range: [0.5, 3, 0.1] },
   skipCount:  { label: '跳过次',      range: [0, 5, 1] },
-  volWindow:  { label: '分位窗口',    range: [0, 250, 10], unit: '天' },
+  volWindow:  { label: '分位窗口',    range: [0, 200, 10], unit: '天' },
   priceSlopeTh: { label: '逆势挡',    range: [0, 0.01, 0.001], prec: 3 },
   slopeDays:  { label: '逆势窗',      range: [10, 60, 5] },
   pbSlopeTh:  { label: '回踩斜率%',   range: [0, 3, 0.5], unit: '%' },
@@ -1713,7 +1713,7 @@ function applyOptValue(pp, key, v) {
   else pp[key] = v;
 }
 
-const OPT_MAX_COMBO = 100000;
+const OPT_MAX_COMBO = 1000000;
 let OPT_TOKEN = 0;
 
 function optimizeParam() {
