@@ -1479,8 +1479,6 @@ async function saveParams() {
       acc_window: numI('p_acc_win') ?? 3,
       acc_streak: numI('p_acc_streak') ?? 3,
       acc_mode: document.getElementById('p_acc_mode').value || 'off',
-      start_date: document.getElementById('p_start').value || null,
-      end_date: document.getElementById('p_end').value || null,
     };
     const resp = await fetch(API_BASE_WORKER + '/api/params', {
       method: 'POST',
@@ -1525,8 +1523,6 @@ async function loadParams(sym) {
         accStreak: r.params.acc_streak ?? 3,
         accMode: r.params.acc_mode ?? 'off',
       });
-      if (r.params.start_date) document.getElementById('p_start').value = r.params.start_date;
-      if (r.params.end_date) document.getElementById('p_end').value = r.params.end_date;
       return true;
     }
   } catch { /* no saved params */ }
@@ -3751,9 +3747,9 @@ window.onload = async function() {
   if (ok) {
     const sym = CURRENT_SYM;
     setParamValues(defaultParams);
-    const loaded = await loadParams(sym);
+    await loadParams(sym);
     const d = ALL_DATA[sym];
-    if (d && !loaded) {
+    if (d) {
       document.getElementById('p_start').value = d[0].d;
       document.getElementById('p_end').value = new Date().toISOString().slice(0, 10);
     }
