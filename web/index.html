@@ -3751,9 +3751,9 @@ window.onload = async function() {
   if (ok) {
     const sym = CURRENT_SYM;
     setParamValues(defaultParams);
-    await loadParams(sym);
+    const loaded = await loadParams(sym);
     const d = ALL_DATA[sym];
-    if (d) {
+    if (d && !loaded) {
       document.getElementById('p_start').value = d[0].d;
       document.getElementById('p_end').value = new Date().toISOString().slice(0, 10);
     }
