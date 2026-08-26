@@ -552,7 +552,7 @@ def main():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     t0 = time.time()
-    print(f'\n=== {year} ===')
+    print(f'\n=== czce {year} ===')
     fut_by_sym = load_all_futures(year)
     opt_by_sym = load_all_options(year)
     print(f'  期货: {len(fut_by_sym)} 品种, 期权: {len(opt_by_sym)} 品种 ({time.time()-t0:.0f}s)')

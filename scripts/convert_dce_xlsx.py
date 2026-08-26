@@ -529,7 +529,7 @@ def main():
     year = int(args.date[:4])
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-
+    print(f'\n=== dce {year} ===')
     output = {}
     tasks = [(sym, prefix) for sym, prefix in DCE_SYMBOLS.items()
              if not args.symbol or sym == args.symbol.upper()]

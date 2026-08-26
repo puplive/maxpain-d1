@@ -481,7 +481,7 @@ def main():
 
     for year in years:
         t0 = time.time()
-        print(f'\n=== {year} ===')
+        print(f'\n=== cffex {year} ===')
         fut, opt = load_year_data(year)
         if fut.empty:
             print(f'  {year}: 无数据')
