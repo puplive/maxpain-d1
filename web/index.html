@@ -509,6 +509,41 @@ function calcATR(data, period) {
   return atr;
 }
 
+// 实盘订单追踪止损: 与策略回测同款算法(入场ATR止损 + ATR追踪 + 保本锁定), 方向和开仓价取记录值
+// 返回从入场日起的 [{idx, stop}] 序列 (stop 为当日收盘后有效的追踪止损)
+function buildManualStop(data, atr, o, params, ei) {
+  const isLong = o.direction === 'long';
+  const entryPx = o.price;
+  const period = params.atrPeriod;
+  const f = (i) => { const a = atr[Math.max(period, i - 1)]; return isNaN(a) ? entryPx * 0.005 : a; };
+  const entryStop = isLong ? entryPx - f(ei) * params.entryAtrMult : entryPx + f(ei) * params.entryAtrMult;
+  const curve = [];
+  let peakPx = entryPx, beActive = false, prevClose = null;
+  for (let i = ei; i < data.length; i++) {
+    let s;
+    if (i === ei) {
+      s = entryStop;
+    } else if (beActive) {
+      const prof = isLong ? peakPx - entryPx : entryPx - peakPx;
+      s = isLong ? entryPx + prof * (params.lockPct || 0) : entryPx - prof * (params.lockPct || 0);
+    } else {
+      const atrStop = isLong ? prevClose - f(i) * params.atrMult : prevClose + f(i) * params.atrMult;
+      s = isLong ? Math.max(atrStop, entryStop) : Math.min(atrStop, entryStop);
+    }
+    curve.push({ idx: i, stop: s });
+    const r = data[i];
+    prevClose = r.c;
+    if (isLong && r.h > peakPx) {
+      peakPx = r.h;
+      if (params.beTh > 0 && params.lockPct > 0 && !beActive && peakPx >= entryPx * (1 + params.beTh / params.lockPct)) beActive = true;
+    } else if (!isLong && r.l < peakPx) {
+      peakPx = r.l;
+      if (params.beTh > 0 && params.lockPct > 0 && !beActive && peakPx <= entryPx * (1 - params.beTh / params.lockPct)) beActive = true;
+    }
+  }
+  return curve;
+}
+
 function calcRollSegStart(fullData) {
   // 期权换月(expiry变化)后方向lookback重新累计: 返回每天的方向数据段起点index
   const seg = new Int32Array(fullData.length);
@@ -2301,22 +2336,52 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         sigHtml += '<div class="sig" style="background:' + c + '15;border:1px solid ' + c + '33;">' + (t.type === 'entry' ? '▶ 开仓' : '■ 平仓') + ' ' + dirText(t.dir) + ' ' + t.qty + '手 @' + t.price.toFixed(0) + ' (' + t.reason + ')' + (t.type==='exit'?'  PnL:'+Math.round(t.pnl):'') + '</div>';
       }
     }
-    // 实盘订单记录 + 风险提示 (悬停K线显示)
-    const dayOrders = MANUAL_ORDERS ? MANUAL_ORDERS.filter(o => o.date === row.d) : [];
-    for (const o of dayOrders) {
-      const oc = o.direction === 'long' ? '#5cd85a' : '#ff6b6b';
-      sigHtml += '<div class="sig" style="background:' + oc + '15;border:1px solid ' + oc + '33;"><b>实盘</b> ' + dirText(o.direction) + ' ' + (o.qty || 1) + '手 @' + (o.price != null ? o.price.toFixed(0) : '-') +
-        (o.stop_price != null ? ' <span style="color:#ff9f43">止损' + o.stop_price.toFixed(0) + '</span>' : '') +
-        (o.status === 'closed' ? ' <span style="color:#576574;">[已平仓]</span>' : '') + '</div>';
-      if (o.remark) sigHtml += '<div class="sig" style="color:#8395a7;font-size:11px;border-color:transparent;">备注: ' + escHtml(o.remark) + '</div>';
-      const risks = [];
-      if (_mpDevPct != null && Math.abs(_mpDevPct) > 2) risks.push('价格偏离MP ' + (Number(_mpDevPct) > 0 ? '+' : '') + _mpDevPct + '%, 偏离过大');
-      if (row.dte != null && row.dte <= 5) risks.push('距到期' + row.dte + '天, 波动加剧');
-      if (Math.abs(oiSkew) > 40) risks.push('OI偏度' + oiSkew + '%, 持仓极端');
-      if (nextDir === 'long' && o.direction === 'short') risks.push('明日信号偏多, 与空单方向相反');
-      if (nextDir === 'short' && o.direction === 'long') risks.push('明日信号偏空, 与多单方向相反');
-      if (o.risk_note) risks.push('手动:' + escHtml(o.risk_note));
-      if (risks.length) sigHtml += '<div class="sig" style="background:#e74c3c15;border:1px solid #e74c3c33;"><b>风险提示</b> ' + risks.join('; ') + '</div>';
+    // 实盘订单: 独立区块, 显示在回测信息下方, 与策略模拟单区分开
+    const omult = (SYM_CFG[CURRENT_SYM] || { mult: 1 }).mult;
+    let manualHtml = '';
+    if (MANUAL_ORDERS && MANUAL_ORDERS.length) {
+      const mlist = [];
+      const mseen = {};
+      for (const o of MANUAL_ORDERS) if (o.date === row.d && !mseen[o.id]) { mlist.push(o); mseen[o.id] = 1; }
+      for (const o of MANUAL_ORDERS) if (o.status === 'open' && o.date <= row.d && !mseen[o.id]) { mlist.push(o); mseen[o.id] = 1; }
+      if (mlist.length) {
+        manualHtml += '<div class="row" style="border-top:2px solid #3d3a22;margin-top:6px;padding-top:6px;"><span class="label" style="color:#e8c84a;font-weight:600;">实盘订单</span></div>';
+        for (const o of mlist) {
+          const isOpen = o.status === 'open' && o.date <= row.d;
+          const ms = manualStops.find(x => x.order.id === o.id);
+          const msk = ms ? idx - ms.ei : -1;
+          const curStop = ms && msk >= 0 && ms.curve[msk] ? ms.curve[msk].stop : null;
+          let opnl = '';
+          if (isOpen) {
+            const up = o.direction === 'long' ? row.c - o.price : o.price - row.c;
+            const pnl = up * (o.qty || 1) * omult;
+            opnl = ' <span class="' + cls(pnl) + '">浮动' + (pnl > 0 ? '+' : '') + Math.round(pnl) + '</span>';
+          }
+          manualHtml += '<div class="sig" style="background:#e8c84a15;border:1px solid #e8c84a33;"><b>实盘' + (isOpen ? '持仓' : '记录') + '</b> ' + dirText(o.direction) + ' ' + (o.qty || 1) + '手 @' + (o.price != null ? o.price.toFixed(0) : '-') +
+            (curStop != null ? ' <span style="color:#ff4757">止损' + curStop.toFixed(0) + '</span>' : (o.stop_price != null ? ' <span style="color:#ff4757">止损' + o.stop_price.toFixed(0) + '</span>' : '')) +
+            (o.status === 'closed' ? ' <span style="color:#576574;">[已平仓]</span>' : '') + opnl + '</div>';
+          if (o.remark) manualHtml += '<div class="sig" style="color:#8395a7;font-size:11px;border-color:transparent;">备注: ' + escHtml(o.remark) + '</div>';
+          const risks = [];
+          if (_mpDevPct != null && Math.abs(_mpDevPct) > 2) risks.push('价格偏离MP ' + (Number(_mpDevPct) > 0 ? '+' : '') + _mpDevPct + '%, 偏离过大');
+          if (row.dte != null && row.dte <= 5) risks.push('距到期' + row.dte + '天, 波动加剧');
+          if (Math.abs(oiSkew) > 40) risks.push('OI偏度' + oiSkew + '%, 持仓极端');
+          if (nextDir === 'long' && o.direction === 'short') risks.push('明日信号偏多, 与空单方向相反');
+          if (nextDir === 'short' && o.direction === 'long') risks.push('明日信号偏空, 与多单方向相反');
+          if (ms && msk >= 0) {
+            // 止损触发检查: 与策略一致, 入场日用入场止损, 第2天用当天重算的追踪止损, 之后用前一日止损线
+            const ci = msk <= 1 ? msk : msk - 1;
+            const ts = ms.curve[ci] ? ms.curve[ci].stop : null;
+            if (ts != null) {
+              const trig = o.direction === 'long'
+                ? (msk === 0 ? row.l < ts : (row.o < ts || row.l < ts))
+                : (msk === 0 ? row.h > ts : (row.o > ts || row.h > ts));
+              if (trig) risks.push('止损' + ts.toFixed(0) + '已触发');
+            }
+          }
+          if (o.risk_note) risks.push('手动:' + escHtml(o.risk_note));
+          if (risks.length) manualHtml += '<div class="sig" style="background:#e74c3c15;border:1px solid #e74c3c33;"><b>风险提示</b> ' + risks.join('; ') + '</div>';
+        }
+      }
     }
     let posHtml = '';
     for (const t of trades) {
@@ -2350,7 +2415,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       <div class="row" style="display:none"><span class="label">GEX</span><span class="val ' + (row.gex>0?'pos':'neg') + '" style="font-size:11px">' + (row.gex != null ? row.gex.toLocaleString('zh-CN',{maximumFractionDigits:0}) : '-') + '</span></div>\
       <div class="row" style="border-top:1px solid #2d3436;margin-top:4px;padding-top:4px;"><span class="label">明日方向</span><span class="val" style="font-size:13px">' + nextDirText + '</span></div>\
       ' + (stopCurve && stopCurve[idx] && (stopCurve[idx].stop !== null || stopCurve[idx].breakLevel != null) ? '<div class="row"><span class="label">止损/结构</span><span class="val" style="font-size:11px">' + (stopCurve[idx].stop !== null ? '<span style="color:#ff9f43">' + stopCurve[idx].stop.toFixed(0) + '</span>' : '-') + ' / ' + (stopCurve[idx].breakLevel != null ? '<span style="color:#a55eea">' + stopCurve[idx].breakLevel.toFixed(0) + '</span>' : '-') + '</span></div>' : '') + '\
-      ' + beCrossHtml + sigHtml + posHtml + '\
+      ' + beCrossHtml + sigHtml + posHtml + manualHtml + '\
     ';
     const aDiv = document.getElementById('candleAnalysis');
     if (aDiv && window._analysisCache && window._analysisCache[idx]) {
@@ -2379,6 +2444,17 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       if (idx >= 0) manualMarkers.push({ idx, order: o });
     }
     manualMarkers.sort((a, b) => a.idx - b.idx);
+  }
+
+  // 实盘订单 ATR 追踪止损 (仅持仓中, 策略同款算法, 方向/开仓价取记录)
+  const manualStops = [];
+  if (MANUAL_ORDERS && MANUAL_ORDERS.length) {
+    for (const o of MANUAL_ORDERS) {
+      if (o.status !== 'open') continue;
+      const ei = data.findIndex(r => r.d === o.date);
+      if (ei < 0) continue;
+      manualStops.push({ order: o, ei, curve: buildManualStop(data, mainAtr, o, params, ei) });
+    }
   }
 
   // BE-MP 交叉标记：看涨BE下穿MP → 下跌，看跌BE上穿MP → 上涨
@@ -2736,6 +2812,29 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.restore();
     }
 
+    // 实盘订单止损线: 亮红虚线 (策略同款算法, 从入场日画到末尾)
+    for (const ms of manualStops) {
+      const lo = Math.max(start, ms.ei);
+      if (lo >= end) continue;
+      ctx.save();
+      ctx.strokeStyle = '#ff4757';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      let started = false;
+      for (let k = lo; k < end && k < n; k++) {
+        const pt = ms.curve[k - ms.ei];
+        if (!pt) break;
+        const x = toX(k), y = toY(pt.stop);
+        if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
     let tmIdx = 0;
     while (tmIdx < tradeMarkers.length && tradeMarkers[tmIdx].idx < start) tmIdx++;
     for (let i = start; i < end && i < n; i++) {
@@ -2883,18 +2982,6 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       const closed = o.status === 'closed';
       const sz = Math.max(7, Math.min(13, state.barW * 0.75));
       const col = closed ? 'rgba(255,255,255,0.45)' : (isLong ? '#2ecc71' : '#ff6b6b');
-
-      // 止损虚线
-      if (o.stop_price != null) {
-        const sy = toY(o.stop_price);
-        ctx.save();
-        ctx.strokeStyle = isLong ? 'rgba(46,204,113,0.5)' : 'rgba(255,107,107,0.5)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
-        ctx.beginPath(); ctx.moveTo(x - 14, sy); ctx.lineTo(x + 14, sy); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
-      }
 
       ctx.save();
       ctx.fillStyle = col;
