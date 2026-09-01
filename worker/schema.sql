@@ -71,3 +71,19 @@ CREATE TABLE IF NOT EXISTS backtest_params (
   end_date TEXT,
   updated_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS manual_orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  symbol TEXT NOT NULL,
+  date TEXT NOT NULL,
+  direction TEXT NOT NULL,
+  price REAL NOT NULL,
+  qty INTEGER DEFAULT 1,
+  stop_price REAL,
+  status TEXT DEFAULT 'open',
+  remark TEXT,
+  risk_note TEXT,
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_manual_orders_symbol ON manual_orders(symbol);

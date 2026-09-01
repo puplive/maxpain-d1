@@ -33,6 +33,21 @@ h1 small { font-size: 13px; color: #576574; font-weight: normal; }
 .opt-panel label:hover { background: #22354a; }
 .opt-panel label input { accent-color: #54a0ff; }
 .opt-panel .opt-range { color: #576574; font-size: 11px; margin-left: auto; white-space: nowrap; }
+.ord-panel { position: absolute; top: calc(100% + 6px); right: 0; z-index: 100; background: #1a2a3a; border: 1px solid #2d3436; border-radius: 8px; padding: 12px; min-width: min(420px, calc(100vw - 16px)); max-width: 480px; max-height: 480px; overflow: auto; box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: 12px; color: #c8d6e5; box-sizing: border-box; }
+.ord-panel h4 { margin: 10px 0 8px; font-size: 13px; color: #8395a7; border-bottom: 1px solid #2d3436; padding-bottom: 4px; }
+.ord-panel h4:first-child { margin-top: 0; }
+.ord-panel label { display: inline-flex; align-items: center; gap: 4px; margin: 0 8px 8px 0; color: #8395a7; white-space: nowrap; }
+.ord-panel input, .ord-panel select, .ord-panel textarea { background: #0f1923; border: 1px solid #2d3436; color: #c8d6e5; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+.ord-panel input { width: 88px; }
+.ord-panel input[type=date] { width: 122px; }
+.ord-panel textarea { width: 100%; resize: vertical; box-sizing: border-box; }
+.ord-panel .ord-btn { background: #2ecc71; color: #0f1923; border: none; border-radius: 4px; padding: 5px 14px; cursor: pointer; font-size: 12px; font-weight: 600; }
+.ord-panel .ord-btn.ghost { background: #2d3436; color: #c8d6e5; }
+.ord-item { border: 1px solid #2d3436; border-radius: 6px; padding: 8px; margin: 6px 0; }
+.ord-item .o-head { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
+.ord-item .o-tag { font-weight: 600; padding: 1px 6px; border-radius: 3px; font-size: 11px; }
+.ord-item .o-del { cursor: pointer; color: #ff6b6b; margin-left: auto; }
+.ord-item .o-edit { cursor: pointer; color: #54a0ff; margin-left: 8px; }
 #optCount { color: #54a0ff; font-size: 11px; margin-left: 4px; }
 /* 期权成熟品种快速栏 */
 .mature-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -149,6 +164,10 @@ tr:hover td { background: #1a2a3a; }
       <div id="optPanel" class="opt-panel" style="display:none;"></div>
     </div>
     <button class="btn" onclick="optimizeParam()" style="background:#8854d0;color:#fff;">优化</button>
+    <div class="opt-wrap" id="ordWrap">
+      <button id="ordBtn" class="sym-btn" onclick="toggleOrdPanel()">实盘记录</button>
+      <div id="ordPanel" class="ord-panel" style="display:none;"></div>
+    </div>
     <span class="status" id="status">就绪</span>
   </div>
 
@@ -279,6 +298,8 @@ const SYM_CFG = {
 let ALL_DATA = {};
 let SYMBOLS = [];
 let CURRENT_SYM = '';
+let MANUAL_ORDERS = []; // 当前品种的实盘订单
+let ORD_EDIT_ID = null; // 正在编辑的订单 id, null=新增模式
 // 期权成熟品种（快速切换栏，写死）：MP 跟随价格、非长期不动的品种
 const MATURE_SYMS = ['TA', 'SA', 'FG', 'AG', 'AU', 'P', 'PS', 'SI', 'LC'];
 let defaultParams = {
@@ -403,6 +424,7 @@ async function switchSymbol(sym) {
     document.getElementById('p_end').value = new Date().toISOString().slice(0, 10);
   }
   if (!await loadParams(sym)) setParamValues(defaultParams);
+  await loadManualOrders(sym);
   runBacktest();
 }
 
@@ -1697,6 +1719,119 @@ function toggleOptPanel() {
   const p = document.getElementById('optPanel');
   p.style.display = p.style.display === 'none' ? 'block' : 'none';
 }
+function toggleOrdPanel() {
+  const p = document.getElementById('ordPanel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  if (p.style.display === 'block') renderOrdPanel();
+}
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+async function loadManualOrders(sym) {
+  try {
+    const resp = await fetch(API_BASE_WORKER + '/api/orders?symbol=' + encodeURIComponent(sym) + '&_=' + Date.now());
+    const r = await resp.json();
+    MANUAL_ORDERS = (r.orders || []).slice();
+  } catch { MANUAL_ORDERS = []; }
+}
+function renderOrdPanel() {
+  const panel = document.getElementById('ordPanel');
+  const today = new Date().toISOString().slice(0, 10);
+  const sym = CURRENT_SYM;
+  const edit = ORD_EDIT_ID != null ? MANUAL_ORDERS.find(o => o.id === ORD_EDIT_ID) : null;
+  let html = '<h4>' + (SYM_CFG[sym] ? SYM_CFG[sym].name : sym) + ' 实盘订单记录</h4>';
+  // 新增/编辑表单
+  html += '<div style="border:1px solid #2d3436;border-radius:6px;padding:10px;margin-bottom:6px;">';
+  html += '<div><label>日期<input type="date" id="o_date" value="' + (edit ? edit.date : today) + '"></label>' +
+          '<label>方向<select id="o_dir"><option value="long"' + (edit && edit.direction === 'long' ? ' selected' : '') + '>多</option><option value="short"' + (edit && edit.direction === 'short' ? ' selected' : '') + '>空</option></select></label>' +
+          '<label>价格<input type="number" id="o_price" step="1" value="' + (edit ? edit.price : '') + '"></label>' +
+          '<label>手数<input type="number" id="o_qty" min="1" step="1" value="' + (edit ? edit.qty : 1) + '"></label></div>';
+  html += '<div><label>止损价<input type="number" id="o_stop" step="1" value="' + (edit && edit.stop_price != null ? edit.stop_price : '') + '"></label>' +
+          '<label>状态<select id="o_status"><option value="open"' + (edit && edit.status === 'closed' ? '' : ' selected') + '>持仓中</option><option value="closed"' + (edit && edit.status === 'closed' ? ' selected' : '') + '>已平仓</option></select></label></div>';
+  html += '<div style="margin:4px 0 8px;"><label style="display:block;margin-bottom:4px;">备注<input type="text" id="o_remark" style="width:100%;" placeholder="交易逻辑/计划" value="' + (edit && edit.remark ? escHtml(edit.remark) : '') + '"></label></div>';
+  html += '<div style="margin:4px 0 8px;"><label style="display:block;margin-bottom:4px;">风险备注<input type="text" id="o_risk" style="width:100%;" placeholder="手动风险提示, 悬停K线时显示" value="' + (edit && edit.risk_note ? escHtml(edit.risk_note) : '') + '"></label></div>';
+  html += '<div style="display:flex;gap:8px;">' +
+          '<button class="ord-btn" onclick="saveManualOrder()">' + (edit ? '保存修改' : '添加订单') + '</button>' +
+          (edit ? '<button class="ord-btn ghost" onclick="cancelOrdEdit()">取消编辑</button>' : '') +
+          '</div></div>';
+  // 订单列表
+  const list = MANUAL_ORDERS.slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id);
+  if (!list.length) {
+    html += '<div style="color:#576574;padding:8px;">暂无记录</div>';
+  } else {
+    html += '<h4>已记录 ' + list.length + ' 笔</h4>';
+    for (const o of list) {
+      const isLong = o.direction === 'long';
+      const tagColor = isLong ? '#5cd85a' : '#ff6b6b';
+      const tagBg = isLong ? '#5cd85a22' : '#ff6b6b22';
+      html += '<div class="ord-item">' +
+        '<div class="o-head"><span class="o-tag" style="color:' + tagColor + ';background:' + tagBg + ';">' + (isLong ? '多' : '空') + '</span>' +
+        '<span>' + o.date + '</span><span>' + (o.price != null ? o.price.toFixed(0) : '-') + '</span>' +
+        '<span>' + (o.qty || 1) + '手</span>' +
+        (o.stop_price != null ? '<span style="color:#ff9f43">止损' + o.stop_price.toFixed(0) + '</span>' : '') +
+        '<span style="color:#576574;font-size:11px;">' + (o.status === 'closed' ? '已平仓' : '持仓中') + '</span>' +
+        '<span class="o-edit" onclick="editOrd(' + o.id + ')">编辑</span>' +
+        '<span class="o-del" onclick="delOrd(' + o.id + ')">删除</span>' +
+        '</div>' +
+        (o.remark ? '<div style="color:#8395a7;font-size:11px;">备注: ' + escHtml(o.remark) + '</div>' : '') +
+        (o.risk_note ? '<div style="color:#ff6b6b;font-size:11px;">风险: ' + escHtml(o.risk_note) + '</div>' : '') +
+        '</div>';
+    }
+  }
+  panel.innerHTML = html;
+}
+function editOrd(id) {
+  ORD_EDIT_ID = id;
+  renderOrdPanel();
+}
+function cancelOrdEdit() {
+  ORD_EDIT_ID = null;
+  renderOrdPanel();
+}
+async function saveManualOrder() {
+  const sym = CURRENT_SYM;
+  const body = {
+    symbol: sym,
+    date: document.getElementById('o_date').value,
+    direction: document.getElementById('o_dir').value,
+    price: parseFloat(document.getElementById('o_price').value),
+    qty: parseInt(document.getElementById('o_qty').value) || 1,
+    stop_price: document.getElementById('o_stop').value !== '' ? parseFloat(document.getElementById('o_stop').value) : null,
+    status: document.getElementById('o_status').value,
+    remark: document.getElementById('o_remark').value.trim() || null,
+    risk_note: document.getElementById('o_risk').value.trim() || null,
+  };
+  if (!body.date || body.price == null || isNaN(body.price)) { alert('请填写日期和价格'); return; }
+  const editing = ORD_EDIT_ID != null;
+  if (editing) body.id = ORD_EDIT_ID;
+  try {
+    const resp = await fetch(API_BASE_WORKER + '/api/orders' + (editing ? '/update' : ''), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const r = await resp.json();
+    if (!r.ok) { alert('保存失败: ' + (r.error || resp.status)); return; }
+  } catch { alert('网络错误, 保存失败'); return; }
+  ORD_EDIT_ID = null;
+  await loadManualOrders(sym);
+  renderOrdPanel();
+  runBacktest();
+}
+async function delOrd(id) {
+  if (!confirm('删除这条订单记录?')) return;
+  try {
+    const resp = await fetch(API_BASE_WORKER + '/api/orders/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    await resp.json();
+  } catch { alert('网络错误, 删除失败'); return; }
+  await loadManualOrders(CURRENT_SYM);
+  renderOrdPanel();
+  runBacktest();
+}
 function getOptSelection() { return Array.from(optSelection); }
 
 function buildOptVals(key, min, max, step) {
@@ -2166,6 +2301,23 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         sigHtml += '<div class="sig" style="background:' + c + '15;border:1px solid ' + c + '33;">' + (t.type === 'entry' ? '▶ 开仓' : '■ 平仓') + ' ' + dirText(t.dir) + ' ' + t.qty + '手 @' + t.price.toFixed(0) + ' (' + t.reason + ')' + (t.type==='exit'?'  PnL:'+Math.round(t.pnl):'') + '</div>';
       }
     }
+    // 实盘订单记录 + 风险提示 (悬停K线显示)
+    const dayOrders = MANUAL_ORDERS ? MANUAL_ORDERS.filter(o => o.date === row.d) : [];
+    for (const o of dayOrders) {
+      const oc = o.direction === 'long' ? '#5cd85a' : '#ff6b6b';
+      sigHtml += '<div class="sig" style="background:' + oc + '15;border:1px solid ' + oc + '33;"><b>实盘</b> ' + dirText(o.direction) + ' ' + (o.qty || 1) + '手 @' + (o.price != null ? o.price.toFixed(0) : '-') +
+        (o.stop_price != null ? ' <span style="color:#ff9f43">止损' + o.stop_price.toFixed(0) + '</span>' : '') +
+        (o.status === 'closed' ? ' <span style="color:#576574;">[已平仓]</span>' : '') + '</div>';
+      if (o.remark) sigHtml += '<div class="sig" style="color:#8395a7;font-size:11px;border-color:transparent;">备注: ' + escHtml(o.remark) + '</div>';
+      const risks = [];
+      if (_mpDevPct != null && Math.abs(_mpDevPct) > 2) risks.push('价格偏离MP ' + (Number(_mpDevPct) > 0 ? '+' : '') + _mpDevPct + '%, 偏离过大');
+      if (row.dte != null && row.dte <= 5) risks.push('距到期' + row.dte + '天, 波动加剧');
+      if (Math.abs(oiSkew) > 40) risks.push('OI偏度' + oiSkew + '%, 持仓极端');
+      if (nextDir === 'long' && o.direction === 'short') risks.push('明日信号偏多, 与空单方向相反');
+      if (nextDir === 'short' && o.direction === 'long') risks.push('明日信号偏空, 与多单方向相反');
+      if (o.risk_note) risks.push('手动:' + escHtml(o.risk_note));
+      if (risks.length) sigHtml += '<div class="sig" style="background:#e74c3c15;border:1px solid #e74c3c33;"><b>风险提示</b> ' + risks.join('; ') + '</div>';
+    }
     let posHtml = '';
     for (const t of trades) {
       if (row.d >= t.entry && row.d < t.exit) {
@@ -2218,6 +2370,16 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     if (oIdx >= 0) tradeMarkers.push({ idx: oIdx, type: 'entry', dir: openPos.direction, qty: openPos.qty, price: openPos.entryPx, openPos: true });
   }
   tradeMarkers.sort((a, b) => a.idx - b.idx || (a.type === 'entry' ? -1 : 1));
+
+  // 实盘订单标记 (来自 manual_orders 表)
+  const manualMarkers = [];
+  if (MANUAL_ORDERS && MANUAL_ORDERS.length) {
+    for (const o of MANUAL_ORDERS) {
+      const idx = data.findIndex(r => r.d === o.date);
+      if (idx >= 0) manualMarkers.push({ idx, order: o });
+    }
+    manualMarkers.sort((a, b) => a.idx - b.idx);
+  }
 
   // BE-MP 交叉标记：看涨BE下穿MP → 下跌，看跌BE上穿MP → 上涨
   const beCrossMarkers = [];
@@ -2706,6 +2868,56 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.textAlign = 'center';
       const lY = bearish ? beY - gap - 5 : beY + gap + 11;
       ctx.fillText(bearish ? '下跌' : '上涨', x, lY);
+      ctx.restore();
+    }
+
+    // 实盘订单标记: 多=绿▲, 空=红▼, 已平=空心, 有止损画虚线
+    let moIdx = 0;
+    while (moIdx < manualMarkers.length && manualMarkers[moIdx].idx < start) moIdx++;
+    for (; moIdx < manualMarkers.length && manualMarkers[moIdx].idx < end; moIdx++) {
+      const m = manualMarkers[moIdx];
+      const o = m.order;
+      const x = toX(m.idx);
+      const priceY = toY(o.price);
+      const isLong = o.direction === 'long';
+      const closed = o.status === 'closed';
+      const sz = Math.max(7, Math.min(13, state.barW * 0.75));
+      const col = closed ? 'rgba(255,255,255,0.45)' : (isLong ? '#2ecc71' : '#ff6b6b');
+
+      // 止损虚线
+      if (o.stop_price != null) {
+        const sy = toY(o.stop_price);
+        ctx.save();
+        ctx.strokeStyle = isLong ? 'rgba(46,204,113,0.5)' : 'rgba(255,107,107,0.5)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(x - 14, sy); ctx.lineTo(x + 14, sy); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      ctx.save();
+      ctx.fillStyle = col;
+      ctx.strokeStyle = closed ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.3)';
+      ctx.lineWidth = 1;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      if (isLong) {
+        ctx.moveTo(x, priceY - 1);
+        ctx.lineTo(x - sz, priceY + sz * 1.4);
+        ctx.lineTo(x + sz, priceY + sz * 1.4);
+      } else {
+        ctx.moveTo(x, priceY + 1);
+        ctx.lineTo(x - sz, priceY - sz * 1.4);
+        ctx.lineTo(x + sz, priceY - sz * 1.4);
+      }
+      ctx.closePath();
+      if (closed) ctx.stroke(); else { ctx.fill(); ctx.stroke(); }
+      ctx.fillStyle = closed ? 'rgba(255,255,255,0.6)' : (isLong ? '#2ecc71' : '#ff6b6b');
+      ctx.font = `bold ${Math.max(8, Math.min(11, state.barW * 0.6))}px sans-serif`;
+      ctx.textAlign = 'center';
+      const off = sz * 1.4 + 10;
+      ctx.fillText(isLong ? '多' : '空', x, priceY + (isLong ? off : -off + 6));
       ctx.restore();
     }
 
@@ -3742,6 +3954,9 @@ window.onload = async function() {
     const wrap = document.getElementById('optWrap');
     const panel = document.getElementById('optPanel');
     if (wrap && panel && !wrap.contains(e.target)) panel.style.display = 'none';
+    const owrap = document.getElementById('ordWrap');
+    const opanel = document.getElementById('ordPanel');
+    if (owrap && opanel && !owrap.contains(e.target)) opanel.style.display = 'none';
   });
   const ok = await loadAllData();
   if (ok) {
@@ -3753,6 +3968,7 @@ window.onload = async function() {
       document.getElementById('p_start').value = d[0].d;
       document.getElementById('p_end').value = new Date().toISOString().slice(0, 10);
     }
+    await loadManualOrders(sym);
     runBacktest();
   }
 };
