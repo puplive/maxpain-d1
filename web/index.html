@@ -2970,7 +2970,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.restore();
     }
 
-    // 实盘订单标记: 多=绿▲, 空=红▼, 已平=空心, 有止损画虚线
+    // 实盘订单标记: 空心三角, 多=蓝▲, 空=紫▼, 已平=更淡更细, 有止损画虚线
     let moIdx = 0;
     while (moIdx < manualMarkers.length && manualMarkers[moIdx].idx < start) moIdx++;
     for (; moIdx < manualMarkers.length && manualMarkers[moIdx].idx < end; moIdx++) {
@@ -2981,12 +2981,12 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       const isLong = o.direction === 'long';
       const closed = o.status === 'closed';
       const sz = Math.max(7, Math.min(13, state.barW * 0.75));
-      const col = closed ? 'rgba(255,255,255,0.45)' : (isLong ? '#2ecc71' : '#ff6b6b');
+      const col = isLong ? '#54a0ff' : '#a29bfe';
 
       ctx.save();
-      ctx.fillStyle = col;
-      ctx.strokeStyle = closed ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.3)';
-      ctx.lineWidth = 1;
+      ctx.globalAlpha = closed ? 0.7 : 1;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = closed ? 1.5 : 2;
       ctx.lineJoin = 'round';
       ctx.beginPath();
       if (isLong) {
@@ -2999,8 +2999,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         ctx.lineTo(x + sz, priceY - sz * 1.4);
       }
       ctx.closePath();
-      if (closed) ctx.stroke(); else { ctx.fill(); ctx.stroke(); }
-      ctx.fillStyle = closed ? 'rgba(255,255,255,0.6)' : (isLong ? '#2ecc71' : '#ff6b6b');
+      ctx.stroke();
+      ctx.fillStyle = col;
       ctx.font = `bold ${Math.max(8, Math.min(11, state.barW * 0.6))}px sans-serif`;
       ctx.textAlign = 'center';
       const off = sz * 1.4 + 10;
