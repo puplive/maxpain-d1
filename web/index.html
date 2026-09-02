@@ -544,6 +544,34 @@ function buildManualStop(data, atr, o, params, ei) {
   return curve;
 }
 
+// 实盘逐日累计盈亏(不含本金): realEq[0]=0 基线, realEq[k]=data[k-1]收盘后累计盈亏
+// 已平仓单在平仓日(含)起记 realized(平仓价), 之前与持仓中单一样按收盘价浮盈浮亏标记到市
+function buildManualRealEq(data, orders, mult) {
+  const n = data.length;
+  const acc = new Float64Array(n + 1);
+  if (!orders || !orders.length) return acc;
+  const _idx = {};
+  for (let i = 0; i < n; i++) _idx[data[i].d] = i;
+  for (const o of orders) {
+    const entry = _idx[o.date];
+    if (entry == null) continue;
+    const dir = o.direction === 'long' ? 1 : -1;
+    const qty = o.qty || 1;
+    const entryPx = o.price;
+    let exit = null;
+    if (o.exit_date != null && o.exit_price != null) {
+      exit = _idx[o.exit_date];
+      if (exit == null) { for (let i = entry; i < n; i++) { if (data[i].d <= o.exit_date) exit = i; else break; } }
+      if (exit == null || exit < entry) exit = entry;
+    }
+    for (let i = entry; i < n; i++) {
+      const ref = exit != null && i >= exit ? o.exit_price : data[i].c;
+      acc[i + 1] += dir * (ref - entryPx) * qty * mult;
+    }
+  }
+  return acc;
+}
+
 function calcRollSegStart(fullData) {
   // 期权换月(expiry变化)后方向lookback重新累计: 返回每天的方向数据段起点index
   const seg = new Int32Array(fullData.length);
@@ -1459,7 +1487,8 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
     // 收盘价/波动率序列与 eqCurve 对齐: eqCurve[0]=基线(数据首日), eqCurve[k]=第k-1日
     const eqCloses = eqCurve.map((_, k) => k === 0 ? data[0].c : data[k - 1].c);
     const eqVols = eqCurve.map((_, k) => k === 0 ? (core.fastVol[1] || core.fastVol[0] || 0) : core.fastVol[k - 1] || 0);
-    drawEquityCurve(eqCurve, CAP, eqCloses, eqVols);
+    const realEq = buildManualRealEq(data, MANUAL_ORDERS || [], (SYM_CFG[CURRENT_SYM] || { mult: 1 }).mult);
+    drawEquityCurve(eqCurve, CAP, eqCloses, eqVols, realEq);
   }, 0);
 }
 
@@ -1773,23 +1802,34 @@ function renderOrdPanel() {
   const panel = document.getElementById('ordPanel');
   const today = new Date().toISOString().slice(0, 10);
   const sym = CURRENT_SYM;
-  const edit = ORD_EDIT_ID != null ? MANUAL_ORDERS.find(o => o.id === ORD_EDIT_ID) : null;
+  const editId = ORD_EDIT_ID != null && ORD_EDIT_ID > 0 ? ORD_EDIT_ID : null;
+  const edit = editId != null ? MANUAL_ORDERS.find(o => o.id === editId) : null;
+  const showForm = ORD_EDIT_ID != null;   // -1=手动新增, >0=编辑
   let html = '<h4>' + (SYM_CFG[sym] ? SYM_CFG[sym].name : sym) + ' 实盘订单记录</h4>';
-  // 新增/编辑表单
-  html += '<div style="border:1px solid #2d3436;border-radius:6px;padding:10px;margin-bottom:6px;">';
-  html += '<div><label>日期<input type="date" id="o_date" value="' + (edit ? edit.date : today) + '"></label>' +
-          '<label>方向<select id="o_dir"><option value="long"' + (edit && edit.direction === 'long' ? ' selected' : '') + '>多</option><option value="short"' + (edit && edit.direction === 'short' ? ' selected' : '') + '>空</option></select></label>' +
-          '<label>价格<input type="number" id="o_price" step="1" value="' + (edit ? edit.price : '') + '"></label>' +
-          '<label>手数<input type="number" id="o_qty" min="1" step="1" value="' + (edit ? edit.qty : 1) + '"></label></div>';
-  html += '<div><label>止损价<input type="number" id="o_stop" step="1" value="' + (edit && edit.stop_price != null ? edit.stop_price : '') + '"></label>' +
-          '<label>状态<select id="o_status"><option value="open"' + (edit && edit.status === 'closed' ? '' : ' selected') + '>持仓中</option><option value="closed"' + (edit && edit.status === 'closed' ? ' selected' : '') + '>已平仓</option></select></label></div>';
-  html += '<div style="margin:4px 0 8px;"><label style="display:block;margin-bottom:4px;">备注<input type="text" id="o_remark" style="width:100%;" placeholder="交易逻辑/计划" value="' + (edit && edit.remark ? escHtml(edit.remark) : '') + '"></label></div>';
-  html += '<div style="margin:4px 0 8px;"><label style="display:block;margin-bottom:4px;">风险备注<input type="text" id="o_risk" style="width:100%;" placeholder="手动风险提示, 悬停K线时显示" value="' + (edit && edit.risk_note ? escHtml(edit.risk_note) : '') + '"></label></div>';
-  html += '<div style="display:flex;gap:8px;">' +
-          '<button class="ord-btn" onclick="saveManualOrder()">' + (edit ? '保存修改' : '添加订单') + '</button>' +
-          (edit ? '<button class="ord-btn ghost" onclick="cancelOrdEdit()">取消编辑</button>' : '') +
-          '</div></div>';
+  if (!showForm) {
+    html += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;"><button class="ord-btn" onclick="showOrdEditor(-1)">＋手动录入</button>' +
+            '<span style="font-size:10px;color:#576574;">选中K线点右侧「＋开多/＋开空」即可开仓</span></div>';
+  }
+  if (showForm) {
+    const closedSel = !!(edit && (edit.status === 'closed' || edit.exit_price != null));
+    html += '<div style="border:1px solid #2d3436;border-radius:6px;padding:10px;margin-bottom:6px;">';
+    html += '<div><label>日期<input type="date" id="o_date" value="' + (edit ? edit.date : today) + '"></label>' +
+            '<label>方向<select id="o_dir"><option value="long"' + (edit && edit.direction === 'long' ? ' selected' : '') + '>多</option><option value="short"' + (edit && edit.direction === 'short' ? ' selected' : '') + '>空</option></select></label>' +
+            '<label>价格<input type="number" id="o_price" step="1" value="' + (edit ? edit.price : '') + '"></label>' +
+            '<label>手数<input type="number" id="o_qty" min="1" step="1" value="' + (edit ? edit.qty : 1) + '"></label></div>';
+    html += '<div><label>止损价<input type="number" id="o_stop" step="1" value="' + (edit && edit.stop_price != null ? edit.stop_price : '') + '"></label>' +
+            '<label>状态<select id="o_status" onchange="ordStatusChange()"><option value="open"' + (closedSel ? '' : ' selected') + '>持仓中</option><option value="closed"' + (closedSel ? ' selected' : '') + '>已平仓</option></select></label></div>';
+    html += '<div id="o_exit_row" style="display:' + (closedSel ? 'flex' : 'none') + ';"><label>平仓日期<input type="date" id="o_exit_date" value="' + (edit && edit.exit_date ? edit.exit_date : '') + '"></label>' +
+            '<label>平仓价<input type="number" id="o_exit_price" step="1" value="' + (edit && edit.exit_price != null ? edit.exit_price : '') + '"></label></div>';
+    html += '<div style="margin:4px 0 8px;"><label style="display:block;margin-bottom:4px;">备注<input type="text" id="o_remark" style="width:100%;" placeholder="交易逻辑/计划" value="' + (edit && edit.remark ? escHtml(edit.remark) : '') + '"></label></div>';
+    html += '<div style="margin:4px 0 8px;"><label style="display:block;margin-bottom:4px;">风险备注<input type="text" id="o_risk" style="width:100%;" placeholder="手动风险提示, 悬停K线时显示" value="' + (edit && edit.risk_note ? escHtml(edit.risk_note) : '') + '"></label></div>';
+    html += '<div style="display:flex;gap:8px;">' +
+            '<button class="ord-btn" onclick="saveManualOrder()">' + (edit ? '保存修改' : '添加订单') + '</button>' +
+            '<button class="ord-btn ghost" onclick="cancelOrdEdit()">收起</button>' +
+            '</div></div>';
+  }
   // 订单列表
+  const omult = (SYM_CFG[sym] || { mult: 1 }).mult;
   const list = MANUAL_ORDERS.slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id);
   if (!list.length) {
     html += '<div style="color:#576574;padding:8px;">暂无记录</div>';
@@ -1799,13 +1839,21 @@ function renderOrdPanel() {
       const isLong = o.direction === 'long';
       const tagColor = isLong ? '#5cd85a' : '#ff6b6b';
       const tagBg = isLong ? '#5cd85a22' : '#ff6b6b22';
+      const isClosed = o.status === 'closed' || o.exit_price != null;
+      let pnlSpan = '';
+      if (o.exit_price != null) {
+        const rp = (isLong ? 1 : -1) * (o.exit_price - o.price) * (o.qty || 1) * omult;
+        pnlSpan = '<span class="' + cls(rp) + '" style="font-size:11px;">' + (rp > 0 ? '+' : '') + Math.round(rp) + '</span>';
+      }
       html += '<div class="ord-item">' +
         '<div class="o-head"><span class="o-tag" style="color:' + tagColor + ';background:' + tagBg + ';">' + (isLong ? '多' : '空') + '</span>' +
         '<span>' + o.date + '</span><span>' + (o.price != null ? o.price.toFixed(0) : '-') + '</span>' +
         '<span>' + (o.qty || 1) + '手</span>' +
         (o.stop_price != null ? '<span style="color:#ff9f43">止损' + o.stop_price.toFixed(0) + '</span>' : '') +
-        '<span style="color:#576574;font-size:11px;">' + (o.status === 'closed' ? '已平仓' : '持仓中') + '</span>' +
-        '<span class="o-edit" onclick="editOrd(' + o.id + ')">编辑</span>' +
+        (o.exit_price != null ? '<span style="color:#576574;font-size:11px;">平' + o.exit_price.toFixed(0) + (o.exit_date ? '(' + o.exit_date.slice(5) + ')' : '') + '</span>' : '') +
+        pnlSpan +
+        '<span style="color:#576574;font-size:11px;">' + (isClosed ? '已平仓' : '持仓中') + '</span>' +
+        '<span class="o-edit" onclick="showOrdEditor(' + o.id + ')">编辑</span>' +
         '<span class="o-del" onclick="delOrd(' + o.id + ')">删除</span>' +
         '</div>' +
         (o.remark ? '<div style="color:#8395a7;font-size:11px;">备注: ' + escHtml(o.remark) + '</div>' : '') +
@@ -1815,9 +1863,16 @@ function renderOrdPanel() {
   }
   panel.innerHTML = html;
 }
-function editOrd(id) {
+function showOrdEditor(id) {
+  const p = document.getElementById('ordPanel');
+  if (p) p.style.display = 'block';
   ORD_EDIT_ID = id;
   renderOrdPanel();
+}
+function ordStatusChange() {
+  const row = document.getElementById('o_exit_row');
+  const sel = document.getElementById('o_status');
+  if (row && sel) row.style.display = sel.value === 'closed' ? 'flex' : 'none';
 }
 function cancelOrdEdit() {
   ORD_EDIT_ID = null;
@@ -1825,6 +1880,10 @@ function cancelOrdEdit() {
 }
 async function saveManualOrder() {
   const sym = CURRENT_SYM;
+  const st = document.getElementById('o_status').value;
+  const exitPxStr = document.getElementById('o_exit_price').value;
+  const exitPx = exitPxStr !== '' ? parseFloat(exitPxStr) : null;
+  const exitDate = document.getElementById('o_exit_date').value || (st === 'closed' ? new Date().toISOString().slice(0, 10) : null);
   const body = {
     symbol: sym,
     date: document.getElementById('o_date').value,
@@ -1832,12 +1891,15 @@ async function saveManualOrder() {
     price: parseFloat(document.getElementById('o_price').value),
     qty: parseInt(document.getElementById('o_qty').value) || 1,
     stop_price: document.getElementById('o_stop').value !== '' ? parseFloat(document.getElementById('o_stop').value) : null,
-    status: document.getElementById('o_status').value,
+    status: st,
+    exit_date: (st === 'closed' || exitPx != null) ? exitDate : null,
+    exit_price: st === 'closed' ? exitPx : null,
     remark: document.getElementById('o_remark').value.trim() || null,
     risk_note: document.getElementById('o_risk').value.trim() || null,
   };
   if (!body.date || body.price == null || isNaN(body.price)) { alert('请填写日期和价格'); return; }
-  const editing = ORD_EDIT_ID != null;
+  if (st === 'closed' && body.exit_price == null) { alert('已平仓请填写平仓价'); return; }
+  const editing = ORD_EDIT_ID != null && ORD_EDIT_ID > 0;
   if (editing) body.id = ORD_EDIT_ID;
   try {
     const resp = await fetch(API_BASE_WORKER + '/api/orders' + (editing ? '/update' : ''), {
@@ -1850,6 +1912,54 @@ async function saveManualOrder() {
   } catch { alert('网络错误, 保存失败'); return; }
   ORD_EDIT_ID = null;
   await loadManualOrders(sym);
+  renderOrdPanel();
+  runBacktest();
+}
+// 右侧K线面板: 选中K线 直接开仓(多/空), 日期=该K线日期
+async function quickAddReal(dir, date, defPx) {
+  const label = dir === 'long' ? '开多' : '开空';
+  const raw = prompt(label + ' @' + date + '\n格式: 开仓价 [手数]\n默认: 收盘 ' + defPx + ' 1手', String(defPx) + ' 1');
+  if (raw === null) return;
+  const parts = String(raw).trim().split(/\s+/);
+  const px = parseFloat(parts[0]);
+  let qty = parts.length > 1 ? parseInt(parts[1], 10) : 1;
+  if (isNaN(px)) { alert('价格无效'); return; }
+  if (!qty || qty < 1 || isNaN(qty)) qty = 1;
+  const body = { symbol: CURRENT_SYM, date: date, direction: dir, price: px, qty: qty, status: 'open', stop_price: null, remark: null, risk_note: null };
+  try {
+    const resp = await fetch(API_BASE_WORKER + '/api/orders', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const r = await resp.json();
+    if (!r.ok) { alert('添加失败: ' + (r.error || resp.status)); return; }
+  } catch { alert('网络错误, 添加失败'); return; }
+  await loadManualOrders(CURRENT_SYM);
+  renderOrdPanel();
+  runBacktest();
+}
+// 右侧K线面板: 平仓已持仓单, 平仓价手输, 平仓日期=当前K线日期
+async function quickCloseReal(id, date, defPx) {
+  const o = MANUAL_ORDERS.find(x => x.id === id);
+  if (!o) { alert('未找到该订单'); return; }
+  const cur = o.exit_price != null ? o.exit_price : (defPx != null ? defPx : o.price);
+  const raw = prompt('平仓 ' + dirText(o.direction) + ' @' + date + '\n平仓价(默认收盘 ' + cur + ')', String(cur));
+  if (raw === null) return;
+  const px = parseFloat(raw);
+  if (isNaN(px)) { alert('价格无效'); return; }
+  const body = {
+    id: o.id, symbol: CURRENT_SYM, date: o.date, direction: o.direction, price: o.price,
+    qty: o.qty || 1, stop_price: o.stop_price != null ? o.stop_price : null,
+    status: 'closed', exit_date: date, exit_price: px,
+    remark: o.remark != null ? o.remark : null, risk_note: o.risk_note != null ? o.risk_note : null,
+  };
+  try {
+    const resp = await fetch(API_BASE_WORKER + '/api/orders/update', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const r = await resp.json();
+    if (!r.ok) { alert('平仓失败: ' + (r.error || resp.status)); return; }
+  } catch { alert('网络错误, 平仓失败'); return; }
+  await loadManualOrders(CURRENT_SYM);
   renderOrdPanel();
   runBacktest();
 }
@@ -2339,27 +2449,40 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     // 实盘订单: 独立区块, 显示在回测信息下方, 与策略模拟单区分开
     const omult = (SYM_CFG[CURRENT_SYM] || { mult: 1 }).mult;
     let manualHtml = '';
+    // 选中K线=实盘开仓/平仓日期: 快捷操作条
+    manualHtml += '<div style="border-top:2px solid #3d3a22;margin-top:6px;padding-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">' +
+      '<span style="color:#e8c84a;font-weight:600;font-size:11px;">实盘 ' + row.d + '</span>' +
+      '<button class="ord-btn" style="padding:2px 8px;font-size:10px;" onclick="quickAddReal(&quot;long&quot;,&quot;' + row.d + '&quot;,' + row.c + ')">＋开多</button>' +
+      '<button class="ord-btn" style="padding:2px 8px;font-size:10px;background:#a29bfe;color:#0f1923;" onclick="quickAddReal(&quot;short&quot;,&quot;' + row.d + '&quot;,' + row.c + ')">＋开空</button>' +
+      '<button class="ord-btn" style="padding:2px 8px;font-size:10px;background:#3d3a22;color:#e8c84a;" onclick="event.stopPropagation();showOrdEditor(-1)">手动录</button></div>';
     if (MANUAL_ORDERS && MANUAL_ORDERS.length) {
       const mlist = [];
       const mseen = {};
-      for (const o of MANUAL_ORDERS) if (o.date === row.d && !mseen[o.id]) { mlist.push(o); mseen[o.id] = 1; }
+      for (const o of MANUAL_ORDERS) if ((o.date === row.d || (o.status === 'closed' && o.exit_date === row.d)) && !mseen[o.id]) { mlist.push(o); mseen[o.id] = 1; }
       for (const o of MANUAL_ORDERS) if (o.status === 'open' && o.date <= row.d && !mseen[o.id]) { mlist.push(o); mseen[o.id] = 1; }
       if (mlist.length) {
-        manualHtml += '<div class="row" style="border-top:2px solid #3d3a22;margin-top:6px;padding-top:6px;"><span class="label" style="color:#e8c84a;font-weight:600;">实盘订单</span></div>';
         for (const o of mlist) {
           const isOpen = o.status === 'open' && o.date <= row.d;
           const ms = manualStops.find(x => x.order.id === o.id);
           const msk = ms ? idx - ms.ei : -1;
           const curStop = ms && msk >= 0 && ms.curve[msk] ? ms.curve[msk].stop : null;
-          let opnl = '';
+          const dSign = o.direction === 'long' ? 1 : -1;
+          let pnlTxt = '';
           if (isOpen) {
-            const up = o.direction === 'long' ? row.c - o.price : o.price - row.c;
-            const pnl = up * (o.qty || 1) * omult;
-            opnl = ' <span class="' + cls(pnl) + '">浮动' + (pnl > 0 ? '+' : '') + Math.round(pnl) + '</span>';
+            const pnl = dSign * (row.c - o.price) * (o.qty || 1) * omult;
+            pnlTxt = ' <span class="' + cls(pnl) + '">浮动' + (pnl > 0 ? '+' : '') + Math.round(pnl) + '</span>';
+          } else if (o.exit_price != null) {
+            const rp = dSign * (o.exit_price - o.price) * (o.qty || 1) * omult;
+            pnlTxt = ' <span class="' + cls(rp) + '">平@' + o.exit_price.toFixed(0) + ' ' + (rp > 0 ? '+' : '') + Math.round(rp) + '</span>';
           }
-          manualHtml += '<div class="sig" style="background:#e8c84a15;border:1px solid #e8c84a33;"><b>实盘' + (isOpen ? '持仓' : '记录') + '</b> ' + dirText(o.direction) + ' ' + (o.qty || 1) + '手 @' + (o.price != null ? o.price.toFixed(0) : '-') +
-            (curStop != null ? ' <span style="color:#ff4757">止损' + curStop.toFixed(0) + '</span>' : (o.stop_price != null ? ' <span style="color:#ff4757">止损' + o.stop_price.toFixed(0) + '</span>' : '')) +
-            (o.status === 'closed' ? ' <span style="color:#576574;">[已平仓]</span>' : '') + opnl + '</div>';
+          const sameDay = o.date === row.d;
+          const datePfx = sameDay ? '' : ' <span style="color:#576574;font-size:10px;">开' + o.date.slice(5) + '</span>';
+          manualHtml += '<div class="sig" style="background:#e8c84a15;border:1px solid #e8c84a33;"><b>实盘' + (isOpen ? '持仓' : (o.date === row.d ? '记录' : '平仓')) + '</b>' + datePfx + ' ' + dirText(o.direction) + ' ' + (o.qty || 1) + '手 @' + (o.price != null ? o.price.toFixed(0) : '-') +
+            (curStop != null ? ' <span style="color:#ff4757">止损' + curStop.toFixed(0) + '</span>' : (o.stop_price != null ? ' <span style="color:#ff4757">止损' + o.stop_price.toFixed(0) + '</span>' : '')) + pnlTxt +
+            (isOpen
+              ? ' <button class="ord-btn" style="padding:1px 6px;font-size:10px;" onclick="quickCloseReal(' + o.id + ',&quot;' + row.d + '&quot;,' + row.c + ')">平仓</button>'
+              : ' <span style="color:#576574;font-size:10px;">' + (o.exit_date ? '[' + o.exit_date + ']' : '[已平仓]') + '</span>') +
+            ' <button class="ord-btn" style="padding:1px 6px;font-size:10px;background:#3d3a22;color:#e8c84a;" onclick="event.stopPropagation();showOrdEditor(' + o.id + ')">编辑</button></div>';
           if (o.remark) manualHtml += '<div class="sig" style="color:#8395a7;font-size:11px;border-color:transparent;">备注: ' + escHtml(o.remark) + '</div>';
           const risks = [];
           if (_mpDevPct != null && Math.abs(_mpDevPct) > 2) risks.push('价格偏离MP ' + (Number(_mpDevPct) > 0 ? '+' : '') + _mpDevPct + '%, 偏离过大');
@@ -2444,6 +2567,15 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       if (idx >= 0) manualMarkers.push({ idx, order: o });
     }
     manualMarkers.sort((a, b) => a.idx - b.idx);
+    // 同一天多条时记录每个bar内序号, 绘制时横向错开避免重叠
+    const bcnt = {};
+    for (const m of manualMarkers) bcnt[m.idx] = (bcnt[m.idx] || 0) + 1;
+    const bseen = {};
+    for (const m of manualMarkers) {
+      m.__bc = bcnt[m.idx];
+      m.__bi = bseen[m.idx] || 0;
+      bseen[m.idx] = m.__bi + 1;
+    }
   }
 
   // 实盘订单 ATR 追踪止损 (仅持仓中, 策略同款算法, 方向/开仓价取记录)
@@ -2976,12 +3108,15 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     for (; moIdx < manualMarkers.length && manualMarkers[moIdx].idx < end; moIdx++) {
       const m = manualMarkers[moIdx];
       const o = m.order;
-      const x = toX(m.idx);
       const priceY = toY(o.price);
       const isLong = o.direction === 'long';
       const closed = o.status === 'closed';
       const sz = Math.max(7, Math.min(13, state.barW * 0.75));
       const col = isLong ? '#54a0ff' : '#a29bfe';
+      // 同bar多条记录横向错开
+      const bc = m.__bc || 1, bi = m.__bi || 0;
+      const gap = Math.max(2, Math.min(6, state.barW * 0.18));
+      const x = toX(m.idx) + (bi - (bc - 1) / 2) * gap;
 
       ctx.save();
       ctx.globalAlpha = closed ? 0.7 : 1;
@@ -3887,15 +4022,16 @@ function toggleChartLine() {
   if (window._chartRender) window._chartRender();
 }
 
-function drawEquityCurve(eqCurve, cap, closes, vols) {
+function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
   const canvas = document.getElementById('eqChart');
   if (!canvas || !eqCurve || eqCurve.length < 2) return;
-  if (!canvas._eqData) canvas._eqData = { hoverIdx: -1, curve: [], cap: 0, closes: [], vols: [] };
+  if (!canvas._eqData) canvas._eqData = { hoverIdx: -1, curve: [], cap: 0, closes: [], vols: [], realEq: null };
   const data = canvas._eqData;
   data.curve = eqCurve;
   data.cap = cap;
   data.closes = closes || null;
   data.vols = vols || null;
+  data.realEq = realEq || null;
 
   const W = canvas.clientWidth || 600;
   const H = 200;
@@ -3968,6 +4104,26 @@ function drawEquityCurve(eqCurve, cap, closes, vols) {
         const lastV = _vols[_vols.length - 1];
         ctx.fillStyle = '#a55eea'; ctx.textAlign = 'left'; ctx.font = '10px sans-serif';
         ctx.fillText('波动 ' + (lastV * 100).toFixed(1) + '%', pad.left + 4, pad.top + 12);
+      }
+    }
+    // 实盘累计盈亏折线(自有归一化刻度, 金色, 含已平仓 realized + 持仓浮盈, 不算本金)
+    const _real = data.realEq;
+    if (_real && _real.length === curve.length) {
+      let any = false, rMin = 0, rMax = 0;
+      for (const v of _real) { if (v !== 0) any = true; if (v < rMin) rMin = v; if (v > rMax) rMax = v; }
+      if (any) {
+        const rrng = rMax - rMin || 1; rMin -= rrng * 0.08; rMax += rrng * 0.08;
+        const toYr = v => pad.top + ch - (v - rMin) / (rMax - rMin) * ch;
+        if (rMin < 0 && 0 < rMax) {
+          ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(232,200,74,0.4)'; ctx.lineWidth = 1;
+          const zy = toYr(0); ctx.beginPath(); ctx.moveTo(pad.left, zy); ctx.lineTo(W - pad.right, zy); ctx.stroke(); ctx.setLineDash([]);
+        }
+        ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.95; ctx.beginPath();
+        for (let i = 0; i < _real.length; i++) { const x = toX(i), y = toYr(_real[i]); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+        ctx.stroke(); ctx.globalAlpha = 1;
+        const lastR = _real[_real.length - 1];
+        ctx.fillStyle = '#e8c84a'; ctx.textAlign = 'left'; ctx.font = '10px sans-serif';
+        ctx.fillText('实盘 ' + (lastR >= 0 ? '+' : '') + Math.round(lastR).toLocaleString(), pad.left + 4, pad.top + 24);
       }
     }
     ctx.fillStyle = '#576574'; ctx.textAlign = 'center'; ctx.font = '10px sans-serif';

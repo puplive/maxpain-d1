@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS manual_orders (
   price REAL NOT NULL,
   qty INTEGER DEFAULT 1,
   stop_price REAL,
+  exit_date TEXT,
+  exit_price REAL,
   status TEXT DEFAULT 'open',
   remark TEXT,
   risk_note TEXT,

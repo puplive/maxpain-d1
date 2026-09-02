@@ -268,7 +268,7 @@ export default {
         });
       }
       const { results } = await env.DB.prepare(
-        'SELECT id, symbol, date, direction, price, qty, stop_price, status, remark, risk_note FROM manual_orders WHERE symbol = ? ORDER BY date, id'
+        'SELECT id, symbol, date, direction, price, qty, stop_price, exit_date, exit_price, status, remark, risk_note FROM manual_orders WHERE symbol = ? ORDER BY date, id'
       ).bind(symbol).all();
       return new Response(JSON.stringify({ orders: results || [] }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
@@ -279,7 +279,9 @@ export default {
     if (request.method === 'POST' && path === '/api/orders') {
       const body: {
         symbol?: string; date?: string; direction?: string; price?: number;
-        qty?: number; stop_price?: number | null; status?: string;
+        qty?: number; stop_price?: number | null;
+        exit_date?: string | null; exit_price?: number | null;
+        status?: string;
         remark?: string | null; risk_note?: string | null;
       } = await request.json();
       const { symbol, date, direction, price } = body;
@@ -288,13 +290,15 @@ export default {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      const closed = body.status === 'closed' || body.exit_price != null;
       const { meta } = await env.DB.prepare(
-        `INSERT INTO manual_orders (symbol, date, direction, price, qty, stop_price, status, remark, risk_note)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO manual_orders (symbol, date, direction, price, qty, stop_price, exit_date, exit_price, status, remark, risk_note)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
         symbol.toUpperCase(), date, direction, price,
         body.qty ?? 1, body.stop_price ?? null,
-        body.status === 'closed' ? 'closed' : 'open',
+        body.exit_date ?? null, body.exit_price ?? null,
+        closed ? 'closed' : 'open',
         body.remark ?? null, body.risk_note ?? null
       ).run();
       return new Response(JSON.stringify({ ok: true, id: meta.last_row_id }), {
@@ -306,7 +310,9 @@ export default {
     if (request.method === 'POST' && path === '/api/orders/update') {
       const body: {
         id?: number; date?: string; direction?: string; price?: number;
-        qty?: number; stop_price?: number | null; status?: string;
+        qty?: number; stop_price?: number | null;
+        exit_date?: string | null; exit_price?: number | null;
+        status?: string;
         remark?: string | null; risk_note?: string | null;
       } = await request.json();
       if (body.id == null) {
@@ -314,12 +320,14 @@ export default {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      const closed = body.status === 'closed' || body.exit_price != null;
       await env.DB.prepare(
-        `UPDATE manual_orders SET date=?, direction=?, price=?, qty=?, stop_price=?, status=?, remark=?, risk_note=?, updated_at=datetime('now') WHERE id=?`
+        `UPDATE manual_orders SET date=?, direction=?, price=?, qty=?, stop_price=?, exit_date=?, exit_price=?, status=?, remark=?, risk_note=?, updated_at=datetime('now') WHERE id=?`
       ).bind(
         body.date, body.direction, body.price, body.qty ?? 1,
         body.stop_price ?? null,
-        body.status === 'closed' ? 'closed' : 'open',
+        body.exit_date ?? null, body.exit_price ?? null,
+        closed ? 'closed' : 'open',
         body.remark ?? null, body.risk_note ?? null,
         body.id
       ).run();
