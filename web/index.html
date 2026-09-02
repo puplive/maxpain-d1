@@ -33,7 +33,9 @@ h1 small { font-size: 13px; color: #576574; font-weight: normal; }
 .opt-panel label:hover { background: #22354a; }
 .opt-panel label input { accent-color: #54a0ff; }
 .opt-panel .opt-range { color: #576574; font-size: 11px; margin-left: auto; white-space: nowrap; }
-.ord-panel { position: absolute; top: calc(100% + 6px); right: 0; z-index: 100; background: #1a2a3a; border: 1px solid #2d3436; border-radius: 8px; padding: 12px; min-width: min(420px, calc(100vw - 16px)); max-width: 480px; max-height: 480px; overflow: auto; box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: 12px; color: #c8d6e5; box-sizing: border-box; }
+.ord-overlay { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(5,10,18,.68); justify-content: center; align-items: center; }
+.ord-overlay.open { display: flex; }
+.ord-panel { position: relative; z-index: 1001; background: #152238; border: 1px solid #3d5568; border-radius: 12px; padding: 16px; width: min(560px, 94vw); max-height: 84vh; overflow: auto; box-shadow: 0 18px 48px rgba(0,0,0,.6); font-size: 12px; color: #c8d6e5; box-sizing: border-box; }
 .ord-panel h4 { margin: 10px 0 8px; font-size: 13px; color: #8395a7; border-bottom: 1px solid #2d3436; padding-bottom: 4px; }
 .ord-panel h4:first-child { margin-top: 0; }
 .ord-panel label { display: inline-flex; align-items: center; gap: 4px; margin: 0 8px 8px 0; color: #8395a7; white-space: nowrap; }
@@ -164,10 +166,6 @@ tr:hover td { background: #1a2a3a; }
       <div id="optPanel" class="opt-panel" style="display:none;"></div>
     </div>
     <button class="btn" onclick="optimizeParam()" style="background:#8854d0;color:#fff;">优化</button>
-    <div class="opt-wrap" id="ordWrap">
-      <button id="ordBtn" class="sym-btn" onclick="toggleOrdPanel()">实盘记录</button>
-      <div id="ordPanel" class="ord-panel" style="display:none;"></div>
-    </div>
     <span class="status" id="status">就绪</span>
   </div>
 
@@ -221,6 +219,9 @@ tr:hover td { background: #1a2a3a; }
   </div>
 
   <div id="result"><div class="loading">就绪，点击"运行回测"</div></div>
+  <div class="ord-overlay" id="ordOverlay" onclick="if(event.target===this)cancelOrdEdit()">
+    <div id="ordPanel" class="ord-panel"></div>
+  </div>
 </div>
 
 <script>
@@ -1086,7 +1087,7 @@ function runBacktest() {
 
 
   if (trades.length === 0) {
-    result.innerHTML = '<div class="error">无交易产生</div>';
+    result.innerHTML = '<div class="error">无交易产生</div>' + buildRealOrderSection(data, MANUAL_ORDERS);
     status.textContent = '无交易'; btn.disabled = false; return;
   }
 
@@ -1225,7 +1226,7 @@ function runBacktest() {
         <label style="cursor:pointer;"><input type="checkbox" id="t_roll" checked onchange="toggleChartLine()"> <span style="color:#ff9f43">换月</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期货成交量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期货持仓量</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
-    <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
+    <div class="chart-wrap"><h2>权益曲线 <small style="font-size:10px;color:#576574;font-weight:normal;">滚轮缩放 · 拖动平移 · 双击复位</small></h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">最大回撤</th><th class="num">最长回撤期</th></tr>' + yrHtml + '</table></div>\
     <div class="section"><h2>按月份（跨年合并）</h2><table><tr><th>月份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + moHtml + '</table></div>\
     <div class="section"><h2>按退出原因</h2><table><tr><th>原因</th><th class="num">笔数</th><th class="num">占比</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">均持仓</th></tr>' + rsHtml + '</table></div>\
@@ -1235,6 +1236,7 @@ function runBacktest() {
       <tr><td class="neg">-' + round1(mdd) + '%</td><td>' + ds + '</td><td>' + de + '</td><td class="num">' + fmt(Math.round(pv)) + '</td><td class="num">' + fmt(Math.round(eqCurve[eqCurve.length-1].eq)) + '</td></tr></table></div>\
     <div class="section"><h2>全部交易</h2><table class="recent"><tr><th>入场</th><th>出场</th><th>方向</th><th class="num">手数</th><th class="num">开仓价</th><th class="num">平仓价</th><th class="num">PnL</th><th>原因</th><th class="num">持仓</th></tr>\
       ' + recent.map(t => '<tr><td>' + t.entry + '</td><td>' + t.exit + '</td><td>' + dirText(t.dir) + '</td><td class="num">' + t.qty + '</td><td class="num">' + t.entryPx.toFixed(0) + '</td><td class="num">' + t.exitPx.toFixed(0) + '</td><td class="num ' + cls(t.pnl) + '">' + fmt(Math.round(t.pnl)) + '</td><td>' + t.reason + '</td><td class="num">' + Math.round(t.hold) + '天</td></tr>').join('') + '</table></div>';
+  result.innerHTML += buildRealOrderSection(data, MANUAL_ORDERS);
 
 function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, stateByDate, atrRatio, fastVol, slowVol) {
   const n = data.length;
@@ -1785,10 +1787,13 @@ function toggleOptPanel() {
   const p = document.getElementById('optPanel');
   p.style.display = p.style.display === 'none' ? 'block' : 'none';
 }
-function toggleOrdPanel() {
-  const p = document.getElementById('ordPanel');
-  p.style.display = p.style.display === 'none' ? 'block' : 'none';
-  if (p.style.display === 'block') renderOrdPanel();
+function showOrdOverlay() {
+  const ov = document.getElementById('ordOverlay');
+  if (ov) ov.classList.add('open');
+}
+function hideOrdOverlay() {
+  const ov = document.getElementById('ordOverlay');
+  if (ov) ov.classList.remove('open');
 }
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -1810,6 +1815,12 @@ function renderOrdPanel() {
   const isNew = ORD_EDIT_ID === -1;
   const newDate = ORD_NEW_DATE || today;
   let html = '<h4>' + (SYM_CFG[sym] ? SYM_CFG[sym].name : sym) + ' 实盘订单记录</h4>';
+  if (showForm && !isNew && !edit) {
+    html += '<div style="color:#576574;margin:6px 0;">未找到该订单(可能已删除或未加载), 请刷新后重试</div>' +
+      '<button class="ord-btn ghost" onclick="cancelOrdEdit()">收起</button>';
+    panel.innerHTML = html;
+    return;
+  }
   if (!showForm) {
     html += '<div style="font-size:10px;color:#576574;margin-bottom:6px;">选中K线 → 右侧「＋添加记录」开仓(方向在弹框选)</div>';
   }
@@ -1879,10 +1890,9 @@ function renderOrdPanel() {
   panel.innerHTML = html;
 }
 function showOrdEditor(id) {
-  const p = document.getElementById('ordPanel');
-  if (p) p.style.display = 'block';
   ORD_EDIT_ID = id;
   renderOrdPanel();
+  showOrdOverlay();
 }
 function ordStatusChange() {
   const row = document.getElementById('o_exit_row');
@@ -1891,7 +1901,7 @@ function ordStatusChange() {
 }
 function cancelOrdEdit() {
   ORD_EDIT_ID = null;
-  renderOrdPanel();
+  hideOrdOverlay();
 }
 async function saveManualOrder() {
   const sym = CURRENT_SYM;
@@ -1932,17 +1942,16 @@ async function saveManualOrder() {
   } catch { alert('网络错误, 保存失败'); return; }
   ORD_EDIT_ID = null;
   await loadManualOrders(sym);
-  renderOrdPanel();
+  hideOrdOverlay();
   runBacktest();
 }
-// 右侧K线面板「＋添加记录」: 打开上面添加弹框, 日期=所选K线(只读), 状态=持仓中, 方向在弹框选
+// 右侧K线面板「＋添加记录」: 打开添加弹框, 日期=所选K线(只读), 状态=持仓中, 方向在弹框选
 function openAddOrdDialog(date, defPx) {
-  const p = document.getElementById('ordPanel');
-  if (p) p.style.display = 'block';
   ORD_NEW_DATE = date || '';
   ORD_NEW_PX = defPx != null ? defPx : '';
   ORD_EDIT_ID = -1;
   renderOrdPanel();
+  showOrdOverlay();
   const el = document.getElementById('o_price');
   if (el) { el.focus(); el.select(); }
 }
@@ -1969,7 +1978,6 @@ async function quickCloseReal(id, date, defPx) {
     if (!r.ok) { alert('平仓失败: ' + (r.error || resp.status)); return; }
   } catch { alert('网络错误, 平仓失败'); return; }
   await loadManualOrders(CURRENT_SYM);
-  renderOrdPanel();
   runBacktest();
 }
 async function delOrd(id) {
@@ -1983,7 +1991,6 @@ async function delOrd(id) {
     await resp.json();
   } catch { alert('网络错误, 删除失败'); return; }
   await loadManualOrders(CURRENT_SYM);
-  renderOrdPanel();
   runBacktest();
 }
 function getOptSelection() { return Array.from(optSelection); }
@@ -4040,6 +4047,8 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
   data.closes = closes || null;
   data.vols = vols || null;
   data.realEq = realEq || null;
+  const len = eqCurve.length - 1;
+  if (!data.view || typeof data.view.lo !== 'number' || data.view.hi > len) data.view = { lo: 0, hi: len };
 
   const W = canvas.clientWidth || 600;
   const H = 200;
@@ -4055,11 +4064,15 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
 
   function renderCurve(hoverIdx) {
     const curve = data.curve;
+    const vLen = curve.length - 1;
+    const lo = Math.max(0, Math.min(vLen, data.view.lo));
+    const hi = Math.max(lo, Math.min(vLen, data.view.hi));
+    const span = (hi - lo) || 1;
     const _cap = data.cap;
     let min = _cap, max = _cap;
-    for (const p of curve) { if (p.eq < min) min = p.eq; if (p.eq > max) max = p.eq; }
+    for (let i = lo; i <= hi; i++) { const p = curve[i]; if (p.eq < min) min = p.eq; if (p.eq > max) max = p.eq; }
     const rng = max - min || 1; min -= rng * 0.05; max += rng * 0.05;
-    const toX = i => pad.left + i / (curve.length - 1) * cw;
+    const toX = i => pad.left + Math.max(0, Math.min(1, (i - lo) / span)) * cw;
     const toY = v => pad.top + ch - (v - min) / (max - min) * ch;
 
     ctx.fillStyle = '#0f1923'; ctx.fillRect(0, 0, W, H);
@@ -4068,15 +4081,19 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
     ctx.fillStyle = '#576574'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
     for (let i = 0; i <= 4; i++) ctx.fillText(Math.round(max - (rng / 4) * i).toLocaleString(), pad.left - 6, pad.top + (ch / 4) * i + 4);
     ctx.strokeStyle = '#8395a7'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-    const capY = toY(_cap); ctx.beginPath(); ctx.moveTo(pad.left, capY); ctx.lineTo(W - pad.right, capY); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#8395a7'; ctx.textAlign = 'left'; ctx.font = '10px sans-serif'; ctx.fillText('本金', W - pad.right - 30, capY - 3);
+    const capY = toY(_cap);
+    if (capY > pad.top - 2 && capY < pad.top + ch + 2) {
+      ctx.beginPath(); ctx.moveTo(pad.left, capY); ctx.lineTo(W - pad.right, capY); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#8395a7'; ctx.textAlign = 'left'; ctx.font = '10px sans-serif'; ctx.fillText('本金', W - pad.right - 30, capY - 3);
+    } else ctx.setLineDash([]);
     const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
     grad.addColorStop(0, 'rgba(84, 160, 255, 0.12)'); grad.addColorStop(1, 'rgba(84, 160, 255, 0.01)');
-    ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(toX(0), toY(curve[0].eq));
-    for (let i = 1; i < curve.length; i++) ctx.lineTo(toX(i), toY(curve[i].eq));
-    ctx.lineTo(toX(curve.length - 1), pad.top + ch); ctx.lineTo(toX(0), pad.top + ch); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(toX(lo), toY(curve[lo].eq));
+    for (let i = lo + 1; i <= hi; i++) ctx.lineTo(toX(i), toY(curve[i].eq));
+    ctx.lineTo(toX(hi), pad.top + ch); ctx.lineTo(toX(lo), pad.top + ch); ctx.closePath(); ctx.fill();
     ctx.strokeStyle = '#54a0ff'; ctx.lineWidth = 1.5; ctx.beginPath();
-    for (let i = 0; i < curve.length; i++) { const x = toX(i), y = toY(curve[i].eq); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+    for (let i = lo; i <= hi; i++) { const x = toX(i), y = toY(curve[i].eq); if (i === lo) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
     ctx.stroke();
     // 收盘价折线(自有归一化刻度, 与权益曲线同区域叠加)
     const _closes = data.closes;
@@ -4087,11 +4104,8 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
         const cRng = cMax - cMin || 1; cMin -= cRng * 0.05; cMax += cRng * 0.05;
         const toYc = v => pad.top + ch - (v - cMin) / (cMax - cMin) * ch;
         ctx.strokeStyle = '#ff9f43'; ctx.lineWidth = 1; ctx.globalAlpha = 0.9; ctx.beginPath();
-        for (let i = 0; i < _closes.length; i++) { const x = toX(i), y = toYc(_closes[i]); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+        for (let i = lo; i <= hi; i++) { const x = toX(i), y = toYc(_closes[i]); if (i === lo) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
         ctx.stroke(); ctx.globalAlpha = 1;
-        const lastC = _closes[_closes.length - 1];
-        ctx.fillStyle = '#ff9f43'; ctx.textAlign = 'left'; ctx.font = '10px sans-serif';
-        ctx.fillText('收盘 ' + (lastC >= 100 ? lastC.toFixed(0) : lastC.toFixed(2)), pad.left + 4, pad.top - 2);
       }
     }
     // 波动率折线(自有归一化刻度, 与权益曲线同区域叠加)
@@ -4103,23 +4117,22 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
         const vRng = vMax - vMin || 1; vMin -= vRng * 0.05; vMax += vRng * 0.05;
         const toYv = v => pad.top + ch - (v - vMin) / (vMax - vMin) * ch;
         ctx.strokeStyle = '#a55eea'; ctx.lineWidth = 1; ctx.globalAlpha = 0.85; ctx.beginPath();
-        for (let i = 0; i < _vols.length; i++) {
+        for (let i = lo; i <= hi; i++) {
           const v = _vols[i]; if (!(v > 0)) continue;
           const x = toX(i), y = toYv(v);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          if (i === lo) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke(); ctx.globalAlpha = 1;
-        const lastV = _vols[_vols.length - 1];
-        ctx.fillStyle = '#a55eea'; ctx.textAlign = 'left'; ctx.font = '10px sans-serif';
-        ctx.fillText('波动 ' + (lastV * 100).toFixed(1) + '%', pad.left + 4, pad.top + 12);
       }
     }
     // 实盘累计盈亏折线(自有归一化刻度, 金色, 含已平仓 realized + 持仓浮盈, 不算本金)
+    data.anyReal = false;
     const _real = data.realEq;
     if (_real && _real.length === curve.length) {
       let any = false, rMin = 0, rMax = 0;
       for (const v of _real) { if (v !== 0) any = true; if (v < rMin) rMin = v; if (v > rMax) rMax = v; }
       if (any) {
+        data.anyReal = true;
         const rrng = rMax - rMin || 1; rMin -= rrng * 0.08; rMax += rrng * 0.08;
         const toYr = v => pad.top + ch - (v - rMin) / (rMax - rMin) * ch;
         if (rMin < 0 && 0 < rMax) {
@@ -4127,16 +4140,17 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
           const zy = toYr(0); ctx.beginPath(); ctx.moveTo(pad.left, zy); ctx.lineTo(W - pad.right, zy); ctx.stroke(); ctx.setLineDash([]);
         }
         ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.95; ctx.beginPath();
-        for (let i = 0; i < _real.length; i++) { const x = toX(i), y = toYr(_real[i]); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+        for (let i = lo; i <= hi; i++) { const x = toX(i), y = toYr(_real[i]); if (i === lo) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
         ctx.stroke(); ctx.globalAlpha = 1;
-        const lastR = _real[_real.length - 1];
-        ctx.fillStyle = '#e8c84a'; ctx.textAlign = 'left'; ctx.font = '10px sans-serif';
-        ctx.fillText('实盘 ' + (lastR >= 0 ? '+' : '') + Math.round(lastR).toLocaleString(), pad.left + 4, pad.top + 24);
       }
     }
     ctx.fillStyle = '#576574'; ctx.textAlign = 'center'; ctx.font = '10px sans-serif';
-    for (const di of [0, Math.floor(curve.length / 2), curve.length - 1]) ctx.fillText(curve[di].d, toX(di), pad.top + ch + 16);
-    const last = curve[curve.length - 1].eq;
+    const ticks = [lo];
+    const tMid = Math.round((lo + hi) / 2);
+    if (tMid > lo && tMid < hi) ticks.push(tMid);
+    if (hi > lo) ticks.push(hi);
+    for (const di of ticks) ctx.fillText(curve[di].d, toX(di), pad.top + ch + 16);
+    const last = curve[hi].eq;
     ctx.fillStyle = '#54a0ff'; ctx.textAlign = 'right'; ctx.font = 'bold 12px sans-serif';
     ctx.fillText(Math.round(last).toLocaleString(), W - pad.right, pad.top - 4);
     ctx.fillStyle = '#8395a7'; ctx.font = '11px sans-serif';
@@ -4176,6 +4190,16 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
         ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - vW, hy - tOff, vW, 18);
         ctx.fillStyle = '#a55eea'; ctx.textAlign = 'right'; ctx.font = '10px sans-serif';
         ctx.fillText(vText, W - pad.right - 5, hy - tOff + 14);
+        tOff += 14;
+      }
+      const _r = data.realEq;
+      if (data.anyReal && _r && _r[hoverIdx] !== undefined) {
+        const rVal = _r[hoverIdx];
+        const rText = '实盘 ' + (rVal > 0 ? '+' : '') + Math.round(rVal).toLocaleString();
+        const rW = ctx.measureText(rText).width + 14;
+        ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - rW, hy - tOff, rW, 18);
+        ctx.fillStyle = '#e8c84a'; ctx.textAlign = 'right'; ctx.font = '10px sans-serif';
+        ctx.fillText(rText, W - pad.right - 5, hy - tOff + 14);
       }
     }
   }
@@ -4188,15 +4212,95 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left - pad.left;
       const curve = data.curve;
-      const idx = Math.round(mx / cw * (curve.length - 1));
-      data.hoverIdx = Math.max(0, Math.min(curve.length - 1, idx));
+      const vLen = curve.length - 1;
+      const span = (data.view.hi - data.view.lo) || 1;
+      const idx = data.view.lo + Math.round(mx / cw * span);
+      data.hoverIdx = Math.max(data.view.lo, Math.min(data.view.hi, idx));
       renderCurve(data.hoverIdx);
     });
     canvas.addEventListener('mouseleave', function() {
       data.hoverIdx = -1;
       renderCurve(-1);
     });
+    canvas.addEventListener('wheel', function(e) {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left - pad.left;
+      const curve = data.curve;
+      const vLen = curve.length - 1;
+      const cur = data.view.lo + (mx / cw) * (data.view.hi - data.view.lo);
+      const span = data.view.hi - data.view.lo;
+      const factor = e.deltaY > 0 ? 1.4 : 1 / 1.4;
+      let nspan = Math.max(1, Math.round(span * factor));
+      let nlo = Math.round(cur - (cur - data.view.lo) * (nspan / span));
+      if (!isFinite(nlo)) nlo = data.view.lo;
+      let nhi = nlo + nspan;
+      if (nlo < 0) { nlo = 0; nhi = nspan; }
+      if (nhi > vLen) { nhi = vLen; nlo = Math.max(0, vLen - nspan); }
+      data.view.lo = nlo; data.view.hi = nhi;
+      renderCurve(-1);
+    }, { passive: false });
+    canvas.addEventListener('mousedown', function(e) {
+      const rect = canvas.getBoundingClientRect();
+      data._pan = { x: e.clientX - rect.left - pad.left, lo: data.view.lo };
+    });
+    canvas.addEventListener('mousemove', function(e) {
+      if (!data._pan) return;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left - pad.left;
+      const curve = data.curve;
+      const vLen = curve.length - 1;
+      const span = data.view.hi - data.view.lo;
+      let nlo = data._pan.lo - (mx - data._pan.x) / cw * span;
+      nlo = Math.max(0, Math.min(vLen - span, Math.round(nlo)));
+      data.view.lo = nlo; data.view.hi = nlo + span;
+      renderCurve(-1);
+    });
+    window.addEventListener('mouseup', function() { data._pan = null; });
+    canvas.addEventListener('dblclick', function() {
+      const curve = data.curve;
+      data.view.lo = 0; data.view.hi = curve.length - 1;
+      renderCurve(-1);
+    });
   }
+}
+
+/* 下方列表: 实盘记录表(已平仓=已实现PnL, 持仓中=对最后收盘浮盈), 用于实盘/策略对照 */
+function buildRealOrderSection(data, orders) {
+  const omult = (SYM_CFG[CURRENT_SYM] || { mult: 1 }).mult;
+  const list = (orders || []).slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.id || 0) - (b.id || 0));
+  if (!list.length) return '';
+  const lastC = data && data.length ? data[data.length - 1].c : null;
+  let realSum = 0, openSum = 0;
+  const rows = list.map(o => {
+    const isLong = o.direction === 'long';
+    const dSign = isLong ? 1 : -1;
+    const closed = o.status === 'closed' || o.exit_price != null;
+    let pnl = null;
+    if (closed && o.exit_price != null) { pnl = dSign * (o.exit_price - o.price) * (o.qty || 1) * omult; realSum += pnl; }
+    else if (!closed && lastC != null) { pnl = dSign * (lastC - o.price) * (o.qty || 1) * omult; openSum += pnl; }
+    const pnlTxt = pnl == null ? '-' : fmt(Math.round(pnl));
+    return '<tr>' +
+      '<td>' + o.date + '</td>' +
+      '<td>' + (isLong ? '<span class="pos">多</span>' : '<span class="neg">空</span>') + '</td>' +
+      '<td class="num">' + (o.qty || 1) + '</td>' +
+      '<td class="num">' + (o.price != null ? o.price.toFixed(0) : '-') + '</td>' +
+      '<td class="num">' + (o.stop_price != null ? o.stop_price.toFixed(0) : '-') + '</td>' +
+      '<td>' + (closed && o.exit_date ? o.exit_date : '—') + '</td>' +
+      '<td class="num">' + (closed && o.exit_price != null ? o.exit_price.toFixed(0) : '—') + '</td>' +
+      '<td class="num ' + cls(pnl) + '">' + (pnl == null ? '-' : (pnl > 0 ? '+' : '') + pnlTxt) + '</td>' +
+      '<td>' + (closed ? '已平仓' : '持仓中') + '</td>' +
+      '<td><span style="color:#54a0ff;cursor:pointer;" onclick="event.stopPropagation();showOrdEditor(' + o.id + ')">编辑</span> ' +
+      '<span style="color:#ff6b6b;cursor:pointer;" onclick="event.stopPropagation();delOrd(' + o.id + ')">删除</span></td>' +
+      '</tr>';
+  }).join('');
+  const total = realSum + openSum;
+  const sumHtml = '<div style="font-size:11px;color:#576574;margin-bottom:6px;">已平仓 ' + fmt(Math.round(realSum)) +
+    ' | 持仓浮动 ' + (openSum > 0 ? '+' : '') + fmt(Math.round(openSum)) +
+    ' | 实盘合计 ' + (total > 0 ? '+' : '') + fmt(Math.round(total)) + '</div>';
+  return '<div class="section"><h2>实盘记录 (' + list.length + '笔)</h2>' + sumHtml +
+    '<table class="recent"><tr><th>开仓</th><th>方向</th><th class="num">手</th><th class="num">开仓价</th><th class="num">止损</th><th>平仓</th><th class="num">平仓价</th><th class="num">PnL</th><th>状态</th><th>操作</th></tr>' +
+    rows + '</table></div>';
 }
 
 window.onload = async function() {
@@ -4205,9 +4309,8 @@ window.onload = async function() {
     const wrap = document.getElementById('optWrap');
     const panel = document.getElementById('optPanel');
     if (wrap && panel && !wrap.contains(e.target)) panel.style.display = 'none';
-    const owrap = document.getElementById('ordWrap');
-    const opanel = document.getElementById('ordPanel');
-    if (owrap && opanel && !owrap.contains(e.target)) opanel.style.display = 'none';
+    const ov = document.getElementById('ordOverlay');
+    if (ov && ov.classList.contains('open') && !ov.contains(e.target)) cancelOrdEdit();
   });
   const ok = await loadAllData();
   if (ok) {
