@@ -299,7 +299,9 @@ let ALL_DATA = {};
 let SYMBOLS = [];
 let CURRENT_SYM = '';
 let MANUAL_ORDERS = []; // 当前品种的实盘订单
-let ORD_EDIT_ID = null; // 正在编辑的订单 id, null=新增模式
+let ORD_EDIT_ID = null; // null=列表, -1=新增(日期取所选K线), >0=编辑该订单
+let ORD_NEW_DATE = ''; // 新增订单默认日期(来自所选K线)
+let ORD_NEW_PX = '';   // 新增订单默认价格(预填所选K线收盘)
 // 期权成熟品种（快速切换栏，写死）：MP 跟随价格、非长期不动的品种
 const MATURE_SYMS = ['TA', 'SA', 'FG', 'AG', 'AU', 'P', 'PS', 'SI', 'LC'];
 let defaultParams = {
@@ -1804,23 +1806,36 @@ function renderOrdPanel() {
   const sym = CURRENT_SYM;
   const editId = ORD_EDIT_ID != null && ORD_EDIT_ID > 0 ? ORD_EDIT_ID : null;
   const edit = editId != null ? MANUAL_ORDERS.find(o => o.id === editId) : null;
-  const showForm = ORD_EDIT_ID != null;   // -1=手动新增, >0=编辑
+  const showForm = ORD_EDIT_ID != null;   // -1=新增(日期取所选K线), >0=编辑
+  const isNew = ORD_EDIT_ID === -1;
+  const newDate = ORD_NEW_DATE || today;
   let html = '<h4>' + (SYM_CFG[sym] ? SYM_CFG[sym].name : sym) + ' 实盘订单记录</h4>';
   if (!showForm) {
-    html += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;"><button class="ord-btn" onclick="showOrdEditor(-1)">＋手动录入</button>' +
-            '<span style="font-size:10px;color:#576574;">选中K线点右侧「＋开多/＋开空」即可开仓</span></div>';
+    html += '<div style="font-size:10px;color:#576574;margin-bottom:6px;">选中K线 → 右侧「＋添加记录」开仓(方向在弹框选)</div>';
   }
   if (showForm) {
     const closedSel = !!(edit && (edit.status === 'closed' || edit.exit_price != null));
     html += '<div style="border:1px solid #2d3436;border-radius:6px;padding:10px;margin-bottom:6px;">';
-    html += '<div><label>日期<input type="date" id="o_date" value="' + (edit ? edit.date : today) + '"></label>' +
-            '<label>方向<select id="o_dir"><option value="long"' + (edit && edit.direction === 'long' ? ' selected' : '') + '>多</option><option value="short"' + (edit && edit.direction === 'short' ? ' selected' : '') + '>空</option></select></label>' +
-            '<label>价格<input type="number" id="o_price" step="1" value="' + (edit ? edit.price : '') + '"></label>' +
-            '<label>手数<input type="number" id="o_qty" min="1" step="1" value="' + (edit ? edit.qty : 1) + '"></label></div>';
-    html += '<div><label>止损价<input type="number" id="o_stop" step="1" value="' + (edit && edit.stop_price != null ? edit.stop_price : '') + '"></label>' +
-            '<label>状态<select id="o_status" onchange="ordStatusChange()"><option value="open"' + (closedSel ? '' : ' selected') + '>持仓中</option><option value="closed"' + (closedSel ? ' selected' : '') + '>已平仓</option></select></label></div>';
-    html += '<div id="o_exit_row" style="display:' + (closedSel ? 'flex' : 'none') + ';"><label>平仓日期<input type="date" id="o_exit_date" value="' + (edit && edit.exit_date ? edit.exit_date : '') + '"></label>' +
-            '<label>平仓价<input type="number" id="o_exit_price" step="1" value="' + (edit && edit.exit_price != null ? edit.exit_price : '') + '"></label></div>';
+    if (isNew) {
+      // 新增: 日期=所选K线(只读), 状态固定持仓中, 方向在弹框选
+      html += '<div><label>日期<input type="date" id="o_date" value="' + newDate + '" readonly disabled></label>' +
+              '<label>方向<select id="o_dir"><option value="long">多</option><option value="short">空</option></select></label>' +
+              '<label>价格<input type="number" id="o_price" step="1" value="' + (ORD_NEW_PX != null ? ORD_NEW_PX : '') + '"></label>' +
+              '<label>手数<input type="number" id="o_qty" min="1" step="1" value="1"></label></div>';
+    } else {
+      html += '<div><label>日期<input type="date" id="o_date" value="' + edit.date + '"></label>' +
+              '<label>方向<select id="o_dir"><option value="long"' + (edit.direction === 'long' ? ' selected' : '') + '>多</option><option value="short"' + (edit.direction === 'short' ? ' selected' : '') + '>空</option></select></label>' +
+              '<label>价格<input type="number" id="o_price" step="1" value="' + edit.price + '"></label>' +
+              '<label>手数<input type="number" id="o_qty" min="1" step="1" value="' + (edit.qty || 1) + '"></label></div>';
+    }
+    html += '<div><label>止损价<input type="number" id="o_stop" step="1" value="' + (edit && edit.stop_price != null ? edit.stop_price : '') + '"></label>';
+    if (isNew) {
+      html += '<span style="font-size:10px;color:#576574;align-self:center;">开仓记录默认持仓中</span></div>';
+    } else {
+      html += '<label>状态<select id="o_status" onchange="ordStatusChange()"><option value="open"' + (closedSel ? '' : ' selected') + '>持仓中</option><option value="closed"' + (closedSel ? ' selected' : '') + '>已平仓</option></select></label></div>';
+      html += '<div id="o_exit_row" style="display:' + (closedSel ? 'flex' : 'none') + ';"><label>平仓日期<input type="date" id="o_exit_date" value="' + (edit && edit.exit_date ? edit.exit_date : '') + '"></label>' +
+              '<label>平仓价<input type="number" id="o_exit_price" step="1" value="' + (edit && edit.exit_price != null ? edit.exit_price : '') + '"></label></div>';
+    }
     html += '<div style="margin:4px 0 8px;"><label style="display:block;margin-bottom:4px;">备注<input type="text" id="o_remark" style="width:100%;" placeholder="交易逻辑/计划" value="' + (edit && edit.remark ? escHtml(edit.remark) : '') + '"></label></div>';
     html += '<div style="margin:4px 0 8px;"><label style="display:block;margin-bottom:4px;">风险备注<input type="text" id="o_risk" style="width:100%;" placeholder="手动风险提示, 悬停K线时显示" value="' + (edit && edit.risk_note ? escHtml(edit.risk_note) : '') + '"></label></div>';
     html += '<div style="display:flex;gap:8px;">' +
@@ -1880,10 +1895,15 @@ function cancelOrdEdit() {
 }
 async function saveManualOrder() {
   const sym = CURRENT_SYM;
-  const st = document.getElementById('o_status').value;
-  const exitPxStr = document.getElementById('o_exit_price').value;
-  const exitPx = exitPxStr !== '' ? parseFloat(exitPxStr) : null;
-  const exitDate = document.getElementById('o_exit_date').value || (st === 'closed' ? new Date().toISOString().slice(0, 10) : null);
+  const isNew = ORD_EDIT_ID === -1;
+  // 新增弹框无 状态/平仓 字段, 一律为持仓中; 仅编辑时有
+  let st = 'open', exitPx = null, exitDate = null;
+  if (!isNew) {
+    st = document.getElementById('o_status').value;
+    const exitPxStr = document.getElementById('o_exit_price').value;
+    exitPx = exitPxStr !== '' ? parseFloat(exitPxStr) : null;
+    exitDate = document.getElementById('o_exit_date').value || (st === 'closed' ? new Date().toISOString().slice(0, 10) : null);
+  }
   const body = {
     symbol: sym,
     date: document.getElementById('o_date').value,
@@ -1892,13 +1912,13 @@ async function saveManualOrder() {
     qty: parseInt(document.getElementById('o_qty').value) || 1,
     stop_price: document.getElementById('o_stop').value !== '' ? parseFloat(document.getElementById('o_stop').value) : null,
     status: st,
-    exit_date: (st === 'closed' || exitPx != null) ? exitDate : null,
-    exit_price: st === 'closed' ? exitPx : null,
+    exit_date: (!isNew && (st === 'closed' || exitPx != null)) ? exitDate : null,
+    exit_price: (!isNew && st === 'closed') ? exitPx : null,
     remark: document.getElementById('o_remark').value.trim() || null,
     risk_note: document.getElementById('o_risk').value.trim() || null,
   };
   if (!body.date || body.price == null || isNaN(body.price)) { alert('请填写日期和价格'); return; }
-  if (st === 'closed' && body.exit_price == null) { alert('已平仓请填写平仓价'); return; }
+  if (!isNew && st === 'closed' && body.exit_price == null) { alert('已平仓请填写平仓价'); return; }
   const editing = ORD_EDIT_ID != null && ORD_EDIT_ID > 0;
   if (editing) body.id = ORD_EDIT_ID;
   try {
@@ -1915,27 +1935,16 @@ async function saveManualOrder() {
   renderOrdPanel();
   runBacktest();
 }
-// 右侧K线面板: 选中K线 直接开仓(多/空), 日期=该K线日期
-async function quickAddReal(dir, date, defPx) {
-  const label = dir === 'long' ? '开多' : '开空';
-  const raw = prompt(label + ' @' + date + '\n格式: 开仓价 [手数]\n默认: 收盘 ' + defPx + ' 1手', String(defPx) + ' 1');
-  if (raw === null) return;
-  const parts = String(raw).trim().split(/\s+/);
-  const px = parseFloat(parts[0]);
-  let qty = parts.length > 1 ? parseInt(parts[1], 10) : 1;
-  if (isNaN(px)) { alert('价格无效'); return; }
-  if (!qty || qty < 1 || isNaN(qty)) qty = 1;
-  const body = { symbol: CURRENT_SYM, date: date, direction: dir, price: px, qty: qty, status: 'open', stop_price: null, remark: null, risk_note: null };
-  try {
-    const resp = await fetch(API_BASE_WORKER + '/api/orders', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    });
-    const r = await resp.json();
-    if (!r.ok) { alert('添加失败: ' + (r.error || resp.status)); return; }
-  } catch { alert('网络错误, 添加失败'); return; }
-  await loadManualOrders(CURRENT_SYM);
+// 右侧K线面板「＋添加记录」: 打开上面添加弹框, 日期=所选K线(只读), 状态=持仓中, 方向在弹框选
+function openAddOrdDialog(date, defPx) {
+  const p = document.getElementById('ordPanel');
+  if (p) p.style.display = 'block';
+  ORD_NEW_DATE = date || '';
+  ORD_NEW_PX = defPx != null ? defPx : '';
+  ORD_EDIT_ID = -1;
   renderOrdPanel();
-  runBacktest();
+  const el = document.getElementById('o_price');
+  if (el) { el.focus(); el.select(); }
 }
 // 右侧K线面板: 平仓已持仓单, 平仓价手输, 平仓日期=当前K线日期
 async function quickCloseReal(id, date, defPx) {
@@ -2452,9 +2461,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     // 选中K线=实盘开仓/平仓日期: 快捷操作条
     manualHtml += '<div style="border-top:2px solid #3d3a22;margin-top:6px;padding-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">' +
       '<span style="color:#e8c84a;font-weight:600;font-size:11px;">实盘 ' + row.d + '</span>' +
-      '<button class="ord-btn" style="padding:2px 8px;font-size:10px;" onclick="quickAddReal(&quot;long&quot;,&quot;' + row.d + '&quot;,' + row.c + ')">＋开多</button>' +
-      '<button class="ord-btn" style="padding:2px 8px;font-size:10px;background:#a29bfe;color:#0f1923;" onclick="quickAddReal(&quot;short&quot;,&quot;' + row.d + '&quot;,' + row.c + ')">＋开空</button>' +
-      '<button class="ord-btn" style="padding:2px 8px;font-size:10px;background:#3d3a22;color:#e8c84a;" onclick="event.stopPropagation();showOrdEditor(-1)">手动录</button></div>';
+      '<button class="ord-btn" style="padding:2px 8px;font-size:10px;" onclick="event.stopPropagation();openAddOrdDialog(&quot;' + row.d + '&quot;,' + row.c + ')">＋添加记录</button>' +
+      '<span style="font-size:10px;color:#576574;">方向在弹框选, 日期=' + row.d + '</span></div>';
     if (MANUAL_ORDERS && MANUAL_ORDERS.length) {
       const mlist = [];
       const mseen = {};
