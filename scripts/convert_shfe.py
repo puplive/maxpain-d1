@@ -1,6 +1,6 @@
 """SHFE 上期所 xls/xlsx → JSON，存入 data/shfe/
 一批读完所有 xlsx, 再按品种分组处理
-用法: python scripts/convert_shfe.py --year 2026
+用法: python scripts/convert_shfe.py --date 2026
 """
 import argparse, json, os, re, sys, time
 from urllib.error import HTTPError
