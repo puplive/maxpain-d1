@@ -4228,16 +4228,20 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
       const mx = e.clientX - rect.left - pad.left;
       const curve = data.curve;
       const vLen = curve.length - 1;
-      const cur = data.view.lo + (mx / cw) * (data.view.hi - data.view.lo);
-      const span = data.view.hi - data.view.lo;
-      const factor = e.deltaY > 0 ? 1.4 : 1 / 1.4;
-      let nspan = Math.max(1, Math.round(span * factor));
-      let nlo = Math.round(cur - (cur - data.view.lo) * (nspan / span));
-      if (!isFinite(nlo)) nlo = data.view.lo;
-      let nhi = nlo + nspan;
-      if (nlo < 0) { nlo = 0; nhi = nspan; }
-      if (nhi > vLen) { nhi = vLen; nlo = Math.max(0, vLen - nspan); }
-      data.view.lo = nlo; data.view.hi = nhi;
+      const lo0 = data.view.lo;
+      const span = data.view.hi - lo0;
+      if (span <= 0) return;
+      const zoomOut = e.deltaY > 0;
+      if (zoomOut && span >= vLen) return;   // 已全览，无法再缩小
+      if (!zoomOut && span <= 1) return;     // 已最大放大
+      let nspan;
+      if (zoomOut) nspan = Math.min(vLen, Math.max(span + 1, Math.round(span * 1.4)));
+      else nspan = Math.max(1, Math.min(span - 1, Math.round(span / 1.4)));
+      const cur = lo0 + Math.max(0, Math.min(1, mx / cw)) * span;
+      let nlo = Math.round(cur - (cur - lo0) * (nspan / span));
+      if (!isFinite(nlo)) nlo = lo0;
+      nlo = Math.max(0, Math.min(nlo, vLen - nspan));
+      data.view.lo = nlo; data.view.hi = nlo + nspan;
       renderCurve(-1);
     }, { passive: false });
     canvas.addEventListener('mousedown', function(e) {
