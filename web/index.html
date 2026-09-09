@@ -2358,10 +2358,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       const atr = _subAtr[i];
       if (atr < _subMinAtr) _subMinAtr = atr;
       if (atr > _subMaxAtr) _subMaxAtr = atr;
-      // 噪音% = (ATR - |今收-昨收|)/收盘, 首日无昨收记 0 不纳入刻度
-      const nv = i > 0 ? (_subAtr[i] - Math.abs(r.c - data[i - 1].c)) / r.c * 100 : 0;
+      // 噪音% = (ATR - |今收-昨收|)/ATR, ATR为周期平滑(params.atrPeriod); >0波幅被浪费(震荡), <0=收盘走出超过一个ATR的方向, 首日无昨收记0
+      const nv = i > 0 && _subAtr[i] > 0 ? (_subAtr[i] - Math.abs(r.c - data[i - 1].c)) / _subAtr[i] * 100 : 0;
       _subNoise[i] = nv;
-      if (nv !== 0) { if (nv < _subMinNoise) _subMinNoise = nv; if (nv > _subMaxNoise) _subMaxNoise = nv; }
+      if (i > 0 && _subAtr[i] > 0) { if (nv < _subMinNoise) _subMinNoise = nv; if (nv > _subMaxNoise) _subMaxNoise = nv; }
       const mc = _subMpConf[i];
       if (mc < _subMinMc) _subMinMc = mc;
       if (mc > _subMaxMc) _subMaxMc = mc;
@@ -3296,7 +3296,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           const mc2 = _subMpConf[i];
           if (mc2 !== 0) { if (mc2 < vMinMc) vMinMc = mc2; if (mc2 > vMaxMc) vMaxMc = mc2; }
           const nz2 = _subNoise[i];
-          if (nz2 !== 0) { if (nz2 < vMinNoise) vMinNoise = nz2; if (nz2 > vMaxNoise) vMaxNoise = nz2; }
+          if (i > 0) { if (nz2 < vMinNoise) vMinNoise = nz2; if (nz2 > vMaxNoise) vMaxNoise = nz2; }
       }
       if (vMinG === Infinity || vMinG === vMaxG) { vMinG = _subMinG; vMaxG = _subMaxG; }
       else { const gr = vMaxG - vMinG || 1; vMinG -= gr * 0.1; vMaxG += gr * 0.1; }
@@ -3578,7 +3578,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         sctx.stroke();
       }
 
-      // 噪音% = (ATR - |今收-昨收|)/收盘 (首日无昨收为0, 断线), 独立%刻度
+      // 噪音% = (ATR - |今收-昨收|)/ATR, ATR为周期平滑(params.atrPeriod); >0波幅被浪费(震荡), <0收盘走出超一个ATR的方向日; 首日记0, 独立%刻度
       if (subVis.noise && isFinite(vMinNoise) && isFinite(vMaxNoise) && vMaxNoise > vMinNoise) {
         sctx.strokeStyle = '#1abc9c';
         sctx.lineWidth = 1;
@@ -3673,10 +3673,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           sctx.fillText('ATR(' + params.atrPeriod + '): ' + atrv3.toFixed(1), hx + 4, hoverY);
           hoverY += 12;
         }
-        if (subVis.noise) {
+        if (subVis.noise && hi > 0) {
           sctx.fillStyle = '#1abc9c';
           const nzHov = _subNoise[hi];
-          sctx.fillText('噪音: ' + nzHov.toFixed(2) + '% (' + Math.round(nzHov / 100 * data[hi].c) + ')', hx + 4, hoverY);
+          const nzPts = _subAtr[hi] > 0 ? ' (' + Math.round(_subAtr[hi] - Math.abs(data[hi].c - data[hi - 1].c)) + ')' : '';
+          sctx.fillText('噪音: ' + nzHov.toFixed(1) + '%' + nzPts, hx + 4, hoverY);
           hoverY += 12;
         }
         if (subVis.mpConf) {
