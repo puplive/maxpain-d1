@@ -1226,7 +1226,7 @@ function runBacktest() {
         <label style="cursor:pointer;"><input type="checkbox" id="t_roll" checked onchange="toggleChartLine()"> <span style="color:#ff9f43">换月</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期货成交量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期货持仓量</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
-    <div class="chart-wrap"><h2>权益曲线 <small style="font-size:10px;color:#576574;font-weight:normal;">滚轮缩放 · 拖动平移 · 双击复位</small></h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
+    <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">最大回撤</th><th class="num">最长回撤期</th></tr>' + yrHtml + '</table></div>\
     <div class="section"><h2>按月份（跨年合并）</h2><table><tr><th>月份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + moHtml + '</table></div>\
     <div class="section"><h2>按退出原因</h2><table><tr><th>原因</th><th class="num">笔数</th><th class="num">占比</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">均持仓</th></tr>' + rsHtml + '</table></div>\
@@ -2221,8 +2221,9 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   var _subSkew, _subMinSk, _subMaxSk;
 	  var _subAtr, _subMinAtr, _subMaxAtr;
 	  var _subMpConf, _subMinMc, _subMaxMc;
+	  var _subNoise, _subMinNoise, _subMaxNoise;
   var _oiChain = null, _oiHoverIdx = -1;
-  const subVis = { gex: false, skew: false, vr: false, iv: true, futVol: false, futOi: false, skewVal: false, atr: true, mpConf: false };
+  const subVis = { gex: false, skew: false, vr: false, iv: true, futVol: false, futOi: false, skewVal: false, atr: true, mpConf: false, noise: false };
   
   // HTML 图例栏（水平可滚动）
   function syncLegend() {
@@ -2250,6 +2251,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       { key: 'futOi', label: '期货持仓量', color: '#f368e0' },
       { key: 'atr', label: 'ATR', color: '#e84393' },
       { key: 'mpConf', label: 'MP置信', color: '#00b894' },
+      { key: 'noise', label: '噪音', color: '#1abc9c' },
     ];
     const el = document.createElement('div');
     el.id = 'subLegend';
@@ -2288,11 +2290,13 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     _subSkew = new Float64Array(n);
 	    _subAtr = new Float64Array(n);
 	    _subMpConf = new Float64Array(n);
-    var _prevSk = null;
+    _subNoise = new Float64Array(n);
+  var _prevSk = null;
     _subMinG = Infinity; _subMaxG = -Infinity;
     _subMinSk = Infinity; _subMaxSk = -Infinity;
 	    _subMinAtr = Infinity; _subMaxAtr = -Infinity;
 	    _subMinMc = Infinity; _subMaxMc = -Infinity;
+    _subMinNoise = Infinity; _subMaxNoise = -Infinity;
     _subMinS = Infinity; _subMaxS = -Infinity;
     _subMinV = Infinity; _subMaxV = -Infinity;
     _subMinIv = Infinity; _subMaxIv = -Infinity;
@@ -2354,6 +2358,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       const atr = _subAtr[i];
       if (atr < _subMinAtr) _subMinAtr = atr;
       if (atr > _subMaxAtr) _subMaxAtr = atr;
+      // 噪音% = (ATR - |今收-昨收|)/收盘, 首日无昨收记 0 不纳入刻度
+      const nv = i > 0 ? (_subAtr[i] - Math.abs(r.c - data[i - 1].c)) / r.c * 100 : 0;
+      _subNoise[i] = nv;
+      if (nv !== 0) { if (nv < _subMinNoise) _subMinNoise = nv; if (nv > _subMaxNoise) _subMaxNoise = nv; }
       const mc = _subMpConf[i];
       if (mc < _subMinMc) _subMinMc = mc;
       if (mc > _subMaxMc) _subMaxMc = mc;
@@ -2380,6 +2388,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     _subMinAtr -= atrR * 0.1; _subMaxAtr += atrR * 0.1;
     const mcR = _subMaxMc - _subMinMc || 1;
     _subMinMc -= mcR * 0.1; _subMaxMc += mcR * 0.1;
+    const _noiRng = _subMaxNoise - _subMinNoise;
+    if (isFinite(_noiRng) && _noiRng > 0) { const noR = _noiRng || 1; _subMinNoise -= noR * 0.1; _subMaxNoise += noR * 0.1; }
   }
 
   const pad = { top: 20, bottom: 36, left: 60, right: 20 };
@@ -3265,6 +3275,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       let vMinG = Infinity, vMaxG = -Infinity, vMinS = Infinity, vMaxS = -Infinity, vMinV = Infinity, vMaxV = -Infinity;
       let vMinIv = Infinity, vMaxIv = -Infinity;
       let vMinFv = Infinity, vMaxFv = -Infinity, vMinFoi = Infinity, vMaxFoi = -Infinity; let vMinSk = Infinity, vMaxSk = -Infinity; let vMinAtr = Infinity, vMaxAtr = -Infinity; let vMinMc = Infinity, vMaxMc = -Infinity;
+      let vMinNoise = Infinity, vMaxNoise = -Infinity;
       for (let i = start; i < end && i < n; i++) {
         const g = _subGex[i];
         if (g !== 0) { if (g < vMinG) vMinG = g; if (g > vMaxG) vMaxG = g; }
@@ -3284,6 +3295,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           if (atrv2 !== 0) { if (atrv2 < vMinAtr) vMinAtr = atrv2; if (atrv2 > vMaxAtr) vMaxAtr = atrv2; }
           const mc2 = _subMpConf[i];
           if (mc2 !== 0) { if (mc2 < vMinMc) vMinMc = mc2; if (mc2 > vMaxMc) vMaxMc = mc2; }
+          const nz2 = _subNoise[i];
+          if (nz2 !== 0) { if (nz2 < vMinNoise) vMinNoise = nz2; if (nz2 > vMaxNoise) vMaxNoise = nz2; }
       }
       if (vMinG === Infinity || vMinG === vMaxG) { vMinG = _subMinG; vMaxG = _subMaxG; }
       else { const gr = vMaxG - vMinG || 1; vMinG -= gr * 0.1; vMaxG += gr * 0.1; }
@@ -3302,6 +3315,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       else { const atrR2 = vMaxAtr - vMinAtr || 1; vMinAtr -= atrR2 * 0.1; vMaxAtr += atrR2 * 0.1; }
       if (vMinMc === Infinity || vMinMc === vMaxMc) { vMinMc = _subMinMc; vMaxMc = _subMaxMc; }
       else { const mcR2 = vMaxMc - vMinMc || 1; vMinMc -= mcR2 * 0.1; vMaxMc += mcR2 * 0.1; }
+      if (vMinNoise === Infinity || vMinNoise === vMaxNoise) { vMinNoise = _subMinNoise; vMaxNoise = _subMaxNoise; }
+      else { const noR2 = vMaxNoise - vMinNoise || 1; vMinNoise -= noR2 * 0.1; vMaxNoise += noR2 * 0.1; }
 
       sctx.fillStyle = '#09131c';
       sctx.fillRect(0, 0, W, 110);
@@ -3415,6 +3430,17 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           const v = vMinMc + (vMaxMc - vMinMc) / 4 * i;
           const y = spad.top + (sch / 4) * (4 - i);
           sctx.fillText((v * 100).toFixed(1) + '%', pad.left - 4, y + 3);
+        }
+      }
+
+      if (subVis.noise && isFinite(vMinNoise) && isFinite(vMaxNoise)) {
+        sctx.fillStyle = '#576574';
+        sctx.font = '10px sans-serif';
+        sctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+          const v = vMinNoise + (vMaxNoise - vMinNoise) / 4 * i;
+          const y = spad.top + (sch / 4) * (4 - i);
+          sctx.fillText(v.toFixed(1) + '%', pad.left - 34, y + 3);
         }
       }
 
@@ -3552,6 +3578,23 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         sctx.stroke();
       }
 
+      // 噪音% = (ATR - |今收-昨收|)/收盘 (首日无昨收为0, 断线), 独立%刻度
+      if (subVis.noise && isFinite(vMinNoise) && isFinite(vMaxNoise) && vMaxNoise > vMinNoise) {
+        sctx.strokeStyle = '#1abc9c';
+        sctx.lineWidth = 1;
+        sctx.setLineDash([3, 2]);
+        sctx.beginPath();
+        let noiseStarted = false;
+        for (let i = start; i < end && i < n; i++) {
+          if (i === 0) { noiseStarted = false; continue; }
+          const x = toX(i);
+          const y = s2y(_subNoise[i], vMinNoise, vMaxNoise);
+          if (!noiseStarted) { sctx.moveTo(x, y); noiseStarted = true; } else sctx.lineTo(x, y);
+        }
+        sctx.stroke();
+        sctx.setLineDash([]);
+      }
+
       if (subVis.futOi) {
         sctx.strokeStyle = '#f368e0';
         sctx.lineWidth = 1.5;
@@ -3628,6 +3671,12 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         if (subVis.atr) {
           sctx.fillStyle = '#e84393';
           sctx.fillText('ATR(' + params.atrPeriod + '): ' + atrv3.toFixed(1), hx + 4, hoverY);
+          hoverY += 12;
+        }
+        if (subVis.noise) {
+          sctx.fillStyle = '#1abc9c';
+          const nzHov = _subNoise[hi];
+          sctx.fillText('噪音: ' + nzHov.toFixed(2) + '% (' + Math.round(nzHov / 100 * data[hi].c) + ')', hx + 4, hoverY);
           hoverY += 12;
         }
         if (subVis.mpConf) {
