@@ -2221,9 +2221,9 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   var _subSkew, _subMinSk, _subMaxSk;
 	  var _subAtr, _subMinAtr, _subMaxAtr;
 	  var _subMpConf, _subMinMc, _subMaxMc;
-	  var _subNoise, _subMinNoise, _subMaxNoise;
+	  var _subNoiseL, _subNoiseS, _subMinNoise, _subMaxNoise;
   var _oiChain = null, _oiHoverIdx = -1;
-  const subVis = { gex: false, skew: false, vr: false, iv: true, futVol: false, futOi: false, skewVal: false, atr: true, mpConf: false, noise: false };
+  const subVis = { gex: false, skew: false, vr: false, iv: false, futVol: false, futOi: false, skewVal: false, atr: true, mpConf: false, noise: true };
   
   // HTML 图例栏（水平可滚动）
   function syncLegend() {
@@ -2251,7 +2251,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       { key: 'futOi', label: '期货持仓量', color: '#f368e0' },
       { key: 'atr', label: 'ATR', color: '#e84393' },
       { key: 'mpConf', label: 'MP置信', color: '#00b894' },
-      { key: 'noise', label: '噪音', color: '#1abc9c' },
+      { key: 'noise', label: '噪音N', color: '#0f9b8e' },
     ];
     const el = document.createElement('div');
     el.id = 'subLegend';
@@ -2290,7 +2290,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     _subSkew = new Float64Array(n);
 	    _subAtr = new Float64Array(n);
 	    _subMpConf = new Float64Array(n);
-    _subNoise = new Float64Array(n);
+    _subNoiseL = new Float64Array(n);
+    _subNoiseS = new Float64Array(n);
   var _prevSk = null;
     _subMinG = Infinity; _subMaxG = -Infinity;
     _subMinSk = Infinity; _subMaxSk = -Infinity;
@@ -2358,10 +2359,22 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       const atr = _subAtr[i];
       if (atr < _subMinAtr) _subMinAtr = atr;
       if (atr > _subMaxAtr) _subMaxAtr = atr;
-      // 噪音% = (ATR - |今收-昨收|)/ATR, ATR为周期平滑(params.atrPeriod); >0波幅被浪费(震荡), <0=收盘走出超过一个ATR的方向, 首日无昨收记0
-      const nv = i > 0 && _subAtr[i] > 0 ? (_subAtr[i] - Math.abs(r.c - data[i - 1].c)) / _subAtr[i] * 100 : 0;
-      _subNoise[i] = nv;
-      if (i > 0 && _subAtr[i] > 0) { if (nv < _subMinNoise) _subMinNoise = nv; if (nv > _subMaxNoise) _subMaxNoise = nv; }
+      // 多头噪音N% = Σ max(0,昨收-最低) / ΣATR ×100 —— 所有日, 不区分涨跌
+      // 空头噪音N% = Σ max(0,最高-昨收) / ΣATR ×100 —— 所有日, 不区分涨跌
+      let nSumL = 0, nSumS = 0, aSum = 0;
+      for (let j = Math.max(1, i - params.lookback + 1); j <= i; j++) {
+        const pcj = data[j - 1].c;
+        nSumL += Math.max(0, pcj - data[j].l);
+        nSumS += Math.max(0, data[j].h - pcj);
+        aSum += _subAtr[j];
+      }
+      const nvL = aSum > 0 ? nSumL / aSum * 100 : 0;
+      const nvS = aSum > 0 ? nSumS / aSum * 100 : 0;
+      _subNoiseL[i] = nvL; _subNoiseS[i] = nvS;
+      if (i > 0 && aSum > 0) {
+        if (nvL < _subMinNoise) _subMinNoise = nvL; if (nvL > _subMaxNoise) _subMaxNoise = nvL;
+        if (nvS < _subMinNoise) _subMinNoise = nvS; if (nvS > _subMaxNoise) _subMaxNoise = nvS;
+      }
       const mc = _subMpConf[i];
       if (mc < _subMinMc) _subMinMc = mc;
       if (mc > _subMaxMc) _subMaxMc = mc;
@@ -2410,6 +2423,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     barW: initBarW,
     dragging: false,
     dragStartX: 0,
+    dragStartClientX: 0,
     dragStartIdx: 0,
     hoverIdx: -1,
     pinchDist: 0,
@@ -2912,7 +2926,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     const legX = pad.left + 8, legY2 = pad.top + 4;
     let lx = legX, ly = legY2;
     // 第一行：MP + BE线
-    ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
+    ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('MP', lx+20, ly+11); lx += 50;
     ctx.strokeStyle = '#a29bfe'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('近月连续', lx+20, ly+11); lx += 70;
@@ -3202,7 +3216,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.fillText('止损', toX(lastVis) + 4, toY(stopCurve[lastVis].stop) + 4);
     }
     if (stopCurve && stopCurve.length === n && stopCurve[lastVis].breakLevel != null) {
-      ctx.strokeStyle = '#a55eea'; ctx.lineWidth = 2; ctx.setLineDash([5, 3]);
+      ctx.strokeStyle = '#a55eea'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 3]);
       ctx.beginPath();
       const bx = toX(lastVis) + 2, by = toY(stopCurve[lastVis].breakLevel);
       ctx.moveTo(bx, by); ctx.lineTo(bx + 20, by);
@@ -3295,8 +3309,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           if (atrv2 !== 0) { if (atrv2 < vMinAtr) vMinAtr = atrv2; if (atrv2 > vMaxAtr) vMaxAtr = atrv2; }
           const mc2 = _subMpConf[i];
           if (mc2 !== 0) { if (mc2 < vMinMc) vMinMc = mc2; if (mc2 > vMaxMc) vMaxMc = mc2; }
-          const nz2 = _subNoise[i];
-          if (i > 0) { if (nz2 < vMinNoise) vMinNoise = nz2; if (nz2 > vMaxNoise) vMaxNoise = nz2; }
+          if (i > 0) {
+            const nzl2 = _subNoiseL[i], nzs2 = _subNoiseS[i];
+            if (nzl2 < vMinNoise) vMinNoise = nzl2; if (nzl2 > vMaxNoise) vMaxNoise = nzl2;
+            if (nzs2 < vMinNoise) vMinNoise = nzs2; if (nzs2 > vMaxNoise) vMaxNoise = nzs2;
+          }
       }
       if (vMinG === Infinity || vMinG === vMaxG) { vMinG = _subMinG; vMaxG = _subMaxG; }
       else { const gr = vMaxG - vMinG || 1; vMinG -= gr * 0.1; vMaxG += gr * 0.1; }
@@ -3440,7 +3457,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         for (let i = 0; i <= 4; i++) {
           const v = vMinNoise + (vMaxNoise - vMinNoise) / 4 * i;
           const y = spad.top + (sch / 4) * (4 - i);
-          sctx.fillText(v.toFixed(1) + '%', pad.left - 34, y + 3);
+          sctx.fillText(Math.round(v) + '%', pad.left - 34, y + 3);
         }
       }
 
@@ -3578,21 +3595,22 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         sctx.stroke();
       }
 
-      // 噪音% = (ATR - |今收-昨收|)/ATR, ATR为周期平滑(params.atrPeriod); >0波幅被浪费(震荡), <0收盘走出超一个ATR的方向日; 首日记0, 独立%刻度
+      // 噪音N% = 过去N天 Σ毛刺/ΣATR×100 (N=params.lookback); 多头(红)/空头(绿) 共用%刻度
       if (subVis.noise && isFinite(vMinNoise) && isFinite(vMaxNoise) && vMaxNoise > vMinNoise) {
-        sctx.strokeStyle = '#1abc9c';
-        sctx.lineWidth = 1;
-        sctx.setLineDash([3, 2]);
-        sctx.beginPath();
-        let noiseStarted = false;
-        for (let i = start; i < end && i < n; i++) {
-          if (i === 0) { noiseStarted = false; continue; }
-          const x = toX(i);
-          const y = s2y(_subNoise[i], vMinNoise, vMaxNoise);
-          if (!noiseStarted) { sctx.moveTo(x, y); noiseStarted = true; } else sctx.lineTo(x, y);
+        const nzLines = [[_subNoiseL, '#e74c3c', 1], [_subNoiseS, '#27ae60', 1]];
+        for (const [arr, col, w] of nzLines) {
+          sctx.strokeStyle = col;
+          sctx.lineWidth = w;
+          sctx.beginPath();
+          let st = false;
+          for (let i = start; i < end && i < n; i++) {
+            if (i === 0) { st = false; continue; }
+            const x = toX(i);
+            const y = s2y(arr[i], vMinNoise, vMaxNoise);
+            if (!st) { sctx.moveTo(x, y); st = true; } else sctx.lineTo(x, y);
+          }
+          sctx.stroke();
         }
-        sctx.stroke();
-        sctx.setLineDash([]);
       }
 
       if (subVis.futOi) {
@@ -3674,10 +3692,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           hoverY += 12;
         }
         if (subVis.noise && hi > 0) {
-          sctx.fillStyle = '#1abc9c';
-          const nzHov = _subNoise[hi];
-          const nzPts = _subAtr[hi] > 0 ? ' (' + Math.round(_subAtr[hi] - Math.abs(data[hi].c - data[hi - 1].c)) + ')' : '';
-          sctx.fillText('噪音: ' + nzHov.toFixed(1) + '%' + nzPts, hx + 4, hoverY);
+          sctx.fillStyle = '#0f9b8e';
+          const pch = data[hi - 1].c;
+          const dnH = Math.max(0, pch - data[hi].l);
+          const upH = Math.max(0, data[hi].h - pch);
+          sctx.fillText('噪音' + params.lookback + '日: 多' + _subNoiseL[hi].toFixed(1) + '% / 空' + _subNoiseS[hi].toFixed(1) + '% (当日下影' + dnH.toFixed(1) + ' 上影' + upH.toFixed(1) + ')', hx + 4, hoverY);
           hoverY += 12;
         }
         if (subVis.mpConf) {
@@ -3905,6 +3924,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   canvas.onmousedown = (e) => {
     state.dragging = true;
     state.didDrag = false;
+    state.dragStartClientX = e.clientX;
     state.dragStartX = getDataX(e.clientX);
     state.dragStartIdx = state.start;
     canvas.style.cursor = 'grabbing';
@@ -3913,6 +3933,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     if (!state.didDrag) {
       state.pinned = !state.pinned;
       state.pinnedIdx = state.pinned ? state.hoverIdx : -1;
+      if (state.hoverIdx >= 0) updateInfo(state.hoverIdx);
       render();
     }
   };
@@ -3920,7 +3941,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   canvas.onmousemove = (e) => {
     const rawIdx = getBarIdx(e.clientX);
     if (state.dragging) {
-      state.didDrag = true;
+      // 位移超过 3px 才算拖动, 否则保留为点击(锁定)
+      if (Math.abs(e.clientX - state.dragStartClientX) > 3) state.didDrag = true;
       const dx = getDataX(e.clientX) - state.dragStartX;
       state.start = Math.max(0, Math.min(n - getVisibleCount() + 60, state.dragStartIdx - dx / state.barW));
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
@@ -4006,36 +4028,90 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   }, { passive: false });
 
   if (subCanvas) {
-    subCanvas.addEventListener('touchstart', function(e) { e.preventDefault(); }, { passive: false });
-    subCanvas.addEventListener('touchmove', function(e) {
-      e.preventDefault();
-      if (state.pinned) return;
-      const touch = e.touches[0];
-      const br = subCanvas.getBoundingClientRect();
-      const sx = touch.clientX - br.left;
-      const idx = Math.max(0, Math.min(n - 1, Math.round(state.start + (sx - pad.left) / state.barW)));
-      if (idx !== state.hoverIdx) {
-        state.hoverIdx = idx;
-        updateInfo(idx);
-        render();
-      }
-    }, { passive: false });
+    // 副图与主图共享 x 轴, 同样支持滚轮缩放 / 拖动平移 / 双指缩放 / 悬停
+    subCanvas.onmousedown = function(e) {
+      state.dragging = true;
+      state.didDrag = false;
+      state.dragStartClientX = e.clientX;
+      state.dragStartX = getDataX(e.clientX);
+      state.dragStartIdx = state.start;
+      subCanvas.style.cursor = 'grabbing';
+    };
     subCanvas.onmousemove = function(e) {
-      if (state.pinned) return;
-      const br = subCanvas.getBoundingClientRect();
-      const sx = e.clientX - br.left;
-      const idx = Math.max(0, Math.min(n - 1, Math.round(state.start + (sx - pad.left) / state.barW)));
-      if (idx !== state.hoverIdx) {
-        state.hoverIdx = idx;
-        updateInfo(idx);
-        render();
+      if (state.dragging) {
+        // 位移超过 3px 才算拖动, 否则保留为点击(锁定)
+        if (Math.abs(e.clientX - state.dragStartClientX) > 3) state.didDrag = true;
+        const dx = getDataX(e.clientX) - state.dragStartX;
+        state.start = Math.max(0, Math.min(n - getVisibleCount() + 60, state.dragStartIdx - dx / state.barW));
+        if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
+      } else if (!state.pinned) {
+        const idx = Math.max(0, Math.min(n - 1, getBarIdx(e.clientX)));
+        if (idx !== state.hoverIdx) {
+          state.hoverIdx = idx;
+          updateInfo(idx);
+          render();
+        }
+        subCanvas.style.cursor = 'crosshair';
       }
     };
-    subCanvas.onclick = function() {
-      state.pinned = !state.pinned;
-      state.pinnedIdx = state.pinned ? state.hoverIdx : -1;
+    subCanvas.onwheel = function(e) {
+      e.preventDefault();
+      const mx = getDataX(e.clientX);
+      const idxUnderMouse = state.start + mx / state.barW;
+      const zoom = e.deltaY > 0 ? 0.85 : 1.18;
+      const newBarW = Math.max(2, Math.min(40, state.barW * zoom));
+      state.start = Math.max(0, Math.min(n - Math.ceil(cw / newBarW) + 60, idxUnderMouse - mx / newBarW));
+      state.barW = newBarW;
       render();
     };
+    subCanvas.onclick = function() {
+      if (state.didDrag) return;
+      state.pinned = !state.pinned;
+      state.pinnedIdx = state.pinned ? state.hoverIdx : -1;
+      if (state.hoverIdx >= 0) updateInfo(state.hoverIdx);
+      render();
+    };
+    subCanvas.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        state.dragStartX = getDataX(e.touches[0].clientX);
+        state.dragStartIdx = state.start;
+        state.dragging = true;
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        state.pinchDist = Math.sqrt(dx * dx + dy * dy);
+      }
+    }, { passive: false });
+    subCanvas.addEventListener('touchmove', function(e) {
+      e.preventDefault();
+      const br = subCanvas.getBoundingClientRect();
+      if (e.touches.length === 1 && state.dragging) {
+        const dx = getDataX(e.touches[0].clientX) - state.dragStartX;
+        state.start = Math.max(0, Math.min(n - getVisibleCount() + 60, state.dragStartIdx - dx / state.barW));
+        if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
+      } else if (e.touches.length === 2 && state.pinchDist > 0) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const scale = dist / state.pinchDist;
+        const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - br.left;
+        const idxUnderMouse = state.start + mx / state.barW;
+        const newBarW = Math.max(2, Math.min(40, state.barW * scale));
+        state.start = Math.max(0, Math.min(n - Math.ceil(cw / newBarW) + 60, idxUnderMouse - mx / newBarW));
+        state.barW = newBarW;
+        state.pinchDist = dist;
+        if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
+      } else if (!state.pinned) {
+        const sx = e.touches[0].clientX - br.left;
+        const idx = Math.max(0, Math.min(n - 1, Math.round(state.start + (sx - pad.left) / state.barW)));
+        if (idx !== state.hoverIdx) {
+          state.hoverIdx = idx;
+          updateInfo(idx);
+          render();
+        }
+      }
+    }, { passive: false });
   }
   // OI 图悬停：显示行权价和持仓量（独立于 K 线维度，不切换 K 线）
   const oiEl = document.getElementById('oiChart');
