@@ -304,7 +304,7 @@ let ORD_EDIT_ID = null; // null=列表, -1=新增(日期取所选K线), >0=编�
 let ORD_NEW_DATE = ''; // 新增订单默认日期(来自所选K线)
 let ORD_NEW_PX = '';   // 新增订单默认价格(预填所选K线收盘)
 // 期权成熟品种（快速切换栏，写死）：MP 跟随价格、非长期不动的品种
-const MATURE_SYMS = ['TA', 'SA', 'FG', 'AG', 'AU', 'P', 'PS', 'SI', 'LC'];
+const MATURE_SYMS = ['SA', 'FG', 'TA', 'AG', 'AU', 'P', 'PS', 'SI', 'LC'];
 let defaultParams = {
   lookback: 5,
   minPct: 0.1,
@@ -1748,7 +1748,7 @@ const OPT_PARAMS = {
   lookback:   { label: 'Lookback',    range: [5, 60, 1] },
   minPct:     { label: 'Min%',        range: [0.1, 2, 0.1], unit: '%' },
   maxPos:     { label: '仓位%',       range: [5, 100, 5], unit: '%' },
-  beTh:       { label: '保本%',       range: [0.5, 2, 0.1], unit: '%' },
+  beTh:       { label: '保本%',       range: [0.5, 5, 0.1], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 75, 5], unit: '%' },
   atrPeriod:  { label: 'ATR周期',     range: [5, 250, 1] },
   entryAtrMult:  { label: '入场ATR倍',   range: [0.3, 3, 0.1] },
@@ -4471,8 +4471,12 @@ function openSymModal() {
     groups[ex].push(sym);
   }
   const exNames = { CZCE: '郑商所 (CZCE)', DCE: '大商所 (DCE)', SHFE: '上期所 (SHFE)', INE: '能源中心 (INE)', CFFEX: '中金所 (CFFEX)', GFEX: '广期所 (GFEX)' };
+  // 交易所固定展示顺序: 郑商所 大商所 上期所 能源中心 广期所 中金所
+  const exOrder = ['CZCE', 'DCE', 'SHFE', 'INE', 'GFEX', 'CFFEX'];
+  const ordered = exOrder.filter(ex => groups[ex]).map(ex => [ex, groups[ex]])
+    .concat(Object.keys(groups).filter(ex => !exOrder.includes(ex)).map(ex => [ex, groups[ex]]));
   let html = '';
-  for (const [ex, syms] of Object.entries(groups)) {
+  for (const [ex, syms] of ordered) {
     html += '<div class="modal-group"><div class="group-title">' + (exNames[ex] || ex) + '</div><div class="modal-symbols">';
     for (const sym of syms) {
       const cfg = SYM_CFG[sym];
