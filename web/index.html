@@ -2926,18 +2926,18 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     const legX = pad.left + 8, legY2 = pad.top + 4;
     let lx = legX, ly = legY2;
     // 第一行：MP + BE线
-    ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
+    ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('MP', lx+20, ly+11); lx += 50;
-    ctx.strokeStyle = '#a29bfe'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
+    ctx.strokeStyle = '#a29bfe'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('近月连续', lx+20, ly+11); lx += 70;
-    ctx.strokeStyle = '#f368e0'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
+    ctx.strokeStyle = '#f368e0'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke();
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('期权期货', lx+20, ly+11); lx += 75;
-    ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
-    ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.setLineDash([4,3]); ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('看涨BE', lx+20, ly+11); lx += 80;
-    ctx.setLineDash([4,3]); ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.setLineDash([4,3]); ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('看跌BE', lx+20, ly+11); lx += 80;
-    ctx.strokeStyle = '#54a0ff'; ctx.lineWidth = 1.5; ctx.setLineDash([2,2]); ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = '#54a0ff'; ctx.lineWidth = 1; ctx.setLineDash([2,2]); ctx.beginPath(); ctx.moveTo(lx, ly+7); ctx.lineTo(lx+16, ly+7); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('EMA', lx+20, ly+11);
     // 第二行：BE-MP交叉
     lx = legX; ly = legY2 + 18;
@@ -2955,7 +2955,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.save();
       ctx.strokeStyle = '#ff9f43';
       ctx.fillStyle = '#ff9f43';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.globalAlpha = 0.8;
       // 按连续段绘制: 新开仓日(start)和空仓日(null)断开; 单日持仓只有孤立一点, 画圆点保证可见
@@ -2989,7 +2989,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       if (lo >= end) continue;
       ctx.save();
       ctx.strokeStyle = '#ff4757';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.globalAlpha = 0.9;
       ctx.beginPath();
@@ -3046,7 +3046,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       if (row._manual) {
         ctx.save();
         ctx.strokeStyle = '#54a0ff';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1;
         ctx.setLineDash([3, 3]);
         ctx.strokeRect(x - bw / 2, by, bw, bh);
         ctx.setLineDash([]);
@@ -3160,7 +3160,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.save();
       ctx.globalAlpha = closed ? 0.7 : 1;
       ctx.strokeStyle = col;
-      ctx.lineWidth = closed ? 1.5 : 2;
+      ctx.lineWidth = closed ? 1 : 1.5;
       ctx.lineJoin = 'round';
       ctx.beginPath();
       if (isLong) {
@@ -3216,7 +3216,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.fillText('止损', toX(lastVis) + 4, toY(stopCurve[lastVis].stop) + 4);
     }
     if (stopCurve && stopCurve.length === n && stopCurve[lastVis].breakLevel != null) {
-      ctx.strokeStyle = '#a55eea'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 3]);
+      ctx.strokeStyle = '#a55eea'; ctx.lineWidth = 1; ctx.setLineDash([5, 3]);
       ctx.beginPath();
       const bx = toX(lastVis) + 2, by = toY(stopCurve[lastVis].breakLevel);
       ctx.moveTo(bx, by); ctx.lineTo(bx + 20, by);
@@ -3258,7 +3258,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
 
     // 期货/期权同一合约月标记: K线图底部边界线(H-36)上画红色短横线
     ctx.strokeStyle = '#e74c3c';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1;
     for (let i = start; i < end && i < n; i++) {
       if (sameContractMonth(data[i].fut_contract, data[i].opt_contract)) {
         const x = toX(i);
@@ -3615,7 +3615,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
 
       if (subVis.futOi) {
         sctx.strokeStyle = '#f368e0';
-        sctx.lineWidth = 1.5;
+        sctx.lineWidth = 1;
         sctx.beginPath();
         started = false;
         for (let i = start; i < end && i < n; i++) {
@@ -3818,7 +3818,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
               if (ivMax > 0) {
                 const ivRng = ivMax - ivMin || 0.01;
                 const iv2y = (iv) => opad.top + och - (iv - ivMin) / ivRng * och;
-                ox.lineWidth = 1.2;
+                ox.lineWidth = 1;
                 // Call IV line
                 ox.strokeStyle = '#3498db';
                 ox.beginPath();
@@ -4173,6 +4173,10 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
   data.closes = closes || null;
   data.vols = vols || null;
   data.realEq = realEq || null;
+  // 实盘线起点: 最早有记录的那一天, 之前不画
+  let realStart = -1;
+  if (realEq) for (let i = 0; i < realEq.length; i++) { if (realEq[i] !== 0) { realStart = i; break; } }
+  data.realStart = realStart;
   const len = eqCurve.length - 1;
   if (!data.view || typeof data.view.lo !== 'number' || data.view.hi > len) data.view = { lo: 0, hi: len };
 
@@ -4218,7 +4222,7 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
     ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(toX(lo), toY(curve[lo].eq));
     for (let i = lo + 1; i <= hi; i++) ctx.lineTo(toX(i), toY(curve[i].eq));
     ctx.lineTo(toX(hi), pad.top + ch); ctx.lineTo(toX(lo), pad.top + ch); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#54a0ff'; ctx.lineWidth = 1.5; ctx.beginPath();
+    ctx.strokeStyle = '#54a0ff'; ctx.lineWidth = 1; ctx.beginPath();
     for (let i = lo; i <= hi; i++) { const x = toX(i), y = toY(curve[i].eq); if (i === lo) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
     ctx.stroke();
     // 收盘价折线(自有归一化刻度, 与权益曲线同区域叠加)
@@ -4254,7 +4258,7 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
     // 实盘累计盈亏折线(自有归一化刻度, 金色, 含已平仓 realized + 持仓浮盈, 不算本金)
     data.anyReal = false;
     const _real = data.realEq;
-    if (_real && _real.length === curve.length) {
+    if (_real && _real.length === curve.length && data.realStart >= 0) {
       let any = false, rMin = 0, rMax = 0;
       for (const v of _real) { if (v !== 0) any = true; if (v < rMin) rMin = v; if (v > rMax) rMax = v; }
       if (any) {
@@ -4265,9 +4269,12 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
           ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(232,200,74,0.4)'; ctx.lineWidth = 1;
           const zy = toYr(0); ctx.beginPath(); ctx.moveTo(pad.left, zy); ctx.lineTo(W - pad.right, zy); ctx.stroke(); ctx.setLineDash([]);
         }
-        ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.95; ctx.beginPath();
-        for (let i = lo; i <= hi; i++) { const x = toX(i), y = toYr(_real[i]); if (i === lo) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
-        ctx.stroke(); ctx.globalAlpha = 1;
+        const r0 = Math.max(lo, data.realStart);
+        if (r0 <= hi) {
+          ctx.strokeStyle = '#e8c84a'; ctx.lineWidth = 1; ctx.globalAlpha = 0.95; ctx.beginPath();
+          for (let i = r0; i <= hi; i++) { const x = toX(i), y = toYr(_real[i]); if (i === r0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+          ctx.stroke(); ctx.globalAlpha = 1;
+        }
       }
     }
     ctx.fillStyle = '#576574'; ctx.textAlign = 'center'; ctx.font = '10px sans-serif';
@@ -4291,41 +4298,37 @@ function drawEquityCurve(eqCurve, cap, closes, vols, realEq) {
       ctx.beginPath(); ctx.moveTo(hx, pad.top); ctx.lineTo(hx, pad.top + ch); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(pad.left, hy); ctx.lineTo(W - pad.right, hy); ctx.stroke();
       ctx.setLineDash([]); ctx.restore();
-      ctx.fillStyle = '#1a2a3a'; ctx.fillRect(hx - 40, pad.top + ch + 2, 80, 18);
+      // 日期标签: 水平钳制在画布内
+      const dbW = 80;
+      const dbx = Math.max(0, Math.min(W - dbW, hx - dbW / 2));
+      ctx.fillStyle = '#1a2a3a'; ctx.fillRect(dbx, pad.top + ch + 2, dbW, 18);
       ctx.fillStyle = '#c8d6e5'; ctx.textAlign = 'center'; ctx.font = '10px sans-serif';
-      ctx.fillText(p.d, hx, pad.top + ch + 15);
-      const eqText = Math.round(p.eq).toLocaleString();
-      const eqW = ctx.measureText(eqText).width + 14;
-      ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - eqW, hy - 9, eqW, 18);
-      ctx.fillStyle = '#54a0ff'; ctx.textAlign = 'right'; ctx.font = 'bold 11px sans-serif';
-      ctx.fillText(eqText, W - pad.right - 5, hy + 5);
+      ctx.fillText(p.d, dbx + dbW / 2, pad.top + ch + 15);
+      // 数值标签: 自权益值所在高度向上堆叠, 溢出顶部则整体下移, 始终落在画布内
+      const rows = [{ text: Math.round(p.eq).toLocaleString(), color: '#54a0ff', font: 'bold 11px sans-serif' }];
       const _cl = data.closes;
-      let tOff = 27;
-      if (_cl && _cl[hoverIdx] !== undefined) {
-        const cText = '收盘 ' + (_cl[hoverIdx] >= 100 ? _cl[hoverIdx].toFixed(0) : _cl[hoverIdx].toFixed(2));
-        const cW = ctx.measureText(cText).width + 14;
-        ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - cW, hy - tOff, cW, 18);
-        ctx.fillStyle = '#ff9f43'; ctx.textAlign = 'right'; ctx.font = '10px sans-serif';
-        ctx.fillText(cText, W - pad.right - 5, hy - tOff + 14);
-        tOff += 14;
-      }
+      if (_cl && _cl[hoverIdx] !== undefined) rows.push({ text: '收盘 ' + (_cl[hoverIdx] >= 100 ? _cl[hoverIdx].toFixed(0) : _cl[hoverIdx].toFixed(2)), color: '#ff9f43', font: '10px sans-serif' });
       const _v = data.vols;
-      if (_v && _v[hoverIdx] !== undefined && _v[hoverIdx] > 0) {
-        const vText = '波动 ' + (_v[hoverIdx] * 100).toFixed(1) + '%';
-        const vW = ctx.measureText(vText).width + 14;
-        ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - vW, hy - tOff, vW, 18);
-        ctx.fillStyle = '#a55eea'; ctx.textAlign = 'right'; ctx.font = '10px sans-serif';
-        ctx.fillText(vText, W - pad.right - 5, hy - tOff + 14);
-        tOff += 14;
-      }
+      if (_v && _v[hoverIdx] !== undefined && _v[hoverIdx] > 0) rows.push({ text: '波动 ' + (_v[hoverIdx] * 100).toFixed(1) + '%', color: '#a55eea', font: '10px sans-serif' });
       const _r = data.realEq;
-      if (data.anyReal && _r && _r[hoverIdx] !== undefined) {
+      if (data.anyReal && _r && _r[hoverIdx] !== undefined && data.realStart >= 0 && hoverIdx >= data.realStart) {
         const rVal = _r[hoverIdx];
-        const rText = '实盘 ' + (rVal > 0 ? '+' : '') + Math.round(rVal).toLocaleString();
-        const rW = ctx.measureText(rText).width + 14;
-        ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - rW, hy - tOff, rW, 18);
-        ctx.fillStyle = '#e8c84a'; ctx.textAlign = 'right'; ctx.font = '10px sans-serif';
-        ctx.fillText(rText, W - pad.right - 5, hy - tOff + 14);
+        rows.push({ text: '实盘 ' + (rVal > 0 ? '+' : '') + Math.round(rVal).toLocaleString(), color: '#e8c84a', font: '10px sans-serif' });
+      }
+      const rowH = 18, tipGap = 9;
+      const blockH = rowH * rows.length;
+      let tipTop = hy + tipGap - blockH;
+      if (tipTop < pad.top) tipTop = Math.max(pad.top, Math.min(hy + tipGap, pad.top + ch - blockH));
+      if (tipTop + blockH > pad.top + ch) tipTop = Math.max(pad.top, pad.top + ch - blockH);
+      ctx.textAlign = 'right';
+      for (let k = 0; k < rows.length; k++) {
+        const r = rows[k];
+        ctx.font = r.font;
+        const bw = ctx.measureText(r.text).width + 14;
+        const by = tipTop + blockH - rowH * (k + 1);
+        ctx.fillStyle = '#1a2a3a'; ctx.fillRect(W - pad.right - bw, by, bw, rowH);
+        ctx.fillStyle = r.color;
+        ctx.fillText(r.text, W - pad.right - 5, by + 14);
       }
     }
   }
