@@ -2954,7 +2954,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.moveTo(lx+8, ly-3); ctx.lineTo(lx+4, ly+tSz-1); ctx.lineTo(lx+12, ly+tSz-1); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#c8d6e5'; ctx.fillText('BE上穿MP 上涨', lx+20, ly+8); lx += 95;
     // 累计涨跌点数转负标记
-    ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 11px sans-serif'; ctx.fillText('!', lx + 4, ly + 8);
+    ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 11px sans-serif'; ctx.fillText('X', lx + 4, ly + 8);
     ctx.fillStyle = '#c8d6e5'; ctx.font = '11px sans-serif'; ctx.fillText((params.accWindow || 3) + '日累计亏损', lx + 12, ly + 8);
     ctx.restore();
 
@@ -3239,28 +3239,21 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.restore();
     }
 
-    // 累计涨跌点数(近accWindow日)连续accStreak天为负 → 主图底部红色"!"徽章
+    // 累计涨跌点数(近accWindow日)连续accStreak天为负 → 主图底部红色"X"标记
     if (accWarnIdx && accWarnIdx.length) {
-      ctx.font = 'bold ' + Math.max(7, Math.min(10, state.barW * 0.6)) + 'px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
       const cy = pad.top + ch - 10;
+      const xs = Math.max(2, Math.min(3.5, state.barW * 0.35));  // X 半宽
+      ctx.strokeStyle = '#e74c3c';
+      ctx.lineWidth = 0.5;
       let ai = 0;
       while (ai < accWarnIdx.length && accWarnIdx[ai] < start) ai++;
       for (; ai < accWarnIdx.length && accWarnIdx[ai] < end; ai++) {
-        const i = accWarnIdx[ai];
-        const x = toX(i);
+        const x = toX(accWarnIdx[ai]);
         ctx.beginPath();
-        ctx.arc(x, cy, 4.5, 0, Math.PI * 2);
-        ctx.fillStyle = '#e74c3c';
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
+        ctx.moveTo(x - xs, cy - xs); ctx.lineTo(x + xs, cy + xs);
+        ctx.moveTo(x + xs, cy - xs); ctx.lineTo(x - xs, cy + xs);
         ctx.stroke();
-        ctx.fillStyle = '#fff';
-        ctx.fillText('!', x, cy);
       }
-      ctx.textBaseline = 'alphabetic';
     }
 
     const lastVis = Math.min(end - 1, n - 1);
@@ -3316,6 +3309,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     // 期货/期权同一合约月标记: K线图底部边界线(H-36)上画红色短横线
     ctx.strokeStyle = '#e74c3c';
     ctx.lineWidth = 1;
+    let lastSameIdx = -1;
     for (let i = start; i < end && i < n; i++) {
       if (sameContractMonth(data[i].fut_contract, data[i].opt_contract)) {
         const x = toX(i);
@@ -3323,6 +3317,21 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         ctx.moveTo(x - 3, H - 36);
         ctx.lineTo(x + 3, H - 36);
         ctx.stroke();
+        lastSameIdx = i;
+      }
+    }
+    // 最后一个标记右侧文字说明; 右侧放不下则改放左侧
+    if (lastSameIdx >= 0) {
+      const lx = toX(lastSameIdx);
+      const txt = '期货/期权同月';
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = '#e74c3c';
+      if (lx + 6 + ctx.measureText(txt).width <= W - pad.right) {
+        ctx.textAlign = 'left';
+        ctx.fillText(txt, lx + 6, H - 36 - 4);
+      } else {
+        ctx.textAlign = 'right';
+        ctx.fillText(txt, lx - 6, H - 36 - 4);
       }
     }
 
