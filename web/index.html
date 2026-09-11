@@ -1204,7 +1204,7 @@ function runBacktest() {
     <div class="grid">\
       <div class="stat-card"><div class="value green">' + fmt(s.endEq) + '</div><div class="label">最终权益</div></div>\
       <div class="stat-card"><div class="value ' + cls(s.totalReturn) + '">' + pct(s.totalReturn) + '</div><div class="label">总收益</div></div>\
-      <div class="stat-card"><div class="value">' + s.maxDd + '%</div><div class="label">最大回撤</div></div>\
+      <div class="stat-card"><div class="value">' + s.maxDd + '%</div><div class="label">最大回撤区间</div></div>\
       <div class="stat-card"><div class="value">' + s.trades + '</div><div class="label">交易笔数</div></div>\
       <div class="stat-card"><div class="value">' + s.coverage + '%</div><div class="label">持仓覆盖率</div></div>\
       <div class="stat-card"><div class="value">' + s.avgHold + '天</div><div class="label">平均持仓</div></div>\
@@ -1227,7 +1227,7 @@ function runBacktest() {
         <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期货成交量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期货持仓量</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
-    <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">最大回撤</th><th class="num">最长回撤期</th></tr>' + yrHtml + '</table></div>\
+    <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">最大回撤区间</th><th class="num">最长回撤期</th></tr>' + yrHtml + '</table></div>\
     <div class="section"><h2>按月份（跨年合并）</h2><table><tr><th>月份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + moHtml + '</table></div>\
     <div class="section"><h2>按退出原因</h2><table><tr><th>原因</th><th class="num">笔数</th><th class="num">占比</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">均持仓</th></tr>' + rsHtml + '</table></div>\
     <div class="section"><h2>按持仓天数</h2><table><tr><th>持仓</th><th class="num">笔数</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + holdHtml + '</table></div>\
@@ -1751,8 +1751,8 @@ const OPT_PARAMS = {
   beTh:       { label: '保本%',       range: [0.5, 5, 0.1], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 75, 5], unit: '%' },
   atrPeriod:  { label: 'ATR周期',     range: [5, 250, 1] },
-  entryAtrMult:  { label: '入场ATR倍',   range: [0.3, 3, 0.1] },
-  atrMult:    { label: '追踪ATR倍',     range: [0.3, 3, 0.1] },
+  entryAtrMult:  { label: '入场ATR倍',   range: [0.3, 2.5, 0.1] },
+  atrMult:    { label: '追踪ATR倍',     range: [0.3, 2.5, 0.1] },
   skipCount:  { label: '跳过次',      range: [0, 5, 1] },
   volWindow:  { label: '分位窗口',    range: [0, 200, 10], unit: '天' },
   priceSlopeTh: { label: '逆势挡',    range: [0, 0.01, 0.001], prec: 3 },
