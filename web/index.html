@@ -2645,6 +2645,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     const vis = getVisibleCount();
     const end = Math.min(n, start + vis + 1);
     const offset = start * state.barW;
+    // 末日可见时, 在末根K线右侧补画下一交易日虚拟K线
+    const showGhost = n > 0 && end >= n && isFinite(mainAtr[n - 1]) && mainAtr[n - 1] > 0;
 
     let minP = Infinity, maxP = -Infinity;
     for (let i = start; i < end; i++) {
@@ -2653,6 +2655,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       maxP = Math.max(maxP, row.h, row.mp, row.bec ?? -Infinity, row.bep ?? -Infinity, row.nc ?? -Infinity, row.oc ?? -Infinity);
       const _av = mainAtr[i];
       if (isFinite(_av)) { minP = Math.min(minP, row.c - _av); maxP = Math.max(maxP, row.c + _av); }
+    }
+    // 虚拟K线纳入纵轴范围, 保证完整可见
+    if (showGhost) {
+      const _gc = data[n - 1].c, _ga = mainAtr[n - 1] / 2;
+      minP = Math.min(minP, _gc - _ga); maxP = Math.max(maxP, _gc + _ga);
     }
     const range = maxP - minP || 1;
     const padP = range * 0.05;
@@ -3102,6 +3109,56 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         ctx.restore();
         tmIdx++;
       }
+    }
+
+    // ── 下一交易日虚拟K线(虚线空心): 最高/最低 = 昨收 ± ATR/2 ──
+    if (showGhost) {
+      const gc = data[n - 1].c, ga = mainAtr[n - 1] / 2;
+      const gx = toX(n);
+      const gw = Math.max(2, state.barW * 0.5);
+      const gTop = toY(gc + ga), gBot = toY(gc - ga);
+      const gBodyY = toY(gc);
+      ctx.save();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(gx - gw / 2, gTop, gw, Math.max(1, gBot - gTop));
+      ctx.setLineDash([]);
+      // 仅在有开仓信号时, 标出虚拟开仓价(=昨收)及方向, 标记贴右侧
+      const gsig = nextDirPred[n - 1];
+      if (gsig) {
+        const isLong = gsig === 'long';
+        const col = isLong ? '#5cd85a' : '#ff6b6b';
+        const txt = '虚拟开仓 ' + gc.toFixed(0);
+        ctx.font = 'bold 10px sans-serif';
+        const tw = ctx.measureText(txt).width;
+        const triSz = 7;
+        const triX = W - pad.right - triSz - 3;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(Math.max(pad.left, gx - Math.max(24, state.barW * 2.5)), gBodyY); ctx.lineTo(triX - triSz - 2, gBodyY); ctx.stroke();
+        // 虚线空心三角: 多朝上, 空朝下
+        ctx.strokeStyle = col;
+        ctx.beginPath();
+        if (isLong) {
+          ctx.moveTo(triX, gBodyY - triSz);
+          ctx.lineTo(triX - triSz, gBodyY + triSz * 0.7);
+          ctx.lineTo(triX + triSz, gBodyY + triSz * 0.7);
+        } else {
+          ctx.moveTo(triX, gBodyY + triSz);
+          ctx.lineTo(triX - triSz, gBodyY - triSz * 0.7);
+          ctx.lineTo(triX + triSz, gBodyY - triSz * 0.7);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = col;
+        ctx.textAlign = 'right';
+        const above = gBodyY - 10 > pad.top;
+        ctx.fillText(txt, triX - triSz - 6, above ? gBodyY - 5 : gBodyY + 15);
+      }
+      ctx.restore();
     }
 
     // BE-MP 交叉标记：▼下跌(红)标在看涨BE上方，▲上涨(绿)标在看跌BE下方
