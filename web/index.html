@@ -3124,39 +3124,38 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.lineWidth = 1;
       ctx.strokeRect(gx - gw / 2, gTop, gw, Math.max(1, gBot - gTop));
       ctx.setLineDash([]);
-      // 仅在有开仓信号时, 标出虚拟开仓价(=昨收)及方向, 标记贴右侧
+      // 仅在有开仓信号时, 在虚拟柱上标出开仓方向(虚线空心三角 + 多/空)
       const gsig = nextDirPred[n - 1];
       if (gsig) {
         const isLong = gsig === 'long';
         const col = isLong ? '#5cd85a' : '#ff6b6b';
-        const txt = '虚拟开仓 ' + gc.toFixed(0);
-        ctx.font = 'bold 10px sans-serif';
-        const tw = ctx.measureText(txt).width;
-        const triSz = 7;
-        const triX = W - pad.right - triSz - 3;
+        const hw = Math.max(10, Math.min(32, state.barW * 0.9));
+        const tipSz = Math.max(5, Math.min(10, state.barW * 0.55));
         ctx.setLineDash([3, 3]);
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
         ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(Math.max(pad.left, gx - Math.max(24, state.barW * 2.5)), gBodyY); ctx.lineTo(triX - triSz - 2, gBodyY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(gx - hw, gBodyY); ctx.lineTo(gx + hw, gBodyY); ctx.stroke();
         // 虚线空心三角: 多朝上, 空朝下
         ctx.strokeStyle = col;
+        ctx.lineJoin = 'round';
         ctx.beginPath();
         if (isLong) {
-          ctx.moveTo(triX, gBodyY - triSz);
-          ctx.lineTo(triX - triSz, gBodyY + triSz * 0.7);
-          ctx.lineTo(triX + triSz, gBodyY + triSz * 0.7);
+          ctx.moveTo(gx, gBodyY - 1);
+          ctx.lineTo(gx - tipSz, gBodyY + tipSz * 1.6);
+          ctx.lineTo(gx + tipSz, gBodyY + tipSz * 1.6);
         } else {
-          ctx.moveTo(triX, gBodyY + triSz);
-          ctx.lineTo(triX - triSz, gBodyY - triSz * 0.7);
-          ctx.lineTo(triX + triSz, gBodyY - triSz * 0.7);
+          ctx.moveTo(gx, gBodyY + 1);
+          ctx.lineTo(gx - tipSz, gBodyY - tipSz * 1.6);
+          ctx.lineTo(gx + tipSz, gBodyY - tipSz * 1.6);
         }
         ctx.closePath();
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.fillStyle = col;
-        ctx.textAlign = 'right';
-        const above = gBodyY - 10 > pad.top;
-        ctx.fillText(txt, triX - triSz - 6, above ? gBodyY - 5 : gBodyY + 15);
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        const labelOff = tipSz * 1.6 + 11;
+        ctx.fillText(isLong ? '多' : '空', gx, gBodyY + (isLong ? labelOff : -labelOff + 6));
       }
       ctx.restore();
     }
@@ -3217,7 +3216,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.save();
       ctx.globalAlpha = closed ? 0.7 : 1;
       ctx.strokeStyle = col;
-      ctx.lineWidth = closed ? 1 : 1.5;
+      ctx.lineWidth = closed ? 0.7 : 1;
       ctx.lineJoin = 'round';
       ctx.beginPath();
       if (isLong) {

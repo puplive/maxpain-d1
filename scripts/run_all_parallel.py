@@ -1,7 +1,7 @@
 # run_all_parallel.py
 # python run_all_parallel.py 20260824
-""" 全部数据转换 
-用法: python run_all_parallel.py 20260824
+""" 全部数据转换 建议精确到月 防止更新不同步
+用法: python run_all_parallel.py 202608
 """
 import subprocess
 import sys
@@ -13,16 +13,16 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 date_day = sys.argv[1]
-date_month = date_day[:6]
+# date_month = date_day[:6]
 
 print(f"📅 日期: {date_day}")
-print(f"📅 GFEX月份: {date_month}")
+# print(f"📅 GFEX月份: {date_month}")
 
 commands = [
     f"python scripts/convert_czce.py --date {date_day}",
     f"python scripts/convert_dce_xlsx.py --date {date_day}",
     f"python scripts/convert_cffex.py --date {date_day}",
-    f"python scripts/convert_gfex.py --date {date_month}",
+    f"python scripts/convert_gfex.py --date {date_day}",
 ]
 
 def run(cmd):
