@@ -967,7 +967,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, revIdx, b
     eq += _upnl;
     eqCurve[eqCurve.length - 1].eq = eq;
   }
-  return { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos: pos, posDays, stateByDate, atrRatio: _atrRatio, fastVol, slowVol };
+  return { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos: pos, posDays, stateByDate, atrRatio: _atrRatio, fastVol, slowVol, priceSlope };
 }
 
 function runBacktest() {
@@ -1061,7 +1061,7 @@ function runBacktest() {
   // Pre-compute analysis for every candle for dynamic hover
   window._analysisCache = [];
   for (let i = 0; i < data.length; i++) {
-    window._analysisCache[i] = genAnalysis(data, fullData, params, nextDirPred, core.trades, i, core.stateByDate, core.atrRatio, core.fastVol, core.slowVol);
+    window._analysisCache[i] = genAnalysis(data, fullData, params, nextDirPred, core.trades, i, core.stateByDate, core.atrRatio, core.fastVol, core.slowVol, core.priceSlope);
   }
   const _lastAnalysis = window._analysisCache[data.length - 1];
   const { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos, posDays } = core;
@@ -1238,7 +1238,7 @@ function runBacktest() {
       ' + recent.map(t => '<tr><td>' + t.entry + '</td><td>' + t.exit + '</td><td>' + dirText(t.dir) + '</td><td class="num">' + t.qty + '</td><td class="num">' + t.entryPx.toFixed(0) + '</td><td class="num">' + t.exitPx.toFixed(0) + '</td><td class="num ' + cls(t.pnl) + '">' + fmt(Math.round(t.pnl)) + '</td><td>' + t.reason + '</td><td class="num">' + Math.round(t.hold) + '天</td></tr>').join('') + '</table></div>';
   result.innerHTML += buildRealOrderSection(data, MANUAL_ORDERS);
 
-function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, stateByDate, atrRatio, fastVol, slowVol) {
+function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, stateByDate, atrRatio, fastVol, slowVol, priceSlope) {
   const n = data.length;
   const idx = targetIdx !== undefined ? targetIdx : n - 1;
   const r = data[idx];
@@ -1326,14 +1326,17 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
         if (_VL > 0 || _VH < 100) {
           const _rr = atrRatio;
           const _curR = _rr ? _rr[lastPredIdx] : NaN;
+          const _vwin = params.volWindow || 0;  // 分位窗口与回测一致(0=全部历史)
+          const _vlo = _vwin > 0 ? Math.max(0, lastPredIdx - _vwin) : 0;
           let _vp = 50;
           if (_rr && !isNaN(_curR)) {
             let _vc = 0, _vb = 0;
-            for (let _j = 0; _j < lastPredIdx; _j++) { const _rv = _rr[_j]; if (!isNaN(_rv)) { _vc++; if (_rv < _curR) _vb++; } }
+            for (let _j = _vlo; _j < lastPredIdx; _j++) { const _rv = _rr[_j]; if (!isNaN(_rv)) { _vc++; if (_rv < _curR) _vb++; } }
             _vp = _vc > 0 ? _vb / _vc * 100 : 50;
           }
-          if (_vp < _VL || _vp > _VH) { _conds.push('波动率:百分位' + _vp.toFixed(0) + '%(' + _VL + '~' + _VH + ') ✗'); _blocked = '波动率过滤'; }
-          else _conds.push('波动率:百分位' + _vp.toFixed(0) + '%(' + _VL + '~' + _VH + ') ✓');
+          const _vTxt = '波动率:' + (_vwin > 0 ? '近' + _vwin + '日' : '') + '百分位' + _vp.toFixed(0) + '%(' + _VL + '~' + _VH + ')';
+          if (_vp < _VL || _vp > _VH) { _conds.push(_vTxt + ' ✗'); _blocked = '波动率过滤'; }
+          else _conds.push(_vTxt + ' ✓');
         } else {
           _conds.push('波动率:未启用');
         }
@@ -1350,6 +1353,28 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
             else _conds.push('EWMA波动:比值' + _ratio.toFixed(2) + '(挡高' + _EFH + '/挡低' + _EFL + ') ✓');
           } else _conds.push('EWMA波动:数据不足');
         } else _conds.push('EWMA波动:未启用');
+      }
+      if (!_blocked) {
+        const _SL = params.priceSlopeTh || 0;
+        if (_SL > 0) {
+          const _sl = priceSlope ? priceSlope[lastPredIdx] : NaN;
+          if (isFinite(_sl) && ((nd === 'long' && _sl < -_SL) || (nd === 'short' && _sl > _SL))) {
+            _conds.push('价格斜率:' + _sl.toFixed(4) + '与方向相反(挡' + _SL + ') ✗'); _blocked = '价格斜率过滤';
+          } else {
+            _conds.push('价格斜率:' + (isFinite(_sl) ? _sl.toFixed(4) : '数据不足') + '(挡' + _SL + ') ✓');
+          }
+        } else _conds.push('价格斜率:未启用');
+      }
+      if (!_blocked) {
+        const _pbTh = params.pbSlopeTh || 0;
+        if (_pbTh > 0) {
+          const _dev = calcMpDevPct(fullData, mpOff, rollSeg, lastPredIdx, params.lookback);
+          if (_dev && Math.abs(_dev.pct) <= _pbTh) {
+            _conds.push('回踩挂单:MP偏离' + _dev.pct.toFixed(2) + '%(≤' + _pbTh + '%),限价挂MP,次日未触及不成交');
+          } else if (_dev) {
+            _conds.push('回踩挂单:MP偏离' + _dev.pct.toFixed(2) + '%(>' + _pbTh + '%),按次日开盘价成交 ✓');
+          }
+        }
       }
       if (!_blocked) {
         const _dn = r.c * params.mult * params.margin;
