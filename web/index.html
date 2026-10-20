@@ -1224,7 +1224,8 @@ function runBacktest() {
         <label style="cursor:pointer;"><input type="checkbox" id="t_nc" onchange="toggleChartLine()"> <span style="color:#a29bfe">近月连续</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_roll" checked onchange="toggleChartLine()"> <span style="color:#ff9f43">换月</span></label>\
-        <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期货成交量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期货持仓量</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+        <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>\
+        <label style="cursor:pointer;" title="Δ×持仓 = 做市商对冲这些期权要买卖的期货手数，勾选后柱高按此显示"><input type="checkbox" id="t_oids" checked onchange="toggleChartLine()"> <span style="color:#00d2d3">对冲手数</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期货成交量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期货持仓量</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">最大回撤区间</th><th class="num">最长回撤期</th></tr>' + yrHtml + '</table></div>\
@@ -1773,11 +1774,11 @@ const OPT_PARAMS = {
   lookback:   { label: 'Lookback',    range: [5, 60, 1] },
   minPct:     { label: 'Min%',        range: [0.1, 2, 0.1], unit: '%' },
   maxPos:     { label: '仓位%',       range: [5, 100, 5], unit: '%' },
-  beTh:       { label: '保本%',       range: [0.5, 5, 0.1], unit: '%' },
+  beTh:       { label: '保本%',       range: [0.5, 2, 0.1], unit: '%' },
   lockPct:    { label: '锁定%',       range: [10, 75, 5], unit: '%' },
-  atrPeriod:  { label: 'ATR周期',     range: [5, 250, 1] },
-  entryAtrMult:  { label: '入场ATR倍',   range: [0.3, 2.5, 0.1] },
-  atrMult:    { label: '追踪ATR倍',     range: [0.3, 2.5, 0.1] },
+  atrPeriod:  { label: 'ATR周期',     range: [5, 120, 1] },
+  entryAtrMult:  { label: '入场ATR倍',   range: [0.3, 2, 0.1] },
+  atrMult:    { label: '追踪ATR倍',     range: [0.3, 2, 0.1] },
   skipCount:  { label: '跳过次',      range: [0, 5, 1] },
   volWindow:  { label: '分位窗口',    range: [0, 200, 10], unit: '天' },
   priceSlopeTh: { label: '逆势挡',    range: [0, 0.01, 0.001], prec: 3 },
@@ -2671,7 +2672,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     const end = Math.min(n, start + vis + 1);
     const offset = start * state.barW;
     // 末日可见时, 在末根K线右侧补画下一交易日虚拟K线
-    const showGhost = n > 0 && end >= n && isFinite(mainAtr[n - 1]) && mainAtr[n - 1] > 0;
+    const showGhost = n > 0 && start < n && end >= n && isFinite(mainAtr[n - 1]) && mainAtr[n - 1] > 0;
 
     let minP = Infinity, maxP = -Infinity;
     for (let i = start; i < end; i++) {
@@ -2680,6 +2681,12 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       maxP = Math.max(maxP, row.h, row.mp, row.bec ?? -Infinity, row.bep ?? -Infinity, row.nc ?? -Infinity, row.oc ?? -Infinity);
       const _av = mainAtr[i];
       if (isFinite(_av)) { minP = Math.min(minP, row.c - _av); maxP = Math.max(maxP, row.c + _av); }
+    }
+    if (!isFinite(minP) || !isFinite(maxP)) {
+      // 视图完全拖出数据(右侧无限留白): 用末根K线±ATR维持纵轴
+      const _lr = data[n - 1];
+      const _la = (isFinite(mainAtr[n - 1]) && mainAtr[n - 1] > 0) ? mainAtr[n - 1] : Math.max(_lr.h - _lr.l, _lr.c * 0.01);
+      minP = _lr.c - _la; maxP = _lr.c + _la;
     }
     // 虚拟K线纳入纵轴范围, 保证完整可见
     if (showGhost) {
@@ -3364,7 +3371,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     ctx.fillRect(pad.left, sbY, cw, sbH);
     if (state.barW * n > cw) {
       const thumbW = Math.max(20, cw * cw / (state.barW * n));
-      const thumbX = pad.left + (state.start / n) * cw;
+      const thumbX = pad.left + (Math.min(state.start, n) / n) * cw;
       ctx.fillStyle = '#576574';
       ctx.fillRect(thumbX, sbY, thumbW, sbH);
     }
@@ -3820,11 +3827,18 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           let chain;
           try { chain = JSON.parse(ocStr); } catch(e) { chain = null; }
           _oiChain = chain;
+          // Δ加权模式: 柱高=|Σ(Δ×OI)|, 即做市商对冲要买卖的期货手数; 无Δ字段时回退原始OI
+          const _dwChk = document.getElementById('t_oids');
+          const _dwMode = !!(_dwChk && _dwChk.checked);
+          const _hasDw = !!(chain && chain.length && chain.some(it => it.cdw != null || it.pdw != null));
+          const _useDw = _dwMode && _hasDw;
+          const _cv = it => _useDw ? Math.abs(it.cdw || 0) : it.co;
+          const _pv = it => _useDw ? Math.abs(it.pdw || 0) : it.po;
           if (chain && chain.length > 0) {
             const px = r.c;
-            // 资金集中区：call+put OI 最大的行权价
-            let peakS = chain[0].s, peakOi = chain[0].co + chain[0].po;
-            chain.forEach(it => { const tot = it.co + it.po; if (tot > peakOi) { peakOi = tot; peakS = it.s; } });
+            // 资金集中区：call+put OI 最大的行权价(Δ加权模式用对冲当量)
+            let peakS = chain[0].s, peakOi = _cv(chain[0]) + _pv(chain[0]);
+            chain.forEach(it => { const tot = _cv(it) + _pv(it); if (tot > peakOi) { peakOi = tot; peakS = it.s; } });
             // 预期亏损（=卖方收获权利金）：价格落在指定位置时买方的总内在价值
             let mpLoss = 0, pxLoss = 0;
             const mp = r.mp;
@@ -3839,7 +3853,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
             chain.forEach(it => { if ((it.civ != null && it.civ > 0) || (it.piv != null && it.piv > 0)) _ivSmile = true; });
             if (oiHint) {
               oiHint.style.display = 'block';
-              oiHint.innerHTML = '<span style="color:#5cd85a">绿=看涨OI</span> <span style="color:#ff6b6b">红=看跌OI</span> <span style="color:#e8c84a">黄=现价' + px + '</span> <span style="color:#a29bfe">紫=痛点' + mp + '</span> 最高柱=' + peakS + ' (' + peakOi.toLocaleString() + '手) 预期收获权利金: 痛点' + fmtLoss(mpLoss) + ' 现价' + fmtLoss(pxLoss);
+              const _barLeg = _useDw
+                ? '<span style="color:#5cd85a">绿=Call对冲(需买期货)</span> <span style="color:#ff6b6b">红=Put对冲(需卖期货)</span>'
+                : '<span style="color:#5cd85a">绿=看涨OI</span> <span style="color:#ff6b6b">红=看跌OI</span>';
+              oiHint.innerHTML = _barLeg + ' <span style="color:#e8c84a">黄=现价' + px + '</span> <span style="color:#a29bfe">紫=痛点' + mp + '</span> ' + (_useDw ? '对冲手数最多=' : '最高柱=') + peakS + ' (' + Math.round(peakOi).toLocaleString() + '手) 预期收获权利金: 痛点' + fmtLoss(mpLoss) + ' 现价' + fmtLoss(pxLoss);
               // MP置信度/集中度
               let _mcTxt = '';
               if (mp >= chain[0].s && mp <= chain[chain.length - 1].s) {
@@ -3855,12 +3872,15 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
                 _mcTxt = ' MP置信' + conf + '% 集中' + conc + 'x';
               }
               oiHint.innerHTML += _mcTxt;
+              if (_useDw) oiHint.innerHTML += ' | <span style="color:#00d2d3">柱=Δ×持仓, 即做市商对冲要买卖的期货手数</span> <span style="color:#5cd85a">绿实线=CallΔ0.25 绿虚线=Δ0.10</span> <span style="color:#ff6b6b">红实线=PutΔ-0.25 红虚线=Δ-0.10</span>(虚线=更虚值)';
+              else if (_dwMode && !_hasDw) oiHint.innerHTML += ' | <span style="color:#576574">该日链无Δ数据</span>';
               if (_ivSmile) {
                 oiHint.innerHTML += ' | <span style="color:#3498db">CallIV</span><span style="color:#e67e22"> PutIV</span> 曲线(IV微笑): 平值附近低=定价合理, 两边高=尾部风险定价; 左高右低=Put贵(恐慌/看跌), 右高左低=Call贵(追涨/看涨)';
               }
             }
             let maxOi = 0;
-            chain.forEach(it => { if (it.co > maxOi) maxOi = it.co; if (it.po > maxOi) maxOi = it.po; });
+            chain.forEach(it => { const c = _cv(it), p = _pv(it); if (c > maxOi) maxOi = c; if (p > maxOi) maxOi = p; });
+            if (maxOi <= 0) maxOi = 1;
             const opad = { top: 8, bottom: 20, left: 8, right: _ivSmile ? 28 : 8 };
             const ocw = oiW - opad.left - opad.right;
             const och = oiH - opad.top - opad.bottom;
@@ -3886,13 +3906,14 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
             const barW = Math.max(2, ocw / chain.length * 0.6);
             chain.forEach(it => {
               const bx = s2x(it.s);
-              if (it.co > 0) {
-                const bh = (it.co / maxOi) * (och / 2);
+              const cVal = _cv(it), pVal = _pv(it);
+              if (cVal > 0) {
+                const bh = (cVal / maxOi) * (och / 2);
                 ox.fillStyle = 'rgba(92,216,90,0.55)';
                 ox.fillRect(bx - barW/2, midY - bh, barW, bh);
               }
-              if (it.po > 0) {
-                const bh = (it.po / maxOi) * (och / 2);
+              if (pVal > 0) {
+                const bh = (pVal / maxOi) * (och / 2);
                 ox.fillStyle = 'rgba(255,107,107,0.55)';
                 ox.fillRect(bx - barW/2, midY, barW, bh);
               }
@@ -3956,6 +3977,36 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
             for (let i = 0; i < chain.length; i += sStep) {
               ox.fillText(chain[i].s, s2x(chain[i].s), oiH - 6);
             }
+            // Δ加权模式: 最近月Δ=±0.25/±0.10 虚实分界(绿=Call, 红=Put, 实线=0.25 虚线=0.10)
+            // 画在柱子/IV曲线之后, 避免被覆盖
+            if (_useDw) {
+              const _findS = (key, target) => {
+                let best = null, bd = Infinity;
+                chain.forEach(it => { const v = it[key]; if (v == null) return; const d = Math.abs(v - target); if (d < bd) { bd = d; best = it.s; } });
+                return best;
+              };
+              [[_findS('cd', 0.25), '#5cd85a', 2, [], 'CΔ.25'],
+               [_findS('cd', 0.10), 'rgba(92,216,90,0.85)', 1.5, [4, 2], 'CΔ.10'],
+               [_findS('pd', -0.25), '#ff6b6b', 2, [], 'PΔ-.25'],
+               [_findS('pd', -0.10), 'rgba(255,107,107,0.85)', 1.5, [4, 2], 'PΔ-.10']]
+                .forEach(([ms, col, lw, dash, tag], li) => {
+                  if (ms == null || ms < minS || ms > maxS) return;
+                  const mx = s2x(ms);
+                  ox.strokeStyle = col; ox.lineWidth = lw; ox.setLineDash(dash);
+                  ox.beginPath(); ox.moveTo(mx, opad.top); ox.lineTo(mx, opad.top + och); ox.stroke();
+                  ox.setLineDash([]);
+                  // 线上小标签: Call标顶部, Put标底部
+                  ox.font = '9px sans-serif';
+                  ox.textAlign = 'center'; ox.textBaseline = 'middle';
+                  const tw2 = ox.measureText(tag).width + 6;
+                  const ty = li < 2 ? opad.top + 7 : opad.top + och - 7;
+                  ox.fillStyle = 'rgba(10,22,40,0.9)';
+                  ox.fillRect(mx - tw2 / 2, ty - 6, tw2, 12);
+                  ox.fillStyle = col;
+                  ox.fillText(tag, mx, ty);
+                });
+              ox.textAlign = 'left'; ox.textBaseline = 'alphabetic';
+            }
             // 右下角标注
             // ox.textAlign = 'right'; ox.fillStyle = '#576574'; ox.font = '9px sans-serif';
             // ox.fillText('现价 ' + px, _ivSmile ? oiW - 30 : oiW - 8, oiH - 6);
@@ -3971,7 +4022,17 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
               ox.beginPath(); ox.moveTo(hx2, opad.top); ox.lineTo(hx2, opad.top + och); ox.stroke();
               ox.setLineDash([]);
               // 提示标签
-              const lbl = hc.s + '  Call:' + hc.co.toLocaleString() + '  Put:' + hc.po.toLocaleString() + '  合计:' + (hc.co+hc.po).toLocaleString();
+              let lbl = hc.s + '  Call:' + hc.co.toLocaleString();
+              if (hc.cd != null) lbl += '(Δ' + hc.cd.toFixed(2) + ')';
+              lbl += '  Put:' + hc.po.toLocaleString();
+              if (hc.pd != null) lbl += '(Δ' + hc.pd.toFixed(2) + ')';
+              if (hc.cdw != null || hc.pdw != null) {
+                const _net = Math.round((hc.cdw || 0) + (hc.pdw || 0));
+                lbl += '  做市商对冲: 买' + Math.round(hc.cdw || 0).toLocaleString() + '手 卖' + Math.abs(Math.round(hc.pdw || 0)).toLocaleString() + '手 净' + (_net < 0 ? '卖' : '买') + Math.abs(_net).toLocaleString() + '手';
+              } else {
+                lbl += '  合计:' + (hc.co + hc.po).toLocaleString();
+              }
+              if (_useDw) lbl += ' [对冲手数]';
               ox.font = '10px sans-serif';
               const tw = ox.measureText(lbl).width;
               let lx = hx2 - tw/2 - 6;
@@ -4034,7 +4095,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       // 位移超过 3px 才算拖动, 否则保留为点击(锁定)
       if (Math.abs(e.clientX - state.dragStartClientX) > 3) state.didDrag = true;
       const dx = getDataX(e.clientX) - state.dragStartX;
-      state.start = Math.max(0, Math.min(n - getVisibleCount() + 60, state.dragStartIdx - dx / state.barW));
+      state.start = Math.max(0, state.dragStartIdx - dx / state.barW);
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
     } else {
       const idx = Math.max(0, Math.min(n - 1, rawIdx));
@@ -4061,7 +4122,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     const idxUnderMouse = state.start + mx / state.barW;
     const zoom = e.deltaY > 0 ? 0.85 : 1.18;
     const newBarW = Math.max(2, Math.min(40, state.barW * zoom));
-    state.start = Math.max(0, Math.min(n - Math.ceil(cw / newBarW) + 60, idxUnderMouse - mx / newBarW));
+    state.start = Math.max(0, idxUnderMouse - mx / newBarW);
     state.barW = newBarW;
     render();
   };
@@ -4086,7 +4147,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     if (e.touches.length === 1 && state.dragging) {
       const touch = e.touches[0];
       const dx = getDataX(touch.clientX) - state.dragStartX;
-      state.start = Math.max(0, Math.min(n - getVisibleCount() + 60, state.dragStartIdx - dx / state.barW));
+      state.start = Math.max(0, state.dragStartIdx - dx / state.barW);
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
       if (!state.pinned) {
         const idx = getBarIdx(touch.clientX);
@@ -4104,7 +4165,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - br.left;
       const idxUnderMouse = state.start + mx / state.barW;
       const newBarW = Math.max(2, Math.min(40, state.barW * scale));
-      state.start = Math.max(0, Math.min(n - Math.ceil(cw / newBarW) + 60, idxUnderMouse - mx / newBarW));
+      state.start = Math.max(0, idxUnderMouse - mx / newBarW);
       state.barW = newBarW;
       state.pinchDist = dist;
       if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
@@ -4132,7 +4193,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         // 位移超过 3px 才算拖动, 否则保留为点击(锁定)
         if (Math.abs(e.clientX - state.dragStartClientX) > 3) state.didDrag = true;
         const dx = getDataX(e.clientX) - state.dragStartX;
-        state.start = Math.max(0, Math.min(n - getVisibleCount() + 60, state.dragStartIdx - dx / state.barW));
+        state.start = Math.max(0, state.dragStartIdx - dx / state.barW);
         if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
       } else if (!state.pinned) {
         const idx = Math.max(0, Math.min(n - 1, getBarIdx(e.clientX)));
@@ -4150,7 +4211,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       const idxUnderMouse = state.start + mx / state.barW;
       const zoom = e.deltaY > 0 ? 0.85 : 1.18;
       const newBarW = Math.max(2, Math.min(40, state.barW * zoom));
-      state.start = Math.max(0, Math.min(n - Math.ceil(cw / newBarW) + 60, idxUnderMouse - mx / newBarW));
+      state.start = Math.max(0, idxUnderMouse - mx / newBarW);
       state.barW = newBarW;
       render();
     };
@@ -4178,7 +4239,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       const br = subCanvas.getBoundingClientRect();
       if (e.touches.length === 1 && state.dragging) {
         const dx = getDataX(e.touches[0].clientX) - state.dragStartX;
-        state.start = Math.max(0, Math.min(n - getVisibleCount() + 60, state.dragStartIdx - dx / state.barW));
+        state.start = Math.max(0, state.dragStartIdx - dx / state.barW);
         if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }
       } else if (e.touches.length === 2 && state.pinchDist > 0) {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -4188,7 +4249,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - br.left;
         const idxUnderMouse = state.start + mx / state.barW;
         const newBarW = Math.max(2, Math.min(40, state.barW * scale));
-        state.start = Math.max(0, Math.min(n - Math.ceil(cw / newBarW) + 60, idxUnderMouse - mx / newBarW));
+        state.start = Math.max(0, idxUnderMouse - mx / newBarW);
         state.barW = newBarW;
         state.pinchDist = dist;
         if (!state.renderPending) { state.renderPending = true; requestAnimationFrame(function() { state.renderPending = false; render(); }); }

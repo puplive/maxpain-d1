@@ -372,6 +372,7 @@ def process_one(sym, fut, opt, mult=100):
 
         nearest_expiry = None
         nearest_code = None
+        nearest_ym = None
         nearest_dte = 0
         seen = set()
         for ym in o['contract_ym'].dropna().unique():
@@ -381,6 +382,7 @@ def process_one(sym, fut, opt, mult=100):
             expiry_str = _cffex_expiry(ym)
             if nearest_expiry is None or expiry_str < nearest_expiry:
                 nearest_expiry = expiry_str
+                nearest_ym = ym
                 nearest_code = OPT_UNDERLYING.get(str(o.loc[o['contract_ym']==ym, 'product'].iloc[0]), sym) + ym
         if nearest_expiry:
             td = datetime.date.fromisoformat(date)
@@ -391,6 +393,14 @@ def process_one(sym, fut, opt, mult=100):
         pt_iv = o.pivot_table(index='strike', columns='type', values='iv', aggfunc='mean')
         pt_vol = o.pivot_table(index='strike', columns='type', values='volume', aggfunc='sum')
         pt_close = o.pivot_table(index='strike', columns='type', values='close', aggfunc='mean')
+        # Δ加权对冲当量(全月份可加) + 最近月Δ(单合约)
+        _o2 = o.assign(_dw=pd.to_numeric(o['delta'], errors='coerce').fillna(0) * pd.to_numeric(o['oi'], errors='coerce').fillna(0))
+        pt_dw = _o2.pivot_table(index='strike', columns='type', values='_dw', aggfunc='sum', fill_value=0)
+        pt_nd = pd.DataFrame()
+        if nearest_ym:
+            _near = o[o['contract_ym'] == nearest_ym]
+            if not _near.empty:
+                pt_nd = _near.pivot_table(index='strike', columns='type', values='delta', aggfunc='first')
         chain_list = []
         for s in pt_oi.index:
             n = int(s)
@@ -412,6 +422,14 @@ def process_one(sym, fut, opt, mult=100):
                 rc = pt_close.loc[s]
                 if rc.get('C', 0) > 0: item['cclose'] = round(float(rc['C']), 2)
                 if rc.get('P', 0) > 0: item['pclose'] = round(float(rc['P']), 2)
+            if s in pt_dw.index:
+                rdw = pt_dw.loc[s]
+                if rdw.get('C', 0) != 0: item['cdw'] = round(float(rdw['C']), 1)
+                if rdw.get('P', 0) != 0: item['pdw'] = round(float(rdw['P']), 1)
+            if s in pt_nd.index:
+                rnd = pt_nd.loc[s]
+                if pd.notna(rnd.get('C')): item['cd'] = round(float(rnd['C']), 3)
+                if pd.notna(rnd.get('P')): item['pd'] = round(float(rnd['P']), 3)
             chain_list.append(item)
         oc_chain = json.dumps(chain_list, separators=(',', ':'))
 
