@@ -23,13 +23,14 @@ commands = [
     f"python scripts/convert_dce_xlsx.py --date {date_day}",
     f"python scripts/convert_cffex.py --date {date_day}",
     f"python scripts/convert_gfex.py --date {date_day}",
+    f"python scripts/convert_shfe.py --date {date_day}",
 ]
 
 def run(cmd):
     print(f"▶️  {cmd}")
     subprocess.run(cmd, shell=True)
 
-with ThreadPoolExecutor(max_workers=4) as executor:
+with ThreadPoolExecutor(max_workers=5) as executor:
     executor.map(run, commands)
 
 print("✅ 转换完成，构建中...")

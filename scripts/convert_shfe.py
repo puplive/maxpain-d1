@@ -221,7 +221,7 @@ def calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar):
 
     valid = iv.notna() & (iv > 1e-6) & (oi > 0) & strike.notna() & (strike > 0)
     if not valid.any():
-        return 0.0
+        return 0.0, 0.0, 0.0
 
     iv, oi, strike = iv[valid], oi[valid], strike[valid]
     cp = cp[valid]
@@ -257,8 +257,11 @@ def calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar):
     gamma = pdf / (px_arr * iv * sqrt_T)
     gex = gamma * oi * mult * px_arr * px_arr * 0.01
     gex = gex * cp.map({'C': 1, 'P': -1})
+    # 价格±1%时对冲手数的变化(手) / 期权持仓对IV的敏感度(元/1%IV)
+    gam = gamma * oi * px_arr * 0.01
+    veg = pdf * px_arr * sqrt_T * oi * mult * 0.01
 
-    return round(float(gex.sum()), 2)
+    return round(float(gex.sum()), 2), round(float(gam.sum()), 1), round(float(veg.sum()), 0)
 
 
 def calc_be(opt_df, px, is_call):
@@ -459,7 +462,7 @@ def process_one(sym, fut, opt, mult=10):
         civ = calls[calls['delta'].between(0.20, 0.30)]['iv'].mean()
         piv = puts[puts['delta'].between(-0.30, -0.20)]['iv'].mean()
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
-        gex = calc_gex(o, px, mult, fut_price_map, date, calendar)
+        gex, gam, veg = calc_gex(o, px, mult, fut_price_map, date, calendar)
 
         # 期权成交量/持仓量
         vol_call = cv
@@ -572,7 +575,7 @@ def process_one(sym, fut, opt, mult=10):
         result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2),
                         'h': row['h'], 'l': row['l'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep,
-                        'vr': vr, 'ivs': ivs, 'gex': gex, 'oc': oc_val, 'oc_chain': oc_chain,
+                        'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'oc': oc_val, 'oc_chain': oc_chain,
                         'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,
                         'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
                         'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,

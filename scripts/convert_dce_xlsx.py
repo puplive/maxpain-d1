@@ -177,7 +177,7 @@ def calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar):
 
     valid = iv.notna() & (iv > 1e-6) & (oi > 0) & strike.notna() & (strike > 0)
     if not valid.any():
-        return 0.0
+        return 0.0, 0.0, 0.0
 
     iv, oi, strike = iv[valid], oi[valid], strike[valid]
     cp = cp[valid]
@@ -213,8 +213,11 @@ def calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar):
     gamma = pdf / (px_arr * iv * sqrt_T)
     gex = gamma * oi * mult * px_arr * px_arr * 0.01
     gex = gex * cp.map({'C': 1, 'P': -1})
+    # 价格±1%时对冲手数的变化(手) / 期权持仓对IV的敏感度(元/1%IV)
+    gam = gamma * oi * px_arr * 0.01
+    veg = pdf * px_arr * sqrt_T * oi * mult * 0.01
 
-    return round(float(gex.sum()), 2)
+    return round(float(gex.sum()), 2), round(float(gam.sum()), 1), round(float(veg.sum()), 0)
 
 
 def calc_be(opt_df, px, is_call):
@@ -373,7 +376,7 @@ def process_symbol(sym, prefix, year, date=None):
 
         day_fut = fut[fut['date'] == dt]
         fut_prices = dict(zip(day_fut['合约名称'], day_fut['close']))
-        gex = calc_gex(opt, px, DCE_MULT.get(sym, 10), fut_prices, dt, calendar)
+        gex, gam, veg = calc_gex(opt, px, DCE_MULT.get(sym, 10), fut_prices, dt, calendar)
 
         # 期权成交量/持仓量
         vol_call = cv
@@ -488,7 +491,7 @@ def process_symbol(sym, prefix, year, date=None):
             'h': round(float(row['high']), 2), 'l': round(float(row['low']), 2),
             'nc': round(fut_nc.get(dt, px), 2), 'oc': oc_val,
             'mp': mp, 'co': co, 'po': po,
-            'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex,
+            'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg,
             'oc_chain': oc_chain,
             'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,
             'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
