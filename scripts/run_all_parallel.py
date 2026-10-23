@@ -23,7 +23,7 @@ commands = [
     f"python scripts/convert_dce_xlsx.py --date {date_day}",
     f"python scripts/convert_cffex.py --date {date_day}",
     f"python scripts/convert_gfex.py --date {date_day}",
-    f"python scripts/convert_shfe.py --date {date_day}",
+    # f"python scripts/convert_shfe.py --date {date_day}",
 ]
 
 def run(cmd):
