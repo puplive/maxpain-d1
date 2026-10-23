@@ -45,7 +45,7 @@ SYMBOL_CFG: dict[str, dict] = {
     'CJ': {'name': '红枣期权',             'exchange': 'czce', 'mult': 5},
     'FG': {'name': '玻璃期权',             'exchange': 'czce', 'mult': 20},
     'PX': {'name': '对二甲苯期权',          'exchange': 'czce', 'mult': 5},
-    'SH': {'name': '烧碱期权',             'exchange': 'czce', 'mult': 10},
+    'SH': {'name': '烧碱期权',             'exchange': 'czce', 'mult': 30},
     # ===== DCE (大商所) =====
     'C':  {'name': '玉米期权',             'exchange': 'dce', 'mult': 10},
     'M':  {'name': '豆粕期权',             'exchange': 'dce', 'mult': 10},
@@ -60,7 +60,7 @@ SYMBOL_CFG: dict[str, dict] = {
     'Y':  {'name': '豆油期权',             'exchange': 'dce', 'mult': 10},
     'EG': {'name': '乙二醇期权',           'exchange': 'dce', 'mult': 10},
     'EB': {'name': '苯乙烯期权',           'exchange': 'dce', 'mult': 5},
-    'JD': {'name': '鸡蛋期权',             'exchange': 'dce', 'mult': 5},
+    'JD': {'name': '鸡蛋期权',             'exchange': 'dce', 'mult': 10},
     'CS': {'name': '玉米淀粉期权',         'exchange': 'dce', 'mult': 10},
     'LH': {'name': '生猪期权',             'exchange': 'dce', 'mult': 16},
     'LG': {'name': '原木期权',             'exchange': 'dce', 'mult': 90},

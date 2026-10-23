@@ -28,7 +28,7 @@ SYMBOL_CFG = {
     'CJ': {'name': '红枣',    'exchange': 'czce', 'mult': 5},
     'FG': {'name': '玻璃',    'exchange': 'czce', 'mult': 20},
     'PX': {'name': '对二甲苯', 'exchange': 'czce', 'mult': 5},
-    'SH': {'name': '烧碱',    'exchange': 'czce', 'mult': 10},
+    'SH': {'name': '烧碱',    'exchange': 'czce', 'mult': 30},
     # DCE
     'C':  {'name': '玉米',     'exchange': 'dce', 'mult': 10},
     'M':  {'name': '豆粕',     'exchange': 'dce', 'mult': 10},
@@ -43,7 +43,7 @@ SYMBOL_CFG = {
     'Y':  {'name': '豆油',     'exchange': 'dce', 'mult': 10},
     'EG': {'name': '乙二醇',   'exchange': 'dce', 'mult': 10},
     'EB': {'name': '苯乙烯',   'exchange': 'dce', 'mult': 5},
-    'JD': {'name': '鸡蛋',     'exchange': 'dce', 'mult': 5},
+    'JD': {'name': '鸡蛋',     'exchange': 'dce', 'mult': 10},
     'CS': {'name': '玉米淀粉', 'exchange': 'dce', 'mult': 10},
     'LH': {'name': '生猪',     'exchange': 'dce', 'mult': 16},
     'LG': {'name': '原木',     'exchange': 'dce', 'mult': 90},

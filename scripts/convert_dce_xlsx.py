@@ -29,7 +29,7 @@ DCE_SYMBOLS = {
 DCE_MULT = {
     'M': 10, 'C': 10, 'L': 5, 'V': 5, 'PP': 5,
     'I': 100, 'PG': 20, 'Y': 10, 'P': 10, 'A': 10,
-    'B': 10, 'EG': 10, 'EB': 5, 'JD': 5, 'CS': 10,
+    'B': 10, 'EG': 10, 'EB': 5, 'JD': 10, 'CS': 10,
     'LH': 16, 'LG': 90,
 }
 
@@ -177,7 +177,7 @@ def calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar):
 
     valid = iv.notna() & (iv > 1e-6) & (oi > 0) & strike.notna() & (strike > 0)
     if not valid.any():
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0
 
     iv, oi, strike = iv[valid], oi[valid], strike[valid]
     cp = cp[valid]
@@ -217,7 +217,14 @@ def calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar):
     gam = gamma * oi * px_arr * 0.01
     veg = pdf * px_arr * sqrt_T * oi * mult * 0.01
 
-    return round(float(gex.sum()), 2), round(float(gam.sum()), 1), round(float(veg.sum()), 0)
+    # ±20%带内 Γ×OI 最集中的行权价(与MP同过滤)
+    band = (strike.values >= main_px * 0.8) & (strike.values <= main_px * 1.2)
+    gpk = 0
+    if band.any():
+        w = pd.Series(gamma[band] * oi.values[band]).groupby(strike.values[band]).sum()
+        gpk = int(w.idxmax())
+
+    return round(float(gex.sum()), 2), round(float(gam.sum()), 1), round(float(veg.sum()), 0), gpk
 
 
 def calc_be(opt_df, px, is_call):
@@ -376,7 +383,7 @@ def process_symbol(sym, prefix, year, date=None):
 
         day_fut = fut[fut['date'] == dt]
         fut_prices = dict(zip(day_fut['合约名称'], day_fut['close']))
-        gex, gam, veg = calc_gex(opt, px, DCE_MULT.get(sym, 10), fut_prices, dt, calendar)
+        gex, gam, veg, gpk = calc_gex(opt, px, DCE_MULT.get(sym, 10), fut_prices, dt, calendar)
 
         # 期权成交量/持仓量
         vol_call = cv
@@ -491,7 +498,7 @@ def process_symbol(sym, prefix, year, date=None):
             'h': round(float(row['high']), 2), 'l': round(float(row['low']), 2),
             'nc': round(fut_nc.get(dt, px), 2), 'oc': oc_val,
             'mp': mp, 'co': co, 'po': po,
-            'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg,
+            'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'gpk': gpk,
             'oc_chain': oc_chain,
             'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,
             'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,

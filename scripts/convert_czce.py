@@ -26,7 +26,7 @@ CZCE_MULT = {
     'TA': 5, 'MA': 10, 'SA': 20, 'SR': 10, 'CF': 5,
     'RM': 10, 'OI': 10, 'PK': 5, 'PF': 5, 'SM': 5,
     'SF': 5, 'UR': 20, 'AP': 10, 'CJ': 5, 'FG': 20,
-    'PX': 5, 'SH': 10,
+    'PX': 5, 'SH': 30,
 }
 
 
@@ -180,7 +180,7 @@ def calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar):
 
     valid = iv.notna() & (iv > 1e-6) & (oi > 0) & strike.notna() & (strike > 0)
     if not valid.any():
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0
 
     iv, oi, strike = iv[valid], oi[valid], strike[valid]
     cp = cp[valid]
@@ -220,7 +220,14 @@ def calc_gex(opt_df, main_px, mult, fut_prices, trade_date, calendar):
     gam = gamma * oi * px_arr * 0.01
     veg = pdf * px_arr * sqrt_T * oi * mult * 0.01
 
-    return round(float(gex.sum()), 2), round(float(gam.sum()), 1), round(float(veg.sum()), 0)
+    # ±20%带内 Γ×OI 最集中的行权价(与MP同过滤)
+    band = (strike.values >= main_px * 0.8) & (strike.values <= main_px * 1.2)
+    gpk = 0
+    if band.any():
+        w = pd.Series(gamma[band] * oi.values[band]).groupby(strike.values[band]).sum()
+        gpk = int(w.idxmax())
+
+    return round(float(gex.sum()), 2), round(float(gam.sum()), 1), round(float(veg.sum()), 0), gpk
 
 
 def calc_be(opt_df, px, is_call):
@@ -434,7 +441,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
         ivs = round(piv - civ, 4) if (pd.notna(civ) and pd.notna(piv)) else None
         day_fut = fut[fut['date'] == date]
         fut_prices = dict(zip(day_fut['合约代码'], pd.to_numeric(day_fut['今收盘'], errors='coerce')))
-        gex, gam, veg = calc_gex(o, px, mult, fut_prices, date, calendar)
+        gex, gam, veg, gpk = calc_gex(o, px, mult, fut_prices, date, calendar)
 
         # 期权成交量/持仓量
         vol_call = cv
@@ -545,7 +552,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
         result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2), 'oc': oc_val,
                         'h': row['h'], 'l': row['l'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep,
-                        'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'oc_chain': oc_chain,
+                        'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'gpk': gpk, 'oc_chain': oc_chain,
                         'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,
                         'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
                         'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,
