@@ -2258,7 +2258,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   var _subFutVol, _subMinFv, _subMaxFv;
   var _subFutOi, _subMinFoi, _subMaxFoi;
   var _subSkew, _subMinSk, _subMaxSk;
-	  var _subAtr, _subMinAtr, _subMaxAtr;
+	  var _subAtr, _subTr, _subMinAtr, _subMaxAtr;
 	  var _subMpConf, _subMinMc, _subMaxMc;
 	  var _subNoiseL, _subNoiseS, _subMinNoise, _subMaxNoise;
   var _subHdg, _subMaxHdgAbs;
@@ -2290,7 +2290,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       { key: 'iv', label: 'IV偏度', color: '#2ecc71' },
       { key: 'futVol', label: '期货成交量', color: '#54a0ff' },
       { key: 'futOi', label: '期货持仓量', color: '#f368e0' },
-      { key: 'atr', label: 'ATR', color: '#e84393' },
+      { key: 'atr', label: 'ATR/TR', color: '#e84393' },
       { key: 'mpConf', label: 'MP置信', color: '#00b894' },
       { key: 'noise', label: '噪音', color: '#0f9b8e' },
       { key: 'oids', label: '需对冲手数', color: '#00d2d3' },
@@ -2340,6 +2340,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     _subFutOi = new Float64Array(n);
     _subSkew = new Float64Array(n);
 	    _subAtr = new Float64Array(n);
+	    _subTr = new Float64Array(n);
 	    _subMpConf = new Float64Array(n);
     _subNoiseL = new Float64Array(n);
     _subNoiseS = new Float64Array(n);
@@ -2421,12 +2422,12 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       _subVeg[i] = vgv;
       if (vgv > _subMaxVeg) _subMaxVeg = vgv;
       if (vgv > 0) _hasVega = true;
-      // ATR
+      // ATR / TR
+      const tr = i === 0 ? r.h - r.l : Math.max(r.h - r.l, Math.abs(r.h - data[i-1].c), Math.abs(r.l - data[i-1].c));
+      _subTr[i] = tr;
       if (i === 0) {
-        _subAtr[i] = r.h - r.l;
+        _subAtr[i] = tr;
       } else {
-        const pc = data[i-1].c;
-        const tr = Math.max(r.h - r.l, Math.abs(r.h - pc), Math.abs(r.l - pc));
         _subAtr[i] = (_subAtr[i-1] * (params.atrPeriod - 1) + tr) / params.atrPeriod;
       }
       if (g < _subMinG) _subMinG = g;
@@ -2866,8 +2867,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
 
     if (document.getElementById('t_mp').checked) {
     ctx.strokeStyle = '#ffd93d';
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = 0.7;
+    ctx.lineWidth = 1.2;
+    ctx.globalAlpha = 1;
     const mpBw = Math.max(state.barW, 2);
     let mpPy = null, mpPi = -9;
     for (let i = start; i < end && i < n; i++) {
@@ -2886,8 +2887,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     // EMA 线
     if (document.getElementById('t_ema').checked) {
     ctx.strokeStyle = '#54a0ff';
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = 0.7;
+    ctx.lineWidth = 1.2;
+    ctx.globalAlpha = 1;
     ctx.setLineDash([2, 2]);
     ctx.beginPath();
     let emaVal = null, emaStarted = false;
@@ -3555,7 +3556,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       let vMinG = Infinity, vMaxG = -Infinity, vMinS = Infinity, vMaxS = -Infinity, vMinV = Infinity, vMaxV = -Infinity;
       let vMinGn = Infinity, vMaxGn = -Infinity;
       let vMinIv = Infinity, vMaxIv = -Infinity;
-      let vMinFv = Infinity, vMaxFv = -Infinity, vMinFoi = Infinity, vMaxFoi = -Infinity; let vMinSk = Infinity, vMaxSk = -Infinity; let vMinAtr = Infinity, vMaxAtr = -Infinity; let vMinMc = Infinity, vMaxMc = -Infinity;
+      let vMinFv = Infinity, vMaxFv = -Infinity, vMinFoi = Infinity, vMaxFoi = -Infinity; let vMinSk = Infinity, vMaxSk = -Infinity; let vMinAtr = Infinity, vMaxAtr = -Infinity; let vMinTr = Infinity, vMaxTr = -Infinity; let vMinMc = Infinity, vMaxMc = -Infinity;
       let vMinNoise = Infinity, vMaxNoise = -Infinity;
       let vMaxHdgAbs = 0, vMaxVeg = 0;
       for (let i = start; i < end && i < n; i++) {
@@ -3577,6 +3578,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         if (foi !== 0) { if (foi < vMinFoi) vMinFoi = foi; if (foi > vMaxFoi) vMaxFoi = foi; }
           const atrv2 = _subAtr[i];
           if (atrv2 !== 0) { if (atrv2 < vMinAtr) vMinAtr = atrv2; if (atrv2 > vMaxAtr) vMaxAtr = atrv2; }
+          const trv2 = _subTr[i];
+          if (trv2 > 0) { if (trv2 < vMinTr) vMinTr = trv2; if (trv2 > vMaxTr) vMaxTr = trv2; }
           const mc2 = _subMpConf[i];
           if (mc2 !== 0) { if (mc2 < vMinMc) vMinMc = mc2; if (mc2 > vMaxMc) vMaxMc = mc2; }
           if (i > 0) {
@@ -3613,6 +3616,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       else { const foir = vMaxFoi - vMinFoi || 1; vMinFoi -= foir * 0.1; vMaxFoi += foir * 0.1; }
       if (vMinAtr === Infinity || vMinAtr === vMaxAtr) { vMinAtr = _subMinAtr; vMaxAtr = _subMaxAtr; }
       else { const atrR2 = vMaxAtr - vMinAtr || 1; vMinAtr -= atrR2 * 0.1; vMaxAtr += atrR2 * 0.1; }
+      if (vMinTr === Infinity || vMinTr === vMaxTr) { vMinTr = 0; vMaxTr = vMaxTr === -Infinity || !(vMaxTr > 0) ? 1 : vMaxTr * 1.1; }
+      else { const trR2 = vMaxTr - vMinTr || 1; vMinTr -= trR2 * 0.1; vMaxTr += trR2 * 0.1; }
       if (vMinMc === Infinity || vMinMc === vMaxMc) { vMinMc = _subMinMc; vMaxMc = _subMaxMc; }
       else { const mcR2 = vMaxMc - vMinMc || 1; vMinMc -= mcR2 * 0.1; vMaxMc += mcR2 * 0.1; }
       if (vMinNoise === Infinity || vMinNoise === vMaxNoise) { vMinNoise = _subMinNoise; vMaxNoise = _subMaxNoise; }
@@ -3733,6 +3738,14 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           const v = vMinAtr + (vMaxAtr - vMinAtr) / 4 * i;
           const y = spad.top + (sch / 4) * (4 - i);
           sctx.fillText(v.toFixed(1), pad.left - 4, y + 3);
+        }
+        // TR 独立刻度(右轴)
+        sctx.fillStyle = '#ff9ecd';
+        sctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+          const v = vMinTr + (vMaxTr - vMinTr) / 4 * i;
+          const y = spad.top + (sch / 4) * (4 - i);
+          sctx.fillText(v.toFixed(1), W - 8, y + 3);
         }
       }
 
@@ -3918,6 +3931,22 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       }
 
       if (subVis.atr) {
+        // TR 当日真实波幅(未平滑)
+        sctx.strokeStyle = '#ff9ecd';
+        sctx.globalAlpha = 0.2;
+        sctx.lineWidth = 0.6;
+        sctx.beginPath();
+        started = false;
+        for (let i = start; i < end && i < n; i++) {
+          const x = toX(i);
+          const y = s2y(_subTr[i], vMinTr, vMaxTr);
+          if (_subTr[i] === 0 && !started) continue;
+          if (_subTr[i] === 0) { started = false; continue; }
+          if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
+        }
+        sctx.stroke();
+        sctx.globalAlpha = 1;
+        // ATR(周期平滑)
         sctx.strokeStyle = '#e84393';
         sctx.lineWidth = 1.2;
         sctx.beginPath();
@@ -4079,7 +4108,16 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         }
         if (subVis.atr) {
           sctx.fillStyle = '#e84393';
-          sctx.fillText('ATR(' + params.atrPeriod + '): ' + atrv3.toFixed(1), hx + 4, hoverY);
+          let atrPctTxt = '';
+          const _aw = params.volWindow || 0;
+          const _alo = _aw > 0 ? Math.max(0, hi - _aw) : 0;
+          let _ac = 0, _ab = 0;
+          for (let _aj = _alo; _aj < hi; _aj++) { const _av = _subAtr[_aj]; if (isFinite(_av)) { _ac++; if (_av < atrv3) _ab++; } }
+          if (_ac > 0) atrPctTxt = ' (分位' + Math.round(_ab / _ac * 100) + '%)';
+          sctx.fillText('ATR(' + params.atrPeriod + '): ' + atrv3.toFixed(1) + atrPctTxt, hx + 4, hoverY);
+          hoverY += 12;
+          sctx.fillStyle = '#ff9ecd';
+          sctx.fillText('TR: ' + _subTr[hi].toFixed(1), hx + 4, hoverY);
           hoverY += 12;
         }
         if (subVis.noise && hi > 0) {
