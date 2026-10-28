@@ -1224,9 +1224,12 @@ function runBacktest() {
         <label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_roll" checked onchange="toggleChartLine()"> <span style="color:#ff9f43">换月</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>\
-        <label style="cursor:pointer;" title="Γ×OI 最集中的行权价(±20%带内, 与MP同过滤)"><input type="checkbox" id="t_gpk" onchange="toggleChartLine()"> <span style="color:#ff6b81">Gamma峰值</span></label>\
+        <label style="cursor:pointer;" title="Γ×OI 最集中的行权价(±20%带内, 与MP同过滤)&#10;价格接近Gamma峰值行权价 → 做市商被迫追买期货对冲 → 推高价格。&#10;对冲需求释放完毕 → 买盘消失 → 价格自然回落。&#10;期权价格因为买方的不对称性，回落得比上涨时更快。&#10;用法: 可用作止盈/压力位参考。"><input type="checkbox" id="t_gpk" onchange="toggleChartLine()"> <span style="color:#ff6b81">Gamma峰值</span></label>\
+        <label style="cursor:pointer;" title="Call Wall: 各价位 Call Γ×OI 最集中的行权价(±20%带) → 做市商对冲空头看涨期权, 价格涨近时卖出期货, 形成天花板/强阻力。&#10;Put Wall: 各价位 Put Γ×OI 最集中的行权价 → 价格跌近时做市商买入期货, 形成地板/强支撑; 一旦跌破, 对冲买盘消失, 可能加速下跌。&#10;口径: oc_chain跨月汇总OI, 到期日T用近月连续dte。"><input type="checkbox" id="t_wall" onchange="toggleChartLine()"> <span style="color:#ff8c42">Call</span><span style="color:#2ecc71">/Put Wall</span></label>\
+        <label style="cursor:pointer;" title="Zero Gamma(Γ翻转点): 在现价±20%范围扫描假设价格, 重算各行权价Γ×OI(Call正/Put负, 跨月汇总OI, T=近月连续dte), 总Γ变号处为翻转点(取离现价最近)。&#10;价格在其上方: 做市商总Gamma为正, 逆势对冲(买跌卖涨), 抑制波动→稳定模式。&#10;价格在其下方: 总Gamma为负, 顺势对冲(追涨杀跌), 放大波动→动量模式。&#10;区间内同号(无变号)则不画线。"><input type="checkbox" id="t_zg" onchange="toggleChartLine()"> <span style="color:#b388ff">ZeroGamma</span></label>\
+        <label style="cursor:pointer;" title="Magnet(磁力点): 现价±20%带内按|Γ×OI|加权平均的行权价(Call/Put各自Γ取绝对值), 理论引力中心 → 价格有向其靠拢的倾向。&#10;Pin(钉住点): 现价±20%带内OI(Call+Put, 跨月汇总)最集中的行权价, 代表持仓锚定效应。&#10;口径: oc_chain跨月汇总OI, T=近月连续dte; SHFE无IV, Magnet不显示。"><input type="checkbox" id="t_mag" onchange="toggleChartLine()"> <span style="color:#74b9ff">Magnet</span>/<span style="color:#fdcb6e">Pin</span></label>\
         <label style="cursor:pointer;" title="最近月CallΔ≈0.25 / PutΔ≈-0.25 所在行权价: 绿=上边界, 红=下边界"><input type="checkbox" id="t_d25" onchange="toggleChartLine()"> <span style="color:#5cd85a">Δ25</span></label>\
-        <label style="cursor:pointer;" title="OI重心: 白=合计(现价±20%带内), 青=Call重心, 品红=Put重心"><input type="checkbox" id="t_oic" onchange="toggleChartLine()"> <span style="color:#ffffff">OI重心</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期货成交量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期货持仓量</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span> <span style="color:#576574">|</span> <span style="color:#00d2d3">净对冲</span><span style="color:#576574">=当日全部月份Σ(Δ×OI)净额, >0净买期货/&lt;0净卖期货</span> <span style="color:#576574">|</span> <span style="color:#f6b93b">Gamma场景</span><span style="color:#576574">=价格±1%时做市商需额外买卖的手数, 涨1%买/跌1%卖, 与净对冲共用刻度</span> <span style="color:#576574">|</span> <span style="color:#cddc39">Vega</span><span style="color:#576574">=期权持仓对IV变动的敏感度(元/1%IV), 做市商净卖期权, IV升1%约亏这个数, 独立刻度</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+        <label style="cursor:pointer;" title="OI重心: 白=合计(现价±20%带内), 青=Call重心, 品红=Put重心"><input type="checkbox" id="t_oic" onchange="toggleChartLine()"> <span style="color:#ffffff">OI重心</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期货成交量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期货持仓量</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span> <span style="color:#576574">|</span> <span style="color:#00d2d3">净对冲</span><span style="color:#576574">=当日全部月份Σ(Δ×OI)净额, >0净买期货/&lt;0净卖期货</span> <span style="color:#576574">|</span> <span style="color:#e17055">DEX方向</span><span style="color:#576574">=Σ(Δ×OI)/ΣOI(OI加权平均Δ), [-1,1]; &gt;0对冲盘偏买/&lt;0偏卖</span> <span style="color:#576574">|</span> <span style="color:#b388ff">Vanna流</span><span style="color:#576574">=IV降1点(0.01)做市商净买入手数(Call+/Put-), &gt;0=IV压缩买盘推涨/&lt;0=卖压, IV越极端影响越大</span> <span style="color:#576574">|</span> <span style="color:#fd79a8">Charm流</span><span style="color:#576574">=时间流逝1天做市商净买入手数(Δ随时间衰减的对冲流), &gt;0=净买(买盘)/&lt;0=净卖(卖压), 越临近到期影响越大</span> <span style="color:#576574">|</span> <span style="color:#f6b93b">Gamma场景</span><span style="color:#576574">=价格±1%时做市商需额外买卖的手数, 涨1%买/跌1%卖, 与净对冲共用刻度</span> <span style="color:#576574">|</span> <span style="color:#cddc39">Vega</span><span style="color:#576574">=期权持仓对IV变动的敏感度(元/1%IV), 做市商净卖期权, IV升1%约亏这个数, 独立刻度</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">最大回撤区间</th><th class="num">最长回撤期</th></tr>' + yrHtml + '</table></div>\
@@ -1486,6 +1489,19 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
       _d25Txt = '影线跌破PutΔ-25(' + _p25 + ')收回 → 无反弹, 弱势延续';
     }
     if (_d25Txt) watchItems.push('25Δ: ' + _d25Txt);
+  }
+
+  // Gamma峰值: 注意事项 + 盘中触及/靠近提醒
+  if (r.gpk > 0) {
+    const _gpk = r.gpk;
+    const _atrG = calcATR(data, params.atrPeriod)[idx];
+    const _bandG = _atrG > 0 ? _atrG * 0.5 : _gpk * 0.005;
+    const _hitGpk = r.l <= _gpk && r.h >= _gpk;
+    const _distGpk = _gpk > r.h ? _gpk - r.h : (_gpk < r.l ? r.l - _gpk : 0);
+    const _nearGpk = !_hitGpk && _distGpk <= _bandG;
+    watchItems.push('Gamma峰值(' + _gpk + '): 价格接近→做市商追买期货对冲推高, 对冲需求释放后买盘消失→自然回落(回落快于上涨), 可作止盈/压力位');
+    if (_hitGpk) watchItems.push('⚠ 盘中已触及Gamma峰值(' + _gpk + ') → 关注冲高后的回落');
+    else if (_nearGpk) watchItems.push('⚠ 临近Gamma峰值(' + _gpk + ', 距' + _distGpk.toFixed(0) + '点) → 靠近也算触发, 关注冲高后的回落');
   }
 
   const factorHtml = factors.map(f =>
@@ -2261,10 +2277,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
 	  var _subAtr, _subTr, _subMinAtr, _subMaxAtr;
 	  var _subMpConf, _subMinMc, _subMaxMc;
 	  var _subNoiseL, _subNoiseS, _subMinNoise, _subMaxNoise;
-  var _subHdg, _subMaxHdgAbs;
+  var _subHdg, _subDex, _subMaxHdgAbs, _subCWall, _subPWall, _subZG, _subVanna, _subMaxVannaAbs, _subCharm, _subMaxCharmAbs, _subMagnet, _subPin;
   var _subGam, _subVeg, _subMaxGamAbs, _subMaxVeg, _hasVega;
   var _oiChain = null, _oiHoverIdx = -1;
-  const subVis = { gex: false, skew: false, vr: false, iv: false, futVol: false, futOi: false, skewVal: false, atr: true, mpConf: false, noise: true, oids: true, hdg: false, gam: false, veg: false };
+  const subVis = { gex: false, skew: false, vr: false, iv: false, futVol: false, futOi: false, skewVal: false, atr: true, mpConf: false, noise: true, oids: true, hdg: false, dex: false, vanna: false, charm: false, gam: false, veg: false };
   
   // HTML 图例栏（水平可滚动）
   function syncLegend() {
@@ -2295,6 +2311,9 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       { key: 'noise', label: '噪音', color: '#0f9b8e' },
       { key: 'oids', label: '需对冲手数', color: '#00d2d3' },
       { key: 'hdg', label: '净对冲手数', color: '#00d2d3' },
+      { key: 'dex', label: 'DEX方向', color: '#e17055' },
+      { key: 'vanna', label: 'Vanna流', color: '#b388ff' },
+      { key: 'charm', label: 'Charm流', color: '#fd79a8' },
       { key: 'gam', label: 'Gamma场景', color: '#f6b93b' },
       { key: 'veg', label: 'Vega', color: '#cddc39' },
     ];
@@ -2345,6 +2364,16 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     _subNoiseL = new Float64Array(n);
     _subNoiseS = new Float64Array(n);
     _subHdg = new Float64Array(n);
+    _subDex = new Float64Array(n);
+    _subVanna = new Float64Array(n);
+    _subMaxVannaAbs = 0;
+    _subCharm = new Float64Array(n);
+    _subMaxCharmAbs = 0;
+    _subCWall = new Float64Array(n);
+    _subPWall = new Float64Array(n);
+    _subZG = new Float64Array(n);
+    _subMagnet = new Float64Array(n);
+    _subPin = new Float64Array(n);
     _subMaxHdgAbs = 0;
     _subGam = new Float64Array(n);
     _subVeg = new Float64Array(n);
@@ -2379,13 +2408,19 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       _subFutVol[i] = r.fut_vol != null ? r.fut_vol : 0;
       _subFutOi[i] = r.fut_oi != null ? r.fut_oi : 0;
       // MP置信度 + 净对冲手数(Σcdw+Σpdw, 正=净买/负=净卖)
-      let _mc = 0, _hdg = 0, _c25 = null, _p25 = null, _cenB = null, _cenC = null, _cenP = null;
+      let _mc = 0, _hdg = 0, _dex = 0, _van = 0, _chm = 0, _cwS = 0, _pwS = 0, _zg = 0, _c25 = null, _p25 = null, _cenB = null, _cenC = null, _cenP = null, _magS = 0, _magW = 0, _pinOi = 0, _pinS = 0;
       if (r.oc_chain) {
         try {
           const ch = JSON.parse(r.oc_chain);
           if (ch && ch.length > 0) {
             let tOi = 0, bestIdx = 0, minD = Infinity, c25d = Infinity, p25d = Infinity;
             let cSum = 0, cW = 0, pSum = 0, pW = 0, bSum = 0, bW = 0;
+            // Call/Put Wall: 到期日T用近月连续dte, 跨月汇总OI
+            const _S = (r.oc != null && r.oc > 0) ? r.oc : r.c;
+            const _T = (r.dte != null && r.dte > 0) ? r.dte / 365 : 1 / 365;
+            const _sqT = Math.sqrt(_T);
+            let _cwG = 0, _pwG = 0;
+            const _zcK = [], _zcV = [], _zcO = [], _zpK = [], _zpV = [], _zpO = [];
             ch.forEach((it, idx) => {
               const co = it.co || 0, po = it.po || 0;
               const tot = co + po;
@@ -2397,10 +2432,62 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
               if (d < minD) { minD = d; bestIdx = idx; }
               const _inBand = it.s >= r.c * 0.8 && it.s <= r.c * 1.2;
               if (_inBand) { bSum += tot * it.s; bW += tot; }
+              if (_inBand && tot > _pinOi) { _pinOi = tot; _pinS = it.s; }
+              // Γ×OI 分侧取最集中行权价(±20%带)
+              if (_inBand && it.co > 0 && it.civ > 0) {
+                const _d1 = (Math.log(_S / it.s) + 0.5 * it.civ * it.civ * _T) / (it.civ * _sqT);
+                const _gxo = 0.3989422804014327 * Math.exp(-0.5 * _d1 * _d1) / (_S * it.civ * _sqT) * it.co;
+                if (_gxo > _cwG) { _cwG = _gxo; _cwS = it.s; }
+                _zcK.push(it.s); _zcV.push(it.civ); _zcO.push(it.co);
+                _van += -0.3989422804014327 * Math.exp(-0.5 * _d1 * _d1) * (_d1 - it.civ * _sqT) / it.civ * it.co;
+                _chm += 0.3989422804014327 * Math.exp(-0.5 * _d1 * _d1) * (_d1 - it.civ * _sqT) / (2 * _T) * it.co;
+                _magS += _gxo * it.s; _magW += _gxo;
+              }
+              if (_inBand && it.po > 0 && it.piv > 0) {
+                const _d1 = (Math.log(_S / it.s) + 0.5 * it.piv * it.piv * _T) / (it.piv * _sqT);
+                const _gxo = 0.3989422804014327 * Math.exp(-0.5 * _d1 * _d1) / (_S * it.piv * _sqT) * it.po;
+                if (_gxo > _pwG) { _pwG = _gxo; _pwS = it.s; }
+                _zpK.push(it.s); _zpV.push(it.piv); _zpO.push(it.po);
+                _van -= -0.3989422804014327 * Math.exp(-0.5 * _d1 * _d1) * (_d1 - it.piv * _sqT) / it.piv * it.po;
+                _chm -= 0.3989422804014327 * Math.exp(-0.5 * _d1 * _d1) * (_d1 - it.piv * _sqT) / (2 * _T) * it.po;
+                _magS += _gxo * it.s; _magW += _gxo;
+              }
               if (_inBand && it.cd != null && Math.abs(it.cd) > 0.01) { const dd = Math.abs(it.cd - 0.25); if (dd < c25d && dd <= 0.2) { c25d = dd; _c25 = it.s; } }
               if (_inBand && it.pd != null && Math.abs(it.pd) > 0.01) { const dd = Math.abs(it.pd + 0.25); if (dd < p25d && dd <= 0.2) { p25d = dd; _p25 = it.s; } }
             });
+            // Zero Gamma: ±20%扫描假设价格, 总Γ(Call正/Put负)变号处, 取离现价最近
+            if (_zcK.length > 0 && _zpK.length > 0) {
+              const _zgF = S => {
+                let sum = 0;
+                for (let j = 0; j < _zcK.length; j++) {
+                  const d1 = (Math.log(S / _zcK[j]) + 0.5 * _zcV[j] * _zcV[j] * _T) / (_zcV[j] * _sqT);
+                  sum += Math.exp(-0.5 * d1 * d1) / (S * _zcV[j] * _sqT) * _zcO[j];
+                }
+                for (let j = 0; j < _zpK.length; j++) {
+                  const d1 = (Math.log(S / _zpK[j]) + 0.5 * _zpV[j] * _zpV[j] * _T) / (_zpV[j] * _sqT);
+                  sum -= Math.exp(-0.5 * d1 * d1) / (S * _zpV[j] * _sqT) * _zpO[j];
+                }
+                return sum;
+              };
+              const _loZ = r.c * 0.8, _hiZ = r.c * 1.2, _NG = 80;
+              let _pS = _loZ, _pF = _zgF(_loZ), _bd = Infinity;
+              for (let g = 1; g <= _NG; g++) {
+                const _sZ = _loZ + (_hiZ - _loZ) * g / _NG;
+                const _fZ = _zgF(_sZ);
+                if ((_pF < 0 && _fZ > 0) || (_pF > 0 && _fZ < 0)) {
+                  let _a = _pS, _b = _sZ, _fa = _pF;
+                  for (let k = 0; k < 10; k++) {
+                    const _m = (_a + _b) / 2, _fm = _zgF(_m);
+                    if ((_fa < 0) === (_fm < 0)) { _a = _m; _fa = _fm; } else { _b = _m; }
+                  }
+                  const _rZ = (_a + _b) / 2, _dZ = Math.abs(_rZ - r.c);
+                  if (_dZ < _bd) { _bd = _dZ; _zg = _rZ; }
+                }
+                _pS = _sZ; _pF = _fZ;
+              }
+            }
             _mc = tOi > 0 ? (ch[bestIdx].co + ch[bestIdx].po) / tOi : 0;
+            _dex = tOi > 0 ? _hdg / tOi : 0;
             if (cW > 0) _cenC = cSum / cW;
             if (pW > 0) _cenP = pSum / pW;
             if (bW > 0) _cenB = bSum / bW;
@@ -2414,6 +2501,18 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       _oiCenP[i] = _cenP;
       _subMpConf[i] = _mc;
       _subHdg[i] = _hdg;
+      _subDex[i] = _dex;
+      _subCWall[i] = _cwS;
+      _subPWall[i] = _pwS;
+      _subZG[i] = _zg;
+      _subMagnet[i] = _magW > 0 ? _magS / _magW : 0;
+      _subPin[i] = _pinOi > 0 ? _pinS : 0;
+      // Vanna流: IV降1点(0.01)做市商净买入手数, 正=IV压缩买盘
+      _subVanna[i] = _van * 0.01;
+      if (_subVanna[i] !== 0 && Math.abs(_subVanna[i]) > _subMaxVannaAbs) _subMaxVannaAbs = Math.abs(_subVanna[i]);
+      // Charm流: 时间流逝1天做市商净买入手数(Δ随时间衰减, Call+/Put-), 正=净买
+      _subCharm[i] = -_chm / 365;
+      if (_subCharm[i] !== 0 && Math.abs(_subCharm[i]) > _subMaxCharmAbs) _subMaxCharmAbs = Math.abs(_subCharm[i]);
       if (_hdg !== 0 && Math.abs(_hdg) > _subMaxHdgAbs) _subMaxHdgAbs = Math.abs(_hdg);
       const gmv = r.gam != null ? r.gam : 0;
       _subGam[i] = gmv;
@@ -2744,12 +2843,24 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     const showGpk = document.getElementById('t_gpk').checked;
     const showD25 = document.getElementById('t_d25').checked;
     const showOic = document.getElementById('t_oic').checked;
+    const showWall = document.getElementById('t_wall').checked;
+    const showZG = document.getElementById('t_zg').checked;
+    const showMag = document.getElementById('t_mag').checked;
     let minP = Infinity, maxP = -Infinity;
     for (let i = start; i < end; i++) {
       const row = data[i];
       minP = Math.min(minP, row.l, row.mp, row.bec ?? Infinity, row.bep ?? Infinity, row.nc ?? Infinity, row.oc ?? Infinity);
       maxP = Math.max(maxP, row.h, row.mp, row.bec ?? -Infinity, row.bep ?? -Infinity, row.nc ?? -Infinity, row.oc ?? -Infinity);
       if (showGpk && row.gpk > 0) { minP = Math.min(minP, row.gpk); maxP = Math.max(maxP, row.gpk); }
+      if (showWall) {
+        if (_subCWall[i] > 0) { minP = Math.min(minP, _subCWall[i]); maxP = Math.max(maxP, _subCWall[i]); }
+        if (_subPWall[i] > 0) { minP = Math.min(minP, _subPWall[i]); maxP = Math.max(maxP, _subPWall[i]); }
+      }
+      if (showZG && _subZG[i] > 0) { minP = Math.min(minP, _subZG[i]); maxP = Math.max(maxP, _subZG[i]); }
+      if (showMag) {
+        if (_subMagnet[i] > 0) { minP = Math.min(minP, _subMagnet[i]); maxP = Math.max(maxP, _subMagnet[i]); }
+        if (_subPin[i] > 0) { minP = Math.min(minP, _subPin[i]); maxP = Math.max(maxP, _subPin[i]); }
+      }
       if (showD25 && _d25c) {
         const _c25 = _d25c[i], _p25 = _d25p[i];
         if (_c25 != null) { minP = Math.min(minP, _c25); maxP = Math.max(maxP, _c25); }
@@ -3063,6 +3174,77 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         }
         pgY = y; pgI = i;
       }
+      ctx.restore();
+    }
+
+    // Call Wall / Put Wall 行权价(阶梯线)
+    if (showWall) {
+      ctx.save();
+      ctx.lineWidth = .5;
+      const bwW = Math.max(state.barW, 2);
+      const drawWall = (arr, col) => {
+        ctx.strokeStyle = col;
+        let pwY = null, pwI = -9;
+        for (let i = start; i < end && i < n; i++) {
+          const v = arr[i];
+          if (!(v > 0)) { pwY = null; continue; }
+          const x = toX(i), y = toY(v);
+          ctx.beginPath(); ctx.moveTo(x - bwW / 2, y); ctx.lineTo(x + bwW / 2, y); ctx.stroke();
+          if (pwY !== null && i === pwI + 1) {
+            ctx.beginPath(); ctx.moveTo(x - bwW / 2, pwY); ctx.lineTo(x - bwW / 2, y); ctx.stroke();
+          }
+          pwY = y; pwI = i;
+        }
+      };
+      drawWall(_subCWall, '#ff8c42');
+      drawWall(_subPWall, '#2ecc71');
+      ctx.restore();
+    }
+
+    // Zero Gamma翻转点(阶梯虚线)
+    if (showZG) {
+      ctx.save();
+      ctx.strokeStyle = '#b388ff';
+      ctx.lineWidth = .6;
+      ctx.setLineDash([4, 2]);
+      const bwZ = Math.max(state.barW, 2);
+      let pzY = null, pzI = -9;
+      for (let i = start; i < end && i < n; i++) {
+        const v = _subZG[i];
+        if (!(v > 0)) { pzY = null; continue; }
+        const x = toX(i), y = toY(v);
+        ctx.beginPath(); ctx.moveTo(x - bwZ / 2, y); ctx.lineTo(x + bwZ / 2, y); ctx.stroke();
+        if (pzY !== null && i === pzI + 1) {
+          ctx.beginPath(); ctx.moveTo(x - bwZ / 2, pzY); ctx.lineTo(x - bwZ / 2, y); ctx.stroke();
+        }
+        pzY = y; pzI = i;
+      }
+      ctx.restore();
+    }
+
+    // Magnet(磁力点) / Pin(钉住点) 行权价(阶梯线)
+    if (showMag) {
+      ctx.save();
+      ctx.lineWidth = .5;
+      const bwM = Math.max(state.barW, 2);
+      const drawMag = (arr, col, dash) => {
+        ctx.strokeStyle = col;
+        ctx.setLineDash(dash);
+        let pmY = null, pmI = -9;
+        for (let i = start; i < end && i < n; i++) {
+          const v = arr[i];
+          if (!(v > 0)) { pmY = null; continue; }
+          const x = toX(i), y = toY(v);
+          ctx.beginPath(); ctx.moveTo(x - bwM / 2, y); ctx.lineTo(x + bwM / 2, y); ctx.stroke();
+          if (pmY !== null && i === pmI + 1) {
+            ctx.beginPath(); ctx.moveTo(x - bwM / 2, pmY); ctx.lineTo(x - bwM / 2, y); ctx.stroke();
+          }
+          pmY = y; pmI = i;
+        }
+      };
+      drawMag(_subMagnet, '#74b9ff', []);
+      drawMag(_subPin, '#fdcb6e', [2, 2]);
+      ctx.setLineDash([]);
       ctx.restore();
     }
 
@@ -3558,7 +3740,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       let vMinIv = Infinity, vMaxIv = -Infinity;
       let vMinFv = Infinity, vMaxFv = -Infinity, vMinFoi = Infinity, vMaxFoi = -Infinity; let vMinSk = Infinity, vMaxSk = -Infinity; let vMinAtr = Infinity, vMaxAtr = -Infinity; let vMinTr = Infinity, vMaxTr = -Infinity; let vMinMc = Infinity, vMaxMc = -Infinity;
       let vMinNoise = Infinity, vMaxNoise = -Infinity;
-      let vMaxHdgAbs = 0, vMaxVeg = 0;
+      let vMaxHdgAbs = 0, vMaxVeg = 0, vMaxDexAbs = 0, vMaxVannaAbs = 0, vMaxCharmAbs = 0;
       for (let i = start; i < end && i < n; i++) {
         const g = _subGex[i];
         if (g !== 0) { if (g < vMinG) vMinG = g; if (g > vMaxG) vMaxG = g; }
@@ -3589,6 +3771,12 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           }
           const hdgv = _subHdg[i];
           if (hdgv !== 0 && Math.abs(hdgv) > vMaxHdgAbs) vMaxHdgAbs = Math.abs(hdgv);
+          const dexv = _subDex[i];
+          if (dexv !== 0 && Math.abs(dexv) > vMaxDexAbs) vMaxDexAbs = Math.abs(dexv);
+          const vanv2 = _subVanna[i];
+          if (vanv2 !== 0 && Math.abs(vanv2) > vMaxVannaAbs) vMaxVannaAbs = Math.abs(vanv2);
+          const chmv2 = _subCharm[i];
+          if (chmv2 !== 0 && Math.abs(chmv2) > vMaxCharmAbs) vMaxCharmAbs = Math.abs(chmv2);
           if (subVis.gam) {
             const gamv = _subGam[i];
             if (gamv !== 0 && Math.abs(gamv) > vMaxHdgAbs) vMaxHdgAbs = Math.abs(gamv);
@@ -3600,6 +3788,9 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       if (vMaxVeg === 0) vMaxVeg = _subMaxVeg;
       const vTopVeg = vMaxVeg > 0 ? vMaxVeg * 1.1 : 1;
       const vMinH = -vMaxHdgAbs * 1.1, vMaxH = vMaxHdgAbs * 1.1;
+      const vTopDex = vMaxDexAbs > 0 ? vMaxDexAbs * 1.15 : 0.05;
+      const vTopVanna = vMaxVannaAbs > 0 ? vMaxVannaAbs * 1.15 : 0.05;
+      const vTopCharm = vMaxCharmAbs > 0 ? vMaxCharmAbs * 1.15 : 0.05;
       if (vMinG === Infinity || vMinG === vMaxG) { vMinG = _subMinG; vMaxG = _subMaxG; }
       else { const gr = vMaxG - vMinG || 1; vMinG -= gr * 0.1; vMaxG += gr * 0.1; }
       if (vMinGn !== Infinity) { const gnr = vMaxGn - vMinGn || 1; vMinGn -= gnr * 0.1; vMaxGn += gnr * 0.1; }
@@ -3660,6 +3851,42 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         }
       }
 
+      // DEX方向 零轴
+      if (subVis.dex) {
+        const dzy = spad.top + sch / 2;
+        sctx.save();
+        sctx.setLineDash([3, 3]);
+        sctx.strokeStyle = 'rgba(225,112,85,0.35)';
+        sctx.lineWidth = 1;
+        sctx.beginPath(); sctx.moveTo(pad.left, dzy); sctx.lineTo(W - spad.right, dzy); sctx.stroke();
+        sctx.setLineDash([]);
+        sctx.restore();
+      }
+
+      // Vanna流 零轴
+      if (subVis.vanna && vMaxVannaAbs > 0) {
+        const vzy = spad.top + sch / 2;
+        sctx.save();
+        sctx.setLineDash([3, 3]);
+        sctx.strokeStyle = 'rgba(179,136,255,0.35)';
+        sctx.lineWidth = 1;
+        sctx.beginPath(); sctx.moveTo(pad.left, vzy); sctx.lineTo(W - spad.right, vzy); sctx.stroke();
+        sctx.setLineDash([]);
+        sctx.restore();
+      }
+
+      // Charm流 零轴
+      if (subVis.charm && vMaxCharmAbs > 0) {
+        const czy = spad.top + sch / 2;
+        sctx.save();
+        sctx.setLineDash([3, 3]);
+        sctx.strokeStyle = 'rgba(253,121,168,0.35)';
+        sctx.lineWidth = 1;
+        sctx.beginPath(); sctx.moveTo(pad.left, czy); sctx.lineTo(W - spad.right, czy); sctx.stroke();
+        sctx.setLineDash([]);
+        sctx.restore();
+      }
+
       // IV偏度零轴参考线
       if (subVis.iv && vMinIv <= 0 && vMaxIv >= 0) {
         const izy = s2y(0, vMinIv, vMaxIv);
@@ -3716,6 +3943,41 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           const y = spad.top + (sch / 4) * (4 - i);
           sctx.fillStyle = '#2ecc71';
           sctx.fillText((v * 100).toFixed(1) + '%', W - 24, y + 3);
+        }
+      }
+
+      if (subVis.dex) {
+        sctx.fillStyle = '#e17055';
+        sctx.font = '10px sans-serif';
+        sctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+          const v = -vTopDex + (2 * vTopDex) / 4 * i;
+          const y = spad.top + (sch / 4) * (4 - i);
+          sctx.fillText(v.toFixed(3), W - 8, y + 3);
+        }
+      }
+
+      if (subVis.vanna && vMaxVannaAbs > 0) {
+        sctx.fillStyle = '#b388ff';
+        sctx.font = '10px sans-serif';
+        sctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+          const v = -vTopVanna + (2 * vTopVanna) / 4 * i;
+          const y = spad.top + (sch / 4) * (4 - i);
+          const av = Math.abs(v);
+          sctx.fillText(av >= 1e4 ? (v / 1e3).toFixed(0) + 'K' : av >= 10 ? v.toFixed(0) : v.toFixed(1), W - 8, y + 3);
+        }
+      }
+
+      if (subVis.charm && vMaxCharmAbs > 0) {
+        sctx.fillStyle = '#fd79a8';
+        sctx.font = '10px sans-serif';
+        sctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+          const v = -vTopCharm + (2 * vTopCharm) / 4 * i;
+          const y = spad.top + (sch / 4) * (4 - i);
+          const av = Math.abs(v);
+          sctx.fillText(av >= 1e4 ? (v / 1e3).toFixed(0) + 'K' : av >= 10 ? v.toFixed(0) : v.toFixed(1), W - 8, y + 3);
         }
       }
 
@@ -4026,6 +4288,51 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         sctx.stroke();
       }
 
+      // DEX方向 = Σ(Δ×OI)/ΣOI, OI加权平均Δ
+      if (subVis.dex) {
+        sctx.strokeStyle = '#e17055';
+        sctx.lineWidth = 1;
+        sctx.beginPath();
+        let dst = false;
+        for (let i = start; i < end && i < n; i++) {
+          const dv = _subDex[i];
+          if (dv === 0) { dst = false; continue; }
+          const x = toX(i), y = s2y(dv, -vTopDex, vTopDex);
+          if (!dst) { sctx.moveTo(x, y); dst = true; } else sctx.lineTo(x, y);
+        }
+        sctx.stroke();
+      }
+
+      // Vanna流：IV降1点做市商净买入手数, >0=IV压缩买盘
+      if (subVis.vanna && vMaxVannaAbs > 0) {
+        sctx.strokeStyle = '#b388ff';
+        sctx.lineWidth = 1;
+        sctx.beginPath();
+        let vst = false;
+        for (let i = start; i < end && i < n; i++) {
+          const vanv = _subVanna[i];
+          if (vanv === 0) { vst = false; continue; }
+          const x = toX(i), y = s2y(vanv, -vTopVanna, vTopVanna);
+          if (!vst) { sctx.moveTo(x, y); vst = true; } else sctx.lineTo(x, y);
+        }
+        sctx.stroke();
+      }
+
+      // Charm流：时间流逝1天做市商净买入手数(Δ衰减), >0=净买
+      if (subVis.charm && vMaxCharmAbs > 0) {
+        sctx.strokeStyle = '#fd79a8';
+        sctx.lineWidth = 1;
+        sctx.beginPath();
+        let cst = false;
+        for (let i = start; i < end && i < n; i++) {
+          const chv = _subCharm[i];
+          if (chv === 0) { cst = false; continue; }
+          const x = toX(i), y = s2y(chv, -vTopCharm, vTopCharm);
+          if (!cst) { sctx.moveTo(x, y); cst = true; } else sctx.lineTo(x, y);
+        }
+        sctx.stroke();
+      }
+
       // Vega：期权持仓对IV变动的敏感度(元/1%IV)，独立刻度
       if (subVis.veg && _hasVega) {
         sctx.strokeStyle = '#cddc39';
@@ -4137,6 +4444,24 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           const hv = _subHdg[hi];
           sctx.fillStyle = '#00d2d3';
           sctx.fillText('净对冲: ' + (hv > 0 ? '+' : '') + hv.toLocaleString('zh-CN', {maximumFractionDigits: 0}) + '手(' + (hv > 0 ? '净买' : hv < 0 ? '净卖' : '持平') + ')', hx + 4, hoverY);
+          hoverY += 12;
+        }
+        if (subVis.dex) {
+          const dxv = _subDex[hi];
+          sctx.fillStyle = '#e17055';
+          sctx.fillText('DEX方向: ' + (dxv >= 0 ? '+' : '') + dxv.toFixed(3) + '(' + (dxv > 0 ? '偏买' : dxv < 0 ? '偏卖' : '中性') + ')', hx + 4, hoverY);
+          hoverY += 12;
+        }
+        if (subVis.vanna && _subMaxVannaAbs > 0) {
+          const vnv = _subVanna[hi];
+          sctx.fillStyle = '#b388ff';
+          sctx.fillText('Vanna流: ' + (vnv >= 0 ? '+' : '') + Math.round(vnv).toLocaleString('zh-CN') + '手(IV降1点→' + (vnv > 0 ? '净买' : vnv < 0 ? '净卖' : '持平') + ')', hx + 4, hoverY);
+          hoverY += 12;
+        }
+        if (subVis.charm && _subMaxCharmAbs > 0) {
+          const chv = _subCharm[hi];
+          sctx.fillStyle = '#fd79a8';
+          sctx.fillText('Charm流: ' + (chv >= 0 ? '+' : '') + Math.round(chv).toLocaleString('zh-CN') + '手(时间流逝1天→' + (chv > 0 ? '净买' : chv < 0 ? '净卖' : '持平') + ')', hx + 4, hoverY);
           hoverY += 12;
         }
         if (subVis.gam) {
@@ -4464,6 +4789,34 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       if (document.getElementById('t_gpk').checked && row.gpk > 0) {
         const gp = (row.gpk - row.c) / row.c * 100;
         items.push([row.gpk, '#ff6b81', 'Gamma峰值: ' + fmtV(row.gpk) + ' (' + (gp >= 0 ? '+' : '') + gp.toFixed(1) + '%)']);
+      }
+      if (document.getElementById('t_wall').checked) {
+        const cwv = _subCWall[hi], pwv = _subPWall[hi];
+        if (cwv > 0) {
+          const cwp = (cwv - row.c) / row.c * 100;
+          items.push([cwv, '#ff8c42', 'Call Wall: ' + fmtV(cwv) + ' (' + (cwp >= 0 ? '+' : '') + cwp.toFixed(1) + '%)']);
+        }
+        if (pwv > 0) {
+          const pwp = (pwv - row.c) / row.c * 100;
+          items.push([pwv, '#2ecc71', 'Put Wall: ' + fmtV(pwv) + ' (' + (pwp >= 0 ? '+' : '') + pwp.toFixed(1) + '%)']);
+        }
+      }
+      if (document.getElementById('t_zg').checked && _subZG[hi] > 0) {
+        const zgv = _subZG[hi];
+        const zgp = (zgv - row.c) / row.c * 100;
+        const zgm = row.c >= zgv ? '稳定模式' : '动量模式';
+        items.push([zgv, '#b388ff', 'ZeroGamma: ' + fmtV(zgv) + ' (' + (zgp >= 0 ? '+' : '') + zgp.toFixed(1) + '%) ' + zgm]);
+      }
+      if (document.getElementById('t_mag').checked) {
+        const mgv = _subMagnet[hi], pnv = _subPin[hi];
+        if (mgv > 0) {
+          const mgp = (mgv - row.c) / row.c * 100;
+          items.push([mgv, '#74b9ff', 'Magnet: ' + fmtV(mgv) + ' (' + (mgp >= 0 ? '+' : '') + mgp.toFixed(1) + '%)']);
+        }
+        if (pnv > 0) {
+          const pnp = (pnv - row.c) / row.c * 100;
+          items.push([pnv, '#fdcb6e', 'Pin: ' + fmtV(pnv) + ' (' + (pnp >= 0 ? '+' : '') + pnp.toFixed(1) + '%)']);
+        }
       }
       if (document.getElementById('t_d25').checked && _d25c) {
         if (_d25c[hi] != null) items.push([_d25c[hi], '#5cd85a', 'CallΔ25: ' + fmtV(_d25c[hi])]);
