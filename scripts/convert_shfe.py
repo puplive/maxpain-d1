@@ -530,6 +530,9 @@ def process_one(sym, fut, opt, mult=10):
         pt_iv = o.pivot_table(index='strike', columns='type', values='iv', aggfunc='mean')
         pt_vol = o.pivot_table(index='strike', columns='type', values='volume', aggfunc='sum')
         pt_close = o.pivot_table(index='strike', columns='type', values='close', aggfunc='mean')
+        # OI加权收盘价(供前端按可调带宽重算BE): Σ(close×oi)/Σoi
+        _o3 = o.assign(_cost=pd.to_numeric(o['close'], errors='coerce').fillna(0) * pd.to_numeric(o['oi'], errors='coerce').fillna(0))
+        pt_wc = _o3.pivot_table(index='strike', columns='type', values='_cost', aggfunc='sum', fill_value=0)
         # Δ加权对冲当量(全月份可加) + 最近月Δ(单合约)
         _o2 = o.assign(_dw=pd.to_numeric(o['delta'], errors='coerce').fillna(0) * pd.to_numeric(o['oi'], errors='coerce').fillna(0))
         pt_dw = _o2.pivot_table(index='strike', columns='type', values='_dw', aggfunc='sum', fill_value=0)
@@ -559,6 +562,10 @@ def process_one(sym, fut, opt, mult=10):
                 rc = pt_close.loc[s]
                 if rc.get('C', 0) > 0: item['cclose'] = round(float(rc['C']), 2)
                 if rc.get('P', 0) > 0: item['pclose'] = round(float(rc['P']), 2)
+            if s in pt_wc.index:
+                rwc = pt_wc.loc[s]
+                if co_v > 0 and rwc.get('C', 0) > 0: item['cwc'] = round(float(rwc['C']) / co_v, 6)
+                if po_v > 0 and rwc.get('P', 0) > 0: item['pwc'] = round(float(rwc['P']) / po_v, 6)
             if s in pt_dw.index:
                 rdw = pt_dw.loc[s]
                 if rdw.get('C', 0) != 0: item['cdw'] = round(float(rdw['C']), 1)

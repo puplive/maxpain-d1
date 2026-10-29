@@ -197,6 +197,11 @@ tr:hover td { background: #1a2a3a; }
       <label>窗:</label><input type="number" id="p_slope_days" min="5" max="60" step="5" class="wide" style="width:64px" title="判断逆势的斜率窗口天数">
     </div>
     <div class="param-group"><label>回踩斜率%:</label><input type="number" id="p_pb_slope_th" min="0" max="5" step="0.5" class="wide" title="MP趋势|斜率|≤此值 时回踩MP开仓(开盘已破MP按开盘价, 否则低/高点触及MP成交), >此值追开盘价; 0=关(始终开盘价)"></div>
+    <div class="param-group">
+      <label>MP带%:</label><input type="number" id="p_mp_band" min="5" max="50" step="5" class="wide" title="MaxPain(痛点)的行权价过滤带宽: 现价±此%(超出范围的行权价不参与, 带内无行权价则用全部)。参与信号判定">
+      <label>BE带%:</label><input type="number" id="p_be_band" min="5" max="50" step="5" class="wide" title="BEC/BEP(盈亏平衡)的行权价过滤带宽: 现价±此%。参与信号判定">
+      <label>显示带%:</label><input type="number" id="p_band" min="5" max="50" step="5" class="wide" title="仅显示指标共用带宽: Gamma峰值/Call Wall/Put Wall/ZeroGamma/Vanna/Charm/Magnet/Pin/OI重心/25Δ">
+    </div>
     <div class="param-group"><label>标记窗口:</label><input type="number" id="p_acc_win" min="1" max="60" step="1" class="wide" title="近N日累计涨跌点数(按信号方向对齐, 等价单手N日PnL)作为每日判定"></div>
     <div class="param-group"><label>连续:</label><input type="number" id="p_acc_streak" min="1" max="30" step="1" class="wide" title="连续N天累计为负才亮!标记, 转正即停"></div>
     <div class="param-group"><label>标记模式:</label><select id="p_acc_mode" style="padding:4px 6px;border:1px solid #2d3436;border-radius:4px;background:#0f1923;color:#c8d6e5;font-size:12px;">
@@ -324,6 +329,9 @@ let defaultParams = {
   priceSlopeTh: 0,
   slopeDays: 30,
   pbSlopeTh: 0,
+  mpBand: 20,
+  beBand: 20,
+  band: 20,
   volWindow: 0,
   accWindow: 3,
   accStreak: 3,
@@ -628,6 +636,107 @@ function sameContractMonth(fc, opt) {
   // 期货主力合约与最近到期期权是否同一合约: fut_contract === opt_contract
   // (opt_contract 转换时记录, 与 fut_contract 同一编码, 直接字符串比对)
   return !!(fc && opt && String(fc) === String(opt));
+}
+
+function readBandParams() {
+  const rd = (id, d) => { const v = parseFloat(document.getElementById(id).value); return (isNaN(v) || v <= 0 || v >= 100) ? d : v; };
+  return {
+    mpBand: rd('p_mp_band', defaultParams.mpBand),
+    beBand: rd('p_be_band', defaultParams.beBand),
+    band: rd('p_band', defaultParams.band),
+  };
+}
+
+function _calcBeBand(items, px, isCall) {
+  // 复刻后端 calc_be: Σ(close×oi) 为成本, 在[px*0.7, px*1.3]二分找盈亏平衡价
+  if (!items.length) return null;
+  const wcKey = isCall ? 'cwc' : 'pwc', oiKey = isCall ? 'co' : 'po';
+  let hasWc = false, totalCost = 0, totalOi = 0;
+  for (const it of items) {
+    const oi = it[oiKey] || 0;
+    if (oi <= 0) continue;
+    totalOi += oi;
+    const wc = it[wcKey];
+    if (wc != null) { hasWc = true; totalCost += wc * oi; }
+  }
+  if (!hasWc) return undefined;   // 老数据无cwc/pwc → 沿用已存BE值
+  if (totalOi === 0 || totalCost === 0) return null;
+  let low = px * 0.7, high = px * 1.3;
+  for (let k = 0; k < 100; k++) {
+    const mid = (low + high) / 2;
+    let v = 0;
+    for (const it of items) {
+      const oi = it[oiKey] || 0;
+      if (oi <= 0) continue;
+      if (isCall) { if (mid > it.s) v += (mid - it.s) * oi; }
+      else if (it.s > mid) v += (it.s - mid) * oi;
+    }
+    if (isCall) { if (v < totalCost) low = mid; else high = mid; }
+    else { if (v < totalCost) high = mid; else low = mid; }
+    if (high - low < 0.01) break;
+  }
+  return Math.round((low + high) / 2 * 100) / 100;
+}
+
+function _calcGpkBand(ch, bandC, S, rng, dte) {
+  // 显示带内 Γ×OI 最集中的行权价(近月dte口径, 与Call/Put Wall一致)
+  const lo = bandC * (1 - rng), hi = bandC * (1 + rng);
+  const T = (dte != null && dte > 0) ? dte / 365 : 1 / 365;
+  const sqT = Math.sqrt(T);
+  let bestS = 0, bestW = 0;
+  for (const it of ch) {
+    if (it.s < lo || it.s > hi) continue;
+    let w = 0;
+    if (it.co > 0 && it.civ > 0) {
+      const d1 = (Math.log(S / it.s) + 0.5 * it.civ * it.civ * T) / (it.civ * sqT);
+      w += 0.3989422804014327 * Math.exp(-0.5 * d1 * d1) / (S * it.civ * sqT) * it.co;
+    }
+    if (it.po > 0 && it.piv > 0) {
+      const d1 = (Math.log(S / it.s) + 0.5 * it.piv * it.piv * T) / (it.piv * sqT);
+      w += 0.3989422804014327 * Math.exp(-0.5 * d1 * d1) / (S * it.piv * sqT) * it.po;
+    }
+    if (w > bestW) { bestW = w; bestS = it.s; }
+  }
+  return bestS;
+}
+
+function applyBandParams(arr, bp) {
+  // 按可调带宽从 oc_chain 重算 MP / BEC / BEP / Gamma峰值; 结果缓存在数组上, 带宽不变则跳过
+  const mpRng = (bp.mpBand != null ? bp.mpBand : defaultParams.mpBand) / 100;
+  const beRng = (bp.beBand != null ? bp.beBand : defaultParams.beBand) / 100;
+  const shRng = (bp.band != null ? bp.band : defaultParams.band) / 100;
+  const key = mpRng + '|' + beRng + '|' + shRng;
+  if (arr._bandKey === key) return;
+  arr._bandKey = key;
+  for (const r of arr) {
+    if (!r.oc_chain) continue;
+    let ch;
+    try { ch = JSON.parse(r.oc_chain); } catch { continue; }
+    if (!ch || !ch.length) continue;
+    const px = r.c;
+    // Max Pain: 带内行权价, 带内为空退回全部
+    let ks = ch.filter(it => it.s >= px * (1 - mpRng) && it.s <= px * (1 + mpRng));
+    if (!ks.length) ks = ch;
+    const ss = Array.from(new Set(ks.map(it => it.s))).sort((a, b) => a - b);
+    let bestS = null, bestV = Infinity;
+    for (const s of ss) {
+      let v = 0;
+      for (const it of ks) {
+        if (it.s < s && it.co > 0) v += (s - it.s) * it.co;
+        else if (it.s > s && it.po > 0) v += (it.s - s) * it.po;
+      }
+      if (v < bestV) { bestV = v; bestS = s; }
+    }
+    if (bestS != null) r.mp = bestS;
+    // BEC/BEP: 带内行权价
+    const bes = ch.filter(it => it.s >= px * (1 - beRng) && it.s <= px * (1 + beRng));
+    const bec = _calcBeBand(bes, px, true);
+    const bep = _calcBeBand(bes, px, false);
+    if (bec !== undefined) r.bec = bec;
+    if (bep !== undefined) r.bep = bep;
+    // Gamma峰值: 显示带内 Γ×OI 最集中行权价
+    r.gpk = _calcGpkBand(ch, px, (r.oc != null && r.oc > 0) ? r.oc : px, shRng, r.dte);
+  }
 }
 
 function computeNextDirPred(fullData, params) {
@@ -980,6 +1089,9 @@ function runBacktest() {
   let fullData = ALL_DATA[sym];
   if (!fullData) { status.textContent = '数据未加载'; return; }
 
+  const bandParams = readBandParams();
+  applyBandParams(fullData, bandParams);
+
   if (document.getElementById('p_manual').checked) {
     const lastRow = fullData[fullData.length - 1];
     const mpx = parseFloat(document.getElementById('p_manual_px').value);
@@ -1046,6 +1158,9 @@ function runBacktest() {
     capital: parseFloat(document.getElementById('p_capital').value) ?? defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) ?? defaultParams.capLimit) * 10000,
     skipCount: parseInt(document.getElementById('p_skip').value) ?? defaultParams.skipCount,
+    mpBand: bandParams.mpBand,
+    beBand: bandParams.beBand,
+    band: bandParams.band,
   };
   params.mult = cfg.mult;
   const MULT = cfg.mult;
@@ -1224,12 +1339,12 @@ function runBacktest() {
         <label style="cursor:pointer;"><input type="checkbox" id="t_oc" onchange="toggleChartLine()"> <span style="color:#f368e0">期权期货</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_roll" checked onchange="toggleChartLine()"> <span style="color:#ff9f43">换月</span></label>\
         <label style="cursor:pointer;"><input type="checkbox" id="t_eq" checked onchange="toggleChartLine()"> <span style="color:#48dbfb">收益</span></label>\
-        <label style="cursor:pointer;" title="Γ×OI 最集中的行权价(±20%带内, 与MP同过滤)&#10;价格接近Gamma峰值行权价 → 做市商被迫追买期货对冲 → 推高价格。&#10;对冲需求释放完毕 → 买盘消失 → 价格自然回落。&#10;期权价格因为买方的不对称性，回落得比上涨时更快。&#10;用法: 可用作止盈/压力位参考。"><input type="checkbox" id="t_gpk" onchange="toggleChartLine()"> <span style="color:#ff6b81">Gamma峰值</span></label>\
-        <label style="cursor:pointer;" title="Call Wall: 各价位 Call Γ×OI 最集中的行权价(±20%带) → 做市商对冲空头看涨期权, 价格涨近时卖出期货, 形成天花板/强阻力。&#10;Put Wall: 各价位 Put Γ×OI 最集中的行权价 → 价格跌近时做市商买入期货, 形成地板/强支撑; 一旦跌破, 对冲买盘消失, 可能加速下跌。&#10;口径: oc_chain跨月汇总OI, 到期日T用近月连续dte。"><input type="checkbox" id="t_wall" onchange="toggleChartLine()"> <span style="color:#ff8c42">Call</span><span style="color:#2ecc71">/Put Wall</span></label>\
-        <label style="cursor:pointer;" title="Zero Gamma(Γ翻转点): 在现价±20%范围扫描假设价格, 重算各行权价Γ×OI(Call正/Put负, 跨月汇总OI, T=近月连续dte), 总Γ变号处为翻转点(取离现价最近)。&#10;价格在其上方: 做市商总Gamma为正, 逆势对冲(买跌卖涨), 抑制波动→稳定模式。&#10;价格在其下方: 总Gamma为负, 顺势对冲(追涨杀跌), 放大波动→动量模式。&#10;区间内同号(无变号)则不画线。"><input type="checkbox" id="t_zg" onchange="toggleChartLine()"> <span style="color:#b388ff">ZeroGamma</span></label>\
-        <label style="cursor:pointer;" title="Magnet(磁力点): 现价±20%带内按|Γ×OI|加权平均的行权价(Call/Put各自Γ取绝对值), 理论引力中心 → 价格有向其靠拢的倾向。&#10;Pin(钉住点): 现价±20%带内OI(Call+Put, 跨月汇总)最集中的行权价, 代表持仓锚定效应。&#10;口径: oc_chain跨月汇总OI, T=近月连续dte; SHFE无IV, Magnet不显示。"><input type="checkbox" id="t_mag" onchange="toggleChartLine()"> <span style="color:#74b9ff">Magnet</span>/<span style="color:#fdcb6e">Pin</span></label>\
+        <label style="cursor:pointer;" title="Γ×OI 最集中的行权价(显示带%内)&#10;价格接近Gamma峰值行权价 → 做市商被迫追买期货对冲 → 推高价格。&#10;对冲需求释放完毕 → 买盘消失 → 价格自然回落。&#10;期权价格因为买方的不对称性，回落得比上涨时更快。&#10;用法: 可用作止盈/压力位参考。"><input type="checkbox" id="t_gpk" onchange="toggleChartLine()"> <span style="color:#ff6b81">Gamma峰值</span></label>\
+        <label style="cursor:pointer;" title="Call Wall: 各价位 Call Γ×OI 最集中的行权价(显示带%内) → 做市商对冲空头看涨期权, 价格涨近时卖出期货, 形成天花板/强阻力。&#10;Put Wall: 各价位 Put Γ×OI 最集中的行权价 → 价格跌近时做市商买入期货, 形成地板/强支撑; 一旦跌破, 对冲买盘消失, 可能加速下跌。&#10;口径: oc_chain跨月汇总OI, 到期日T用近月连续dte。"><input type="checkbox" id="t_wall" onchange="toggleChartLine()"> <span style="color:#ff8c42">Call</span><span style="color:#2ecc71">/Put Wall</span></label>\
+        <label style="cursor:pointer;" title="Zero Gamma(Γ翻转点): 在现价±显示带%范围扫描假设价格, 重算各行权价Γ×OI(Call正/Put负, 跨月汇总OI, T=近月连续dte), 总Γ变号处为翻转点(取离现价最近)。&#10;价格在其上方: 做市商总Gamma为正, 逆势对冲(买跌卖涨), 抑制波动→稳定模式。&#10;价格在其下方: 总Gamma为负, 顺势对冲(追涨杀跌), 放大波动→动量模式。&#10;区间内同号(无变号)则不画线。"><input type="checkbox" id="t_zg" onchange="toggleChartLine()"> <span style="color:#b388ff">ZeroGamma</span></label>\
+        <label style="cursor:pointer;" title="Magnet(磁力点): 现价±显示带%内按|Γ×OI|加权平均的行权价(Call/Put各自Γ取绝对值), 理论引力中心 → 价格有向其靠拢的倾向。&#10;Pin(钉住点): 现价±显示带%内OI(Call+Put, 跨月汇总)最集中的行权价, 代表持仓锚定效应。&#10;口径: oc_chain跨月汇总OI, T=近月连续dte; SHFE无IV, Magnet不显示。"><input type="checkbox" id="t_mag" onchange="toggleChartLine()"> <span style="color:#74b9ff">Magnet</span>/<span style="color:#fdcb6e">Pin</span></label>\
         <label style="cursor:pointer;" title="最近月CallΔ≈0.25 / PutΔ≈-0.25 所在行权价: 绿=上边界, 红=下边界"><input type="checkbox" id="t_d25" onchange="toggleChartLine()"> <span style="color:#5cd85a">Δ25</span></label>\
-        <label style="cursor:pointer;" title="OI重心: 白=合计(现价±20%带内), 青=Call重心, 品红=Put重心"><input type="checkbox" id="t_oic" onchange="toggleChartLine()"> <span style="color:#ffffff">OI重心</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期货成交量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期货持仓量</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span> <span style="color:#576574">|</span> <span style="color:#00d2d3">净对冲</span><span style="color:#576574">=当日全部月份Σ(Δ×OI)净额, >0净买期货/&lt;0净卖期货</span> <span style="color:#576574">|</span> <span style="color:#e17055">DEX方向</span><span style="color:#576574">=Σ(Δ×OI)/ΣOI(OI加权平均Δ), [-1,1]; &gt;0对冲盘偏买/&lt;0偏卖</span> <span style="color:#576574">|</span> <span style="color:#b388ff">Vanna流</span><span style="color:#576574">=IV降1点(0.01)做市商净买入手数(Call+/Put-), &gt;0=IV压缩买盘推涨/&lt;0=卖压, IV越极端影响越大</span> <span style="color:#576574">|</span> <span style="color:#fd79a8">Charm流</span><span style="color:#576574">=时间流逝1天做市商净买入手数(Δ随时间衰减的对冲流), &gt;0=净买(买盘)/&lt;0=净卖(卖压), 越临近到期影响越大</span> <span style="color:#576574">|</span> <span style="color:#f6b93b">Gamma场景</span><span style="color:#576574">=价格±1%时做市商需额外买卖的手数, 涨1%买/跌1%卖, 与净对冲共用刻度</span> <span style="color:#576574">|</span> <span style="color:#cddc39">Vega</span><span style="color:#576574">=期权持仓对IV变动的敏感度(元/1%IV), 做市商净卖期权, IV升1%约亏这个数, 独立刻度</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+        <label style="cursor:pointer;" title="OI重心: 白=合计(现价±显示带%内), 青=Call重心, 品红=Put重心"><input type="checkbox" id="t_oic" onchange="toggleChartLine()"> <span style="color:#ffffff">OI重心</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期货成交量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期货持仓量</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span> <span style="color:#576574">|</span> <span style="color:#00d2d3">净对冲</span><span style="color:#576574">=当日全部月份Σ(Δ×OI)净额, >0净买期货/&lt;0净卖期货</span> <span style="color:#576574">|</span> <span style="color:#e17055">DEX方向</span><span style="color:#576574">=Σ(Δ×OI)/ΣOI(OI加权平均Δ), [-1,1]; &gt;0对冲盘偏买/&lt;0偏卖</span> <span style="color:#576574">|</span> <span style="color:#b388ff">Vanna流</span><span style="color:#576574">=IV降1点(0.01)做市商净买入手数(Call+/Put-), &gt;0=IV压缩买盘推涨/&lt;0=卖压, IV越极端影响越大</span> <span style="color:#576574">|</span> <span style="color:#fd79a8">Charm流</span><span style="color:#576574">=时间流逝1天做市商净买入手数(Δ随时间衰减的对冲流), &gt;0=净买(买盘)/&lt;0=净卖(卖压), 越临近到期影响越大</span> <span style="color:#576574">|</span> <span style="color:#f6b93b">Gamma场景</span><span style="color:#576574">=价格±1%时做市商需额外买卖的手数, 涨1%买/跌1%卖, 与净对冲共用刻度</span> <span style="color:#576574">|</span> <span style="color:#cddc39">Vega</span><span style="color:#576574">=期权持仓对IV变动的敏感度(元/1%IV), 做市商净卖期权, IV升1%约亏这个数, 独立刻度</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">最大回撤区间</th><th class="num">最长回撤期</th></tr>' + yrHtml + '</table></div>\
@@ -1467,9 +1582,10 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
 
     // 25Δ边界: 收盘站上=短期回撤风险(正GEX), 影线穿越=无次日效应; 跌破红线无回抽
     let _c25 = null, _c25d = Infinity, _p25 = null, _p25d = Infinity;
+    const _bd = (params.band != null ? params.band : 20) / 100;
     try {
       JSON.parse(r.oc_chain || '[]').forEach(it => {
-        const _b = it.s >= r.c * 0.8 && it.s <= r.c * 1.2;
+        const _b = it.s >= r.c * (1 - _bd) && it.s <= r.c * (1 + _bd);
         if (_b && it.cd != null && Math.abs(it.cd) > 0.01) { const dd = Math.abs(it.cd - 0.25); if (dd < _c25d && dd <= 0.2) { _c25d = dd; _c25 = it.s; } }
         if (_b && it.pd != null && Math.abs(it.pd) > 0.01) { const dd = Math.abs(it.pd + 0.25); if (dd < _p25d && dd <= 0.2) { _p25d = dd; _p25 = it.s; } }
       });
@@ -1581,6 +1697,9 @@ function setParamValues(p) {
   document.getElementById('p_slope_th').value = f.priceSlopeTh;
   document.getElementById('p_slope_days').value = f.slopeDays;
   document.getElementById('p_pb_slope_th').value = f.pbSlopeTh;
+  document.getElementById('p_mp_band').value = f.mpBand;
+  document.getElementById('p_be_band').value = f.beBand;
+  document.getElementById('p_band').value = f.band;
   document.getElementById('p_vol_window').value = f.volWindow;
   document.getElementById('p_acc_win').value = f.accWindow;
   document.getElementById('p_acc_streak').value = f.accStreak;
@@ -1618,6 +1737,9 @@ async function saveParams() {
       price_slope_th: num('p_slope_th'),
       slope_days: numI('p_slope_days'),
       pb_slope_th: num('p_pb_slope_th') ?? 0,
+      mp_band: num('p_mp_band') ?? 20,
+      be_band: num('p_be_band') ?? 20,
+      band: num('p_band') ?? 20,
       vol_window: numI('p_vol_window') ?? 0,
       acc_window: numI('p_acc_win') ?? 3,
       acc_streak: numI('p_acc_streak') ?? 3,
@@ -1661,6 +1783,9 @@ async function loadParams(sym) {
         priceSlopeTh: r.params.price_slope_th,
         slopeDays: r.params.slope_days,
         pbSlopeTh: r.params.pb_slope_th ?? 0,
+        mpBand: r.params.mp_band ?? 20,
+        beBand: r.params.be_band ?? 20,
+        band: r.params.band ?? 20,
         volWindow: r.params.vol_window ?? 0,
         accWindow: r.params.acc_window ?? 3,
         accStreak: r.params.acc_streak ?? 3,
@@ -1682,6 +1807,8 @@ function runMonteCarlo() {
   const cfg = SYM_CFG[sym] || { name: sym, mult: 10 };
   const fullData = ALL_DATA[sym];
   if (!fullData) { alert('数据未加载'); return; }
+  const bandParams = readBandParams();
+  applyBandParams(fullData, bandParams);
   const startDate = document.getElementById('p_start').value;
   const endDate = document.getElementById('p_end').value;
   let data = fullData;
@@ -1715,6 +1842,9 @@ function runMonteCarlo() {
     capital: parseFloat(document.getElementById('p_capital').value) ?? defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) ?? defaultParams.capLimit) * 10000,
     skipCount: parseInt(document.getElementById('p_skip').value) ?? defaultParams.skipCount,
+    mpBand: bandParams.mpBand,
+    beBand: bandParams.beBand,
+    band: bandParams.band,
   };
   params.mult = cfg.mult;
   const nextDirPred = computeNextDirPred(fullData, params);
@@ -2068,6 +2198,8 @@ function optimizeParam() {
   const cfg = SYM_CFG[sym] || { name: sym, mult: 10 };
   const fullData = ALL_DATA[sym];
   if (!fullData) { status.textContent = '数据未加载'; return; }
+  const bandParams = readBandParams();
+  applyBandParams(fullData, bandParams);
 
   const selected = getOptSelection();
   if (selected.length === 0) { status.textContent = '请先选择要优化的参数'; return; }
@@ -2106,6 +2238,9 @@ function optimizeParam() {
     capital: parseFloat(document.getElementById('p_capital').value) ?? defaultParams.capital,
     capLimit: (parseFloat(document.getElementById('p_cap_limit').value) ?? defaultParams.capLimit) * 10000,
     skipCount: parseInt(document.getElementById('p_skip').value) ?? defaultParams.skipCount,
+    mpBand: bandParams.mpBand,
+    beBand: bandParams.beBand,
+    band: bandParams.band,
     mult: cfg.mult,
   };
 
@@ -2391,6 +2526,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     _subMinIv = Infinity; _subMaxIv = -Infinity;
     _subMinFv = Infinity; _subMaxFv = -Infinity;
     _subMinFoi = Infinity; _subMaxFoi = -Infinity;
+    const _bandP = (params.band != null ? params.band : 20) / 100;
     for (let i = 0; i < n; i++) {
       const r = data[i];
       const g = r.gex != null ? r.gex : 0;
@@ -2430,10 +2566,10 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
               _hdg += (it.cdw || 0) + (it.pdw || 0);
               const d = Math.abs(it.s - r.mp);
               if (d < minD) { minD = d; bestIdx = idx; }
-              const _inBand = it.s >= r.c * 0.8 && it.s <= r.c * 1.2;
+              const _inBand = it.s >= r.c * (1 - _bandP) && it.s <= r.c * (1 + _bandP);
               if (_inBand) { bSum += tot * it.s; bW += tot; }
               if (_inBand && tot > _pinOi) { _pinOi = tot; _pinS = it.s; }
-              // Γ×OI 分侧取最集中行权价(±20%带)
+              // Γ×OI 分侧取最集中行权价(显示带内)
               if (_inBand && it.co > 0 && it.civ > 0) {
                 const _d1 = (Math.log(_S / it.s) + 0.5 * it.civ * it.civ * _T) / (it.civ * _sqT);
                 const _gxo = 0.3989422804014327 * Math.exp(-0.5 * _d1 * _d1) / (_S * it.civ * _sqT) * it.co;
@@ -2455,7 +2591,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
               if (_inBand && it.cd != null && Math.abs(it.cd) > 0.01) { const dd = Math.abs(it.cd - 0.25); if (dd < c25d && dd <= 0.2) { c25d = dd; _c25 = it.s; } }
               if (_inBand && it.pd != null && Math.abs(it.pd) > 0.01) { const dd = Math.abs(it.pd + 0.25); if (dd < p25d && dd <= 0.2) { p25d = dd; _p25 = it.s; } }
             });
-            // Zero Gamma: ±20%扫描假设价格, 总Γ(Call正/Put负)变号处, 取离现价最近
+            // Zero Gamma: 显示带内扫描假设价格, 总Γ(Call正/Put负)变号处, 取离现价最近
             if (_zcK.length > 0 && _zpK.length > 0) {
               const _zgF = S => {
                 let sum = 0;
@@ -2469,7 +2605,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
                 }
                 return sum;
               };
-              const _loZ = r.c * 0.8, _hiZ = r.c * 1.2, _NG = 80;
+              const _loZ = r.c * (1 - _bandP), _hiZ = r.c * (1 + _bandP), _NG = 80;
               let _pS = _loZ, _pF = _zgF(_loZ), _bd = Infinity;
               for (let g = 1; g <= _NG; g++) {
                 const _sZ = _loZ + (_hiZ - _loZ) * g / _NG;
@@ -3272,7 +3408,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       drawD25(_d25p, '#ff6b6b');
     }
 
-    // OI重心阶梯线: 青=Call重心, 品红=Put重心, 白=合计(±20%带内)
+    // OI重心阶梯线: 青=Call重心, 品红=Put重心, 白=合计(显示带内)
     if (showOic && _oiCen) {
       const bw3 = Math.max(state.barW, 2);
       const drawCen = (arr, col) => {

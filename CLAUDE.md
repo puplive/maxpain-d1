@@ -48,7 +48,7 @@
 | GET | `/api/symbols` | DB 已有品种列表 |
 | DELETE | `/api/data?symbol=TA` | 删除品种数据（需鉴权） |
 | GET | `/api/stats` | 各品种统计 |
-| POST | `/api/params` | 保存参数配置（含 vol_filter_low/vol_filter_high） |
+| POST | `/api/params` | 保存参数配置（含 vol_filter_low/vol_filter_high、mp_band/be_band/band） |
 | GET | `/api/params?symbol=TA` | 读取参数配置 |
 
 Worker 域名: `maxpain-api.136320309workersdev.workers.dev`
@@ -79,6 +79,20 @@ python scripts/build_web_data.py
 4. 每个记录包含：`d, o, c, h, l, mp, co, po, bec, bep, vr, ivs, gex, oc_chain, expiry, dte, oi_total, oi_pcr, oi_max_strike, vol_call, vol_put, vol_total, fut_vol, fut_oi, fut_turnover, atm_iv`
 
 > 前端所有计算（MP 趋势、止损、信号判定等）均在浏览器端完成，数据文件只提供原始指标。
+
+### 带宽参数（前端可调）
+
+前端从 `oc_chain` 重算指标，带宽按品种保存在 `backtest_params`：
+
+| 参数 | 默认 | 作用 |
+|------|------|------|
+| `mp_band` | 20 | MP(痛点)计算的行权价过滤带（现价±%），参与信号 |
+| `be_band` | 20 | BEC/BEP(盈亏平衡)计算的行权价过滤带（现价±%），参与信号 |
+| `band` | 20 | 不参与信号的显示指标共用带：Gamma峰值/Wall/ZeroGamma/Vanna/Charm/Magnet/Pin/OI重心/25Δ |
+
+- 重算时机：`runBacktest` / 运行蒙特卡洛 / 优化参数 前调用 `applyBandParams()`，带宽不变时用数组上的 `_bandKey` 跳过。
+- BEC/BEP 精确重算依赖转换脚本写入 `oc_chain` 的 `cwc/pwc`（OI加权期权收盘价）；旧数据缺该字段时回退到已存的 `bec/bep`。
+- Gamma峰值由前端按近月 `dte` 口径重算（与 Wall 一致），与转换脚本按各合约 T 的旧值可能有细微差异。
 
 ### 次要路径（AKShare 拉取 CZCE）
 
@@ -174,7 +188,10 @@ Cloudflare Dashboard 已关联 GitHub 仓库，Worker 自动部署。配置在 D
 字段: symbol, date, open, close, high, low, mp, co, po, bec, bep, vr, ivs, gex, oc_chain, expiry, dte, oi_total, oi_pcr, oi_max_strike, vol_call, vol_put, vol_total, fut_vol, fut_oi, fut_turnover, atm_iv
 
 表: `backtest_params`，PRIMARY KEY (symbol)
-字段: symbol, lookback, min_pct, max_pos, margin, be_th, entry_atr_mult, atr_period, atr_mult, lock_pct, vol_filter_low, vol_filter_high, capital, cap_limit, skip_count
+字段: symbol, lookback, min_pct, max_pos, margin, be_th, entry_atr_mult, atr_period, atr_mult, lock_pct, vol_filter_low, vol_filter_high, capital, cap_limit, skip_count, mp_band, be_band, band
+
+> 已有远程库新增 `mp_band/be_band/band` 时需各执行一次：
+> `ALTER TABLE backtest_params ADD COLUMN mp_band REAL DEFAULT 20;`（`be_band`、`band` 同理）
 
 远程操作：
 ```bash
