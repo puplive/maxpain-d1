@@ -41,6 +41,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .pos { color: #5cd85a; }
 .neg { color: #ff6b6b; }
 .muted { color: #8395a7; }
+.tag { display: inline-block; font-size: 11px; font-weight: 400; padding: 1px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; white-space: nowrap; }
+.tag-pending { color: #e8c84a; background: #2a2410; border: 1px solid #5a4a18; }
 .note, .warn { border-left: 3px solid #54a0ff; background: #14212e; padding: 8px 12px; border-radius: 0 4px 4px 0; margin: 10px 0; }
 .warn { border-left-color: #ff6b6b; }
 .note strong { color: #54a0ff; }
@@ -117,6 +119,55 @@ footer { max-width: 1180px; margin: 0 auto 40px; padding: 0 20px; color: #576574
       <p><code>F(S) = Σ_call φ(d1)/(S·σc·√T)·OIc - Σ_put φ(d1)/(S·σp·√T)·OIp</code></p>
       <p>找变号点，取离现价最近的一个；区间内不变号则无 ZG。<code>T = dte/365</code>，call 需 <code>co&gt;0 且 civ&gt;0</code>，put 需 <code>po&gt;0 且 piv&gt;0</code>。</p>
       <div class="note"><strong>结论：</strong>三者没有恒等关系。MP 是 delta 零，ZG 是 gamma 零，gpk 是 gamma 最大；只有临近到期时才可能重合。现实里出现"MP 在净对冲买卖临界点"的说法，是把 delta 和 gamma 混在了一起。</div>
+    </section>
+
+    <section id="wall-strength">
+      <h2>Call/Put Wall 强度口径与验证</h2>
+      <p>图表 tooltip 里 Wall 后面的百分比是<b>距现价的距离</b>；下一行的强度指标才是墙本身：</p>
+      <table>
+        <tr><th>指标</th><th>公式</th><th>读法</th></tr>
+        <tr><td>集中度</td><td>墙 Γ×OI ÷ 显示带内同侧 Γ×OI 之和</td><td>越高墙越厚；受显示带 band 影响</td></tr>
+        <tr><td>对冲</td><td>Γ×OI × 现价 × 1%</td><td>价格变动 1% 时该墙需增加的对冲手数（手/1%）</td></tr>
+        <tr><td>OI</td><td>墙 OI ÷ 带内同侧 OI 之和</td><td>该行权价的持仓集中度</td></tr>
+        <tr><td>持续</td><td>同一墙行权价连续天数</td><td>越长仓位越真实；频繁换行权价说明是滚动仓位</td></tr>
+      </table>
+
+      <h3>历史验证（汇总口径）</h3>
+      <p>61 个品种、51,788 个交易日（其中 48,671 天有可计算链数据）；Call/Put 事件各按 20 日去重，再只看 10 日内真正触墙的样本。触墙 = 最高价 ≥ Call Wall / 最低价 ≤ Put Wall；越墙 = 收盘越过；墙取事件当天的行权价和强度，后续 10 日固定参照。</p>
+      <table>
+        <tr><th>指标</th><th class="num">Call Wall</th><th class="num">Put Wall</th></tr>
+        <tr><td>事件数（20 日去重）</td><td class="num">2,491</td><td class="num">2,475</td></tr>
+        <tr><td>10 日内触墙率</td><td class="num">47.3%</td><td class="num">49.6%</td></tr>
+        <tr><td>触墙当天收盘越墙</td><td class="num">52.3%</td><td class="num">52.6%</td></tr>
+        <tr><td>当天守住后、其后 10 日再破</td><td class="num">61.9%</td><td class="num">57.6%</td></tr>
+        <tr><td>10 日内收盘越墙</td><td class="num">81.8%</td><td class="num">79.9%</td></tr>
+        <tr><td>守住样本中位反向回撤（5 日）</td><td class="num">3.64%</td><td class="num">3.48%</td></tr>
+      </table>
+      <ul>
+        <li>按集中度分三组，触墙当天收破率 Call 52.5% / 52.1% / 52.4%，Put 54.2% / 53.6% / 50.5%，没有单调关系。</li>
+        <li>只有前 10% 的极端墙略好：当天收破 Call 47.5% vs 52.9%，Put 42.3% vs 53.8%（0-2% 距离内 Put 37.2% vs 52.7%）；但 10 日内最终越墙率几乎一样（Call 81.4% vs 81.9%，Put 76.4% vs 80.3%）。</li>
+        <li>控制距离和 dte 后，集中度每 +10pp 对 10 日越墙率的影响：Call +0.9pp（t=0.75），Put -0.6pp（t=-0.59），都不显著。</li>
+        <li>OI 占比反而与"被破"正相关：Call 每 +10pp，10 日越墙率 +4.5pp（t=2.31）——大 OI 行权价更像磁铁，不是障碍。</li>
+        <li>墙的持续天数只在 Put 侧有很小作用：每多 1 天，10 日越墙率 -0.3pp（t=-1.90）。</li>
+      </ul>
+      <div class="warn"><strong>结论：</strong>汇总口径下，Wall 强度不能作为过滤条件：大多数墙在触墙当天或之后 10 日内被收盘突破；只有最极端的 10% 能略微降低当天收破概率，但改变不了最终结果。若墙真实存在，需要分到期 OI 和盘中数据才可能识别。</div>
+      <p class="muted">口径限制：oc_chain 是跨月汇总 OI，T 用近月连续 dte，验证与图上显示的强度完全同口径。</p>
+
+      <h3>越墙怎么用：等确认只有微弱优势，抢跑不行</h3>
+      <p>回测口径：触墙（最高/最低价碰到墙）后，以首次收盘越墙为信号，次日收盘入场；Call 侧越墙做多、Put 侧越墙做空；持有 3/5/10 日，不加止损（加"收盘收回墙内"止损结果不变）。</p>
+      <table>
+        <tr><th>入场方式</th><th class="num">样本</th><th class="num">5 日均值</th><th class="num">t</th></tr>
+        <tr><td>全部越墙（多+空混合）</td><td class="num">1,938</td><td class="num">+0.06%</td><td class="num">—</td></tr>
+        <tr><td>Call Wall 越墙做多</td><td class="num">961</td><td class="num">+0.34%</td><td class="num">+2.5</td></tr>
+        <tr><td>Put Wall 越墙做空</td><td class="num">977</td><td class="num">-0.22%</td><td class="num">-2.0</td></tr>
+        <tr><td>当天守住、之后才破</td><td class="num">682</td><td class="num">≈0 或负</td><td class="num">—</td></tr>
+      </table>
+      <ul>
+        <li>Call 侧按信号日期聚类后 5 日 +0.41%（t≈2.1），优势是真的但很薄；Put 侧做空直接为负——Put Wall 被跌破后下行不跟随。</li>
+        <li>优势集中在动量：越墙当天同时是 20 日收盘新高时 5 日 +0.80%（其余 +0.15%）；越墙收盘超出墙 ≥1% 时 +1.00%（超出 &lt;0.3% 时 -0.18%）。说明赚的是突破动量，不是墙本身的信息。</li>
+      </ul>
+      <div class="warn"><strong>抢跑（越墙前入场）不可行：</strong>触墙当天收回、次日收盘入场（赌后续越墙，n=1,143），全部 5 日 -0.07%；Call +0.19%（t=1.3），Put -0.31%（t=-2.1）。事后来看最终越墙的样本 5 日 +0.96%、未越墙的 -1.58%，但事前无法区分，期望值正好对消。首次进入距墙 0.5%/1%/2% 内入场同样全平（各侧 |EV| ≤0.2%），固定止损 1%/2%/3% 也不改变结论。10 日内 80% 越墙率是"触墙之后"的条件概率，其中 52% 在触墙当天就收盘越墙；剩下的部分抢跑要同时承受约 40% 的假突破，盈亏相抵。</div>
+      <p class="muted">抢跑回测样本：触墙收回后入场 1,143 次（Call 561 / Put 582）；接近墙入场按侧各约 1,200–1,900 次（阈值越小样本越少），均按 20 日去重。</p>
     </section>
 
     <section id="gpk-vs-zg">
@@ -221,8 +272,8 @@ footer { max-width: 1180px; margin: 0 auto 40px; padding: 0 20px; color: #576574
     </section>
 
     <section id="playbook">
-      <h2>实战组合：临近到期 + 单一大 OI 行权价 + 期货对冲流</h2>
-      <div class="warn"><strong>尚未验证：</strong>这是从机制推导出来的交易框架，不是回测结论。此前的日线汇总测试没有稳定方向优势，使用前需要按第 8 节的方法自行验证。</div>
+      <h2>实战组合：临近到期 + 单一大 OI 行权价 + 期货对冲流<span class="tag tag-pending">待验证</span></h2>
+      <div class="warn"><strong>尚未验证：</strong>这是从机制推导出来的交易框架，不是回测结论。此前的日线汇总测试没有稳定方向优势，使用前需要按 <a href="#methodology">方法论</a> 一节自行验证。</div>
 
       <h3>时间尺度分离</h3>
       <p>MP 21 日 EMA 定中周期方向；到期结构定短线进出场。MP 选边，结构选点和止损。</p>
@@ -291,6 +342,44 @@ footer { max-width: 1180px; margin: 0 auto 40px; padding: 0 20px; color: #576574
       </ul>
     </section>
 
+    <section id="followups">
+      <h2>后续关注（待验证）</h2>
+      <p>还没验证、或需要改数据才能验证的事项，按优先级排列。做完后把结论写进对应章节，并去掉那边的「待验证」标签。</p>
+      <table>
+        <tr><th>事项</th><th>要回答的问题</th><th>验证方式</th><th>优先级</th></tr>
+        <tr>
+          <td>临近到期组合玩法</td>
+          <td>pin / break 流程是否有效</td>
+          <td>按 dte、top1 OI 占比、价格 vs ZG、MP 斜率分桶；次日执行，统计结算落点与突破后收益</td>
+          <td>高</td>
+        </tr>
+        <tr>
+          <td>结算落点统计</td>
+          <td>pin 是否真的存在</td>
+          <td>按距 pin 距离、dte 分桶，统计结算落在 pin ±0.5% 内的比例</td>
+          <td>中</td>
+        </tr>
+        <tr>
+          <td>期货流过滤</td>
+          <td>OI / 成交额能否区分真突破</td>
+          <td>fut_oi 5 日变化 + 成交额相对 20 日均值 vs 突破延续概率；对齐 opt_contract / fut_contract</td>
+          <td>中</td>
+        </tr>
+        <tr>
+          <td>分到期 OI 落库</td>
+          <td>消除跨月汇总误差</td>
+          <td>转换脚本保留近月 / 分到期 OI，重算 MP、Wall 强度、Pin</td>
+          <td>中（需改管道）</td>
+        </tr>
+        <tr>
+          <td>盘中主动买卖</td>
+          <td>日内确认突破方向</td>
+          <td>需要 tick / 委托流数据，当前日线数据没有</td>
+          <td>低（数据缺口）</td>
+        </tr>
+      </table>
+    </section>
+
   </main>
 </div>
 
@@ -308,7 +397,9 @@ footer { max-width: 1180px; margin: 0 auto 40px; padding: 0 20px; color: #576574
     if (!sec.id) sec.id = 'note-' + (i + 1);
     var h2 = sec.querySelector('h2');
     if (!h2) return;
-    var title = h2.textContent.trim();
+    var _hc = h2.cloneNode(true);
+    Array.prototype.forEach.call(_hc.querySelectorAll('.tag'), function (x) { x.remove(); });
+    var title = _hc.textContent.trim();
     var link = document.createElement('a');
     link.href = '#' + sec.id;
     link.textContent = title;
