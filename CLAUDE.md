@@ -34,7 +34,8 @@
 │   │   ├── index.json                  # 品种列表 + 合约乘数
 │   │   └── {symbol}.json               # 按品种拆分的全量数据
 │   ├── index.html                      # 回测页面
-│   └── train.html                      # 模拟训练
+│   ├── train.html                      # 模拟训练
+│   └── notes.html                      # 交易笔记页（目录/搜索自动生成，追加 section 即可）
 ├── strategy_rules.md                   # 策略规则文档（可能滞后）
 └── .gitignore
 ```

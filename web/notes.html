@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>交易笔记 · MP / Gamma / 对冲流</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #0f1923; color: #c8d6e5; font: 14px/1.7 -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+a { color: #54a0ff; }
+.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 10px 20px; background: rgba(15,25,35,.94); backdrop-filter: blur(6px); border-bottom: 1px solid #2d3436; }
+.brand { color: #54a0ff; font-weight: 600; font-size: 17px; white-space: nowrap; }
+.brand small { color: #576574; font-weight: 400; font-size: 12px; margin-left: 8px; }
+.top nav { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.top nav a { color: #8395a7; text-decoration: none; font-size: 13px; padding: 4px 10px; border: 1px solid #2d3436; border-radius: 4px; transition: all .15s; white-space: nowrap; }
+.top nav a:hover { color: #54a0ff; border-color: #54a0ff; }
+#q { width: 180px; background: #0f1923; border: 1px solid #2d3436; color: #c8d6e5; border-radius: 4px; padding: 5px 10px; font-size: 13px; outline: none; }
+#q:focus { border-color: #54a0ff; }
+.layout { display: flex; gap: 24px; max-width: 1180px; margin: 0 auto; padding: 20px; align-items: flex-start; }
+aside { position: sticky; top: 64px; width: 210px; flex-shrink: 0; max-height: calc(100vh - 84px); overflow: auto; }
+.toc-title { font-size: 11px; letter-spacing: .08em; color: #576574; margin: 0 0 8px 10px; }
+#toc a { display: block; color: #8395a7; text-decoration: none; font-size: 13px; padding: 6px 10px; border-left: 2px solid transparent; border-radius: 0 4px 4px 0; line-height: 1.35; }
+#toc a:hover { color: #c8d6e5; background: #16232f; }
+#toc a.active { color: #54a0ff; border-left-color: #54a0ff; background: #16232f; }
+main { flex: 1; min-width: 0; }
+section { background: #1a2a3a; border: 1px solid #2d3436; border-radius: 8px; padding: 18px 22px; margin-bottom: 16px; scroll-margin-top: 70px; }
+section h2 { font-size: 17px; color: #fff; margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px solid #2d3436; }
+section h2 .perm { color: #576574; text-decoration: none; font-size: 14px; font-weight: 400; margin-left: 8px; opacity: 0; transition: opacity .15s; }
+section:hover h2 .perm { opacity: 1; }
+section h3 { font-size: 14px; color: #54a0ff; margin: 18px 0 6px; }
+p { margin: 8px 0; }
+ul, ol { margin: 8px 0; padding-left: 22px; }
+li { margin: 4px 0; }
+strong { color: #e8e8e8; font-weight: 600; }
+code { background: #0f1923; border: 1px solid #2d3436; border-radius: 3px; padding: 0 5px; font-size: 12px; color: #e8c84a; font-family: ui-monospace, Menlo, monospace; }
+table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+th { background: #16232f; color: #8395a7; font-weight: 500; text-align: left; padding: 7px 10px; border-bottom: 1px solid #2d3436; white-space: nowrap; }
+td { padding: 6px 10px; border-bottom: 1px solid #223040; }
+tr:last-child td { border-bottom: none; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pos { color: #5cd85a; }
+.neg { color: #ff6b6b; }
+.muted { color: #8395a7; }
+.note, .warn { border-left: 3px solid #54a0ff; background: #14212e; padding: 8px 12px; border-radius: 0 4px 4px 0; margin: 10px 0; }
+.warn { border-left-color: #ff6b6b; }
+.note strong { color: #54a0ff; }
+.warn strong { color: #ff6b6b; }
+.hidden { display: none !important; }
+footer { max-width: 1180px; margin: 0 auto 40px; padding: 0 20px; color: #576574; font-size: 12px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 820px) {
+  .top { flex-wrap: wrap; gap: 10px; }
+  #q { width: 120px; }
+  .layout { flex-direction: column; padding: 12px; gap: 12px; }
+  aside { position: static; width: 100%; max-height: none; overflow-x: auto; padding-bottom: 4px; }
+  .toc-title { display: none; }
+  #toc { display: flex; gap: 6px; }
+  #toc a { border: 1px solid #2d3436; border-radius: 14px; padding: 4px 10px; white-space: nowrap; font-size: 12px; }
+  #toc a.active { border-color: #54a0ff; }
+  section { padding: 14px 16px; }
+  section h2 { font-size: 16px; }
+  th, td { padding: 5px 6px; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">交易笔记<small>MP · Gamma · 对冲流</small></div>
+  <nav>
+    <a href="index.html">回测</a>
+    <a href="train.html">模拟训练</a>
+    <input id="q" type="search" placeholder="搜索笔记…" aria-label="搜索笔记">
+  </nav>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="toc-title">目录</div>
+    <div id="toc"></div>
+  </aside>
+
+  <main id="notes">
+
+    <section id="mp-trend">
+      <h2>MP 是趋势过滤器，不是日线磁吸</h2>
+      <p>最大痛点（MP）是到期时总赔付最小的行权价，对价格求导：</p>
+      <p><code>dP/dS = Σ(实值 call OI) - Σ(实值 put OI)</code>，在 MP 处为零，即到期时净方向敞口（净 delta）为零的行权价。</p>
+      <ul>
+        <li>不要每天把 MP 当磁吸目标做均值回归——日线级别没有统计优势（见后文实测）。</li>
+        <li>正确的用法：把 MP 当噪音小的中周期趋势方向。回测里用 21 日 MP 的 EMA 斜率 + threshold 缓冲定方向。</li>
+        <li>方向判断：EMA 上行为多头模式，下行为空头模式；价格与 MP 同侧作为入场过滤。</li>
+        <li>MP 选方向（中周期），到期结构选进出场（短周期），两者时间尺度分开。</li>
+      </ul>
+    </section>
+
+    <section id="three-levels">
+      <h2>三个关键价位：MP / ZeroGamma / Gamma 峰</h2>
+      <table>
+        <tr><th>价位</th><th>定义</th><th>含义</th></tr>
+        <tr>
+          <td><strong>MP</strong>（最大痛点）</td>
+          <td>到期赔付最小的行权价</td>
+          <td>净 delta 为零；不是对冲流的临界点</td>
+        </tr>
+        <tr>
+          <td><strong>ZeroGamma</strong>（ZG）</td>
+          <td>做市商总 gamma 变号的点位</td>
+          <td>对冲方向的翻转点：上方正 gamma（高抛低吸、抑制波动），下方负 gamma（追涨杀跌、放大波动）。是波动率状态指标，不是方向指标</td>
+        </tr>
+        <tr>
+          <td><strong>Gamma 峰</strong>（gpk）</td>
+          <td>全链 Γ×OI 最大的行权价</td>
+          <td>正 gamma 区里的吸附/钉扎中心，对冲压力最集中</td>
+        </tr>
+      </table>
+      <p>ZG 的前端算法：在现价 ±band 区间取 81 个网格点，计算</p>
+      <p><code>F(S) = Σ_call φ(d1)/(S·σc·√T)·OIc - Σ_put φ(d1)/(S·σp·√T)·OIp</code></p>
+      <p>找变号点，取离现价最近的一个；区间内不变号则无 ZG。<code>T = dte/365</code>，call 需 <code>co&gt;0 且 civ&gt;0</code>，put 需 <code>po&gt;0 且 piv&gt;0</code>。</p>
+      <div class="note"><strong>结论：</strong>三者没有恒等关系。MP 是 delta 零，ZG 是 gamma 零，gpk 是 gamma 最大；只有临近到期时才可能重合。现实里出现"MP 在净对冲买卖临界点"的说法，是把 delta 和 gamma 混在了一起。</div>
+    </section>
+
+    <section id="gpk-vs-zg">
+      <h2>实测：峰与 ZG 的相对位置没有方向优势</h2>
+      <p>样本：47,983 个交易日（同时有 ZG 和 gpk），全部期货期权品种汇总。</p>
+      <ul>
+        <li>gpk 在 ZG 上方占 <strong>69.4%</strong> 的交易日——这是常态，不是看涨信号。</li>
+        <li>(gpk - ZG)/价格 中位 <strong>+2.22%</strong>；(价格 - ZG)/价格 中位 <strong>+0.99%</strong>。</li>
+        <li>gpk 每天上移 12.1%、下移 12.1%、不变 75.8%——峰值本身很粘。</li>
+      </ul>
+      <p>条件未来收益（每品种每 10 日抽 1 天，非重叠采样）：</p>
+      <table>
+        <tr><th>条件</th><th class="num">10日均值</th><th class="num">10日上涨率</th><th class="num">20日均值</th><th class="num">20日上涨率</th></tr>
+        <tr><td>基线</td><td class="num">+0.195%</td><td class="num">49.1%</td><td class="num">+0.428%</td><td class="num">49.2%</td></tr>
+        <tr><td>gpk &gt; ZG</td><td class="num">+0.233%</td><td class="num">48.3%</td><td class="num">+0.478%</td><td class="num">48.5%</td></tr>
+        <tr><td>gpk &lt; ZG</td><td class="num">+0.106%</td><td class="num">51.0%</td><td class="num">+0.316%</td><td class="num">51.0%</td></tr>
+        <tr><td>价格 &gt; ZG（正 gamma）</td><td class="num">+0.112%</td><td class="num">47.3%</td><td class="num">+0.473%</td><td class="num">46.8%</td></tr>
+        <tr><td>价格 &lt; ZG（负 gamma）</td><td class="num">+0.363%</td><td class="num">52.8%</td><td class="num">+0.342%</td><td class="num">53.8%</td></tr>
+        <tr><td>ZG &lt; 价格 &lt; CallWall</td><td class="num">+0.100%</td><td class="num">47.4%</td><td class="num">+0.658%</td><td class="num">48.3%</td></tr>
+        <tr><td>PutWall &lt; 价格 &lt; ZG</td><td class="num">+0.218%</td><td class="num">51.5%</td><td class="num">+0.213%</td><td class="num">52.4%</td></tr>
+        <tr><td>ZG &lt; 价格 &lt; gpk</td><td class="num">+0.127%</td><td class="num">47.3%</td><td class="num">+0.614%</td><td class="num">48.3%</td></tr>
+        <tr><td>gpk &lt; 价格 &lt; ZG</td><td class="num neg">-0.076%</td><td class="num">50.9%</td><td class="num neg">-0.287%</td><td class="num">50.1%</td></tr>
+      </table>
+      <p>解读：峰在 ZG 上方 ≠ 上涨趋势；call 走廊（ZG 与 CallWall 之间）是常见状态且收益并不突出；镜像组合也不看跌。本样本里价格在 ZG 下方反而收益更高，大概率是周期/反弹成分，不能反推成规律。</p>
+      <div class="warn"><strong>结论：</strong>只看 gpk / ZG / 价格的相对位置做方向，没有可交易优势。</div>
+    </section>
+
+    <section id="fail-to-zg">
+      <h2>触峰失败 ≠ 回到 ZG（是距离效应）</h2>
+      <p>定义：价格从一侧接近 gpk（0.25% 以内），之后 5 个交易日内没有收盘站到峰的另一侧，即"触峰失败"。</p>
+      <ul>
+        <li>从下方触峰，失败 n=82：70.7% 在 10 日内触及 ZG，中位 2 天，距 ZG 中位 2.59%；成功站上 n=199：只有 32.2% 回落触及 ZG。</li>
+        <li>从上方触峰，失败 n=43：74.4% 触及 ZG，中位 1 天，距 ZG 中位 1.31%；成功跌破 n=124：52.4%。</li>
+      </ul>
+      <p>但按"任意一天距 ZG 同样距离，10 日内触及 ZG"做距离匹配基线：</p>
+      <table>
+        <tr><th>距 ZG</th><th class="num">0-1%</th><th class="num">1-2%</th><th class="num">2-3%</th><th class="num">3-4%</th><th class="num">4-5%</th></tr>
+        <tr><td>10 日内触及率</td><td class="num">86.7%</td><td class="num">68.0%</td><td class="num">50.8%</td><td class="num">38.0%</td><td class="num">21.6%</td></tr>
+      </table>
+      <ul>
+        <li>失败确认后（第 6-15 日、价格仍在原侧）：从下方 n=48，回到 ZG 概率 45.8%（中位 1.5 天）；从上方 n=17，35.3%——都低于同距离基线。</li>
+        <li>也就是说，反转几乎全部集中在 5 日确认窗口内（41% 的失败单当场就摸到 ZG），确认之后没有额外的 ZG 磁吸。</li>
+        <li>穿峰又收回的"假突破确认"：上假突破 n=328，56.4% 回 ZG（距 1.92%，基线 1-2% 段 68.0%）；下假突破 n=178，70.8%（距 1.05%，基线 0-1% 段 86.7%）——同样不高于基线。</li>
+        <li>障碍赛：call 走廊先到 CallWall 44.4%，几何基线 44.5%；put 走廊先到 PutWall 40.6%，几何基线 41.7%——没有吸附，甚至略反向。</li>
+      </ul>
+      <div class="warn"><strong>结论：</strong>"突破失败会回到 ZG"是被距离混淆的假象。真正决定 10 日内能否摸到 ZG 的是当前离 ZG 有多远，而不是突破是否失败。</div>
+    </section>
+
+    <section id="fade-results">
+      <h2>峰值附近做失败方：回测数字</h2>
+      <p>核心现象：峰值附近风险不对称——失败的回撤（约 5%）远大于成功突破的延续（约 1.3%）。但把这个不对称乘上概率后，优势基本被抵消。</p>
+
+      <h3>触峰当天反手（赌突破失败）</h3>
+      <ul>
+        <li>事件 n=712（20 日去重），无界持有 10 日：毛 EV +0.029%，t=0.16。</li>
+        <li>止损 1.3% / 止盈 5%：EV +0.060%，胜率 11.4%，止损 64.7%，到期 23.9%，中位 -1.3%。</li>
+      </ul>
+
+      <h3>假突破确认后反手（穿峰又收回）</h3>
+      <ul>
+        <li>事件 n=1687。止损放在 poke 极值（影线高/低点），距离中位 1.28%，90 分位 3.80%。</li>
+        <li>止盈 5%：EV +0.097%（t=1.39），胜率 17.0%，止损 66.3%，到期 16.7%，中位 -0.63%；止盈 3%：EV +0.050%；止盈 2%：EV +0.005%。</li>
+        <li>确认后 10 日内，从 poke 极值向反方向的最大回撤：中位 4.26%，均值 5.73%，达到 5% 的占 41.8%——不对称是真的，但不是每次都有。</li>
+        <li>方向拆分：做空失败方（上假突破）EV -0.000%（n=939）；做多失败方（下假突破）+0.218%（n=748）。只有失败方毛 EV 不为负，量级约 0.1%/笔。</li>
+      </ul>
+
+      <h3>"峰值上移离场 / 突破次日未收回离场"规则</h3>
+      <ul>
+        <li>规则：在峰值附近开失败单；峰值朝持仓不利方向移动离场；峰值朝有利方向移动则持仓；价格刺穿峰值后，次日收盘仍未收回则离场。</li>
+        <li>897 笔，毛 EV -0.003%（t=-0.02），中位 -0.666%，胜率 22.2%，平均持有 7.9 天（中位 3 天）。</li>
+        <li>离场分布：突破未回撤 461、gpk 上移 209、到期/数据结束 116、gpk 下移 111。</li>
+        <li>方向：做空 +0.025%，做多 -0.034%。</li>
+        <li>对照（同入场、无规则持 10 日）：EV +0.001%，中位 +0.093%，胜率 50.9%。</li>
+      </ul>
+
+      <div class="warn"><strong>结论：</strong>
+        <ul>
+          <li>规则形态是"低胜率 + 正偏"（靠少数大回撤单赚钱），但毛 EV ≈ 0，扣掉成本后为负。</li>
+          <li>"刺穿峰值 ≠ 突破失败"：刺穿后约有一半（51%）会持续站稳，次日不收回才离场依然来不及。</li>
+          <li>gpk 75.8% 的天数不变，等它移动离场往往已经晚了。</li>
+          <li>所有日线级别的 MP / ZG / gpk 方向测试，均未发现扣除成本后仍成立的优势。</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="who-uses-mp">
+      <h2>现实中谁在用 MP</h2>
+      <ul>
+        <li><strong>散户/数据站：</strong>Barchart、Market Chameleon、OptionCharts、0DTE 圈子等普遍展示 MP，用来画线、选到期、找 pin。</li>
+        <li><strong>机构：</strong>很少把 MP 当核心。机构看 GEX、gamma flip、walls、vanna/charm、波动率曲面；MP 最多作为共振项或结算参考。</li>
+        <li><strong>国内商品期权：</strong>期货公司研究和培训里提得多，专业核心用户少。市场规模小、以期货对冲为主，钉扎效应比美股弱。</li>
+      </ul>
+      <p>常见策略：</p>
+      <ul>
+        <li>到期 pin / 区间交易：straddle、strangle、iron condor，赌结算落在 MP 附近。</li>
+        <li>偏离收敛：价格大幅偏离 MP 时反向做回归。</li>
+        <li>卖权选行权价：用 MP 和 walls 挑安全的卖出腿。</li>
+        <li>共振过滤：MP + GEX + OI 集中度 + 趋势方向同时指向才做。</li>
+        <li>结算参考：临近到期用 MP 估结算附近，管理已有仓位。</li>
+      </ul>
+      <p class="muted">机构不作为核心的原因：MP 是静态的、只看 OI、忽略 gamma/T/IV；做市商是动态对冲的；0DTE 会稀释 OI 集中度。</p>
+    </section>
+
+    <section id="playbook">
+      <h2>实战组合：临近到期 + 单一大 OI 行权价 + 期货对冲流</h2>
+      <div class="warn"><strong>尚未验证：</strong>这是从机制推导出来的交易框架，不是回测结论。此前的日线汇总测试没有稳定方向优势，使用前需要按第 8 节的方法自行验证。</div>
+
+      <h3>时间尺度分离</h3>
+      <p>MP 21 日 EMA 定中周期方向；到期结构定短线进出场。MP 选边，结构选点和止损。</p>
+
+      <h3>每日筛选</h3>
+      <ul>
+        <li>近月 <code>dte</code> 在 2-7 天，理想 3-5 天。</li>
+        <li>现价 ±3% 内 OI 最大的行权价，其 (co+po) 占比 ≥25%，且 top1/top2 ≥1.5。</li>
+        <li>该行权价的 call、put 各占自身 OI 的 20% 以上（双边都有仓位才会钉）。</li>
+        <li>行权价离现价 ≤1%；同时 |行权价 - mp| ≤1% 或一个最小变动价位。</li>
+        <li>gpk 落在同一行权价；Γ×OI 占比 ≥30%。</li>
+        <li>价格相对 ZG 的位置；MP 21 日 EMA 斜率方向。</li>
+        <li>期货流：<code>fut_oi</code> 5 日变化、<code>fut_turnover</code> 相对 20 日均值。</li>
+      </ul>
+
+      <h3>Pin 模式（价格 &gt; ZG，正 gamma）</h3>
+      <ul>
+        <li>只做 MP 趋势方向的回踩 pin。</li>
+        <li>入场：0.3-0.5% 回踩，缩量、期货 OI 不扩张。</li>
+        <li>止损：收盘站出 pin ≥0.5%（或 1 ATR）且期货 OI 扩张。</li>
+        <li>目标：pin 或下一道 wall。不要裸持到结算。</li>
+      </ul>
+
+      <h3>Break 模式（价格 &lt; ZG，或 pin 被有效击穿）</h3>
+      <ul>
+        <li>入场：收盘站出 pin，方向与 MP 趋势一致；<code>fut_oi</code> 5 日 +3-5%；成交额 ≥1.5×20 日均值；且不是空头回补。</li>
+        <li>止损：收盘收回 pin 内。</li>
+        <li>目标：下一道 OI 行权价 / 量度目标。</li>
+      </ul>
+
+      <h3>负 gamma 下的假突破</h3>
+      <p>刺穿 pin 后收回，且期货 OI 不扩张 → 反手做失败方，止损放 poke 影线极值。</p>
+
+      <h3>读期货流</h3>
+      <ul>
+        <li><strong>Absorption：</strong>成交量增、OI 增、价格滞涨 → pin 有效。</li>
+        <li><strong>Expansion：</strong>价格穿过 pin、OI 增、量增 → 真突破。</li>
+        <li><strong>空头回补：</strong>价格涨 + OI 降 → 不是真买盘。</li>
+        <li>看对应期货合约（<code>fut_contract</code> / <code>opt_contract</code> 映射），不是主力合约；会员多空排名作辅助。</li>
+      </ul>
+
+      <h3>示例（TA）</h3>
+      <p>近月 dte=4，价格 5800，5800 行权价 OI 占 30% 且 call/put 都有，gpk=5800，ZG=5720（正 gamma），MP 21 日 EMA 向上：</p>
+      <ul>
+        <li>在 5780-5800 回踩买入，目标 pin / 下一道 wall。</li>
+        <li>若收盘站上 5800 且 <code>fut_oi</code> +5%、成交额 1.5× → 翻成突破模式。</li>
+        <li>若戳到 5810 后收回 5800 下方、OI 没增 → 假突破，反向做回 pin。</li>
+      </ul>
+    </section>
+
+    <section id="methodology">
+      <h2>方法论与数据缺口</h2>
+      <h3>研究注意</h3>
+      <ul>
+        <li>前视：OI 和期权链是收盘后更新的，信号只能在次日开盘执行。</li>
+        <li>非重叠采样（每 10/20 日抽 1 天），避免重叠样本把 t 值放大。</li>
+        <li>必须用距离匹配基线；很多"回归/吸附"只是"离得近"。</li>
+        <li>同一天同时触发止损和止盈时，按保守顺序（先止损）处理。</li>
+        <li>结论：日线级别 MP / ZG / gpk 方向测试均无可交易优势；组合玩法需要用分桶数据单独验证。</li>
+      </ul>
+      <h3>数据缺口</h3>
+      <ul>
+        <li><code>oc_chain</code> 的 <code>co/po</code> 是跨月汇总 OI；真正的 pin 需要到期月份那一组合约的 OI。建议转换脚本保留近月/分到期的 OI。</li>
+        <li>没有盘中主动买卖（aggressor）数据；日线确认偏晚。</li>
+        <li>验证时按 dte、top1 占比、价格 vs ZG、MP 斜率分桶；统计结算落在 pin ±0.5% 的比例、突破后的收益。</li>
+      </ul>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <span>最后更新：2026-10-30</span>
+  <span>新增笔记：复制文件末尾注释里的 section 模板，目录和锚点自动生成。</span>
+</footer>
+
+<script>
+(function () {
+  var sections = Array.prototype.slice.call(document.querySelectorAll('#notes > section'));
+  var toc = document.getElementById('toc');
+
+  sections.forEach(function (sec, i) {
+    if (!sec.id) sec.id = 'note-' + (i + 1);
+    var h2 = sec.querySelector('h2');
+    if (!h2) return;
+    var title = h2.textContent.trim();
+    var link = document.createElement('a');
+    link.href = '#' + sec.id;
+    link.textContent = title;
+    toc.appendChild(link);
+    var perm = document.createElement('a');
+    perm.className = 'perm';
+    perm.href = '#' + sec.id;
+    perm.textContent = '#';
+    perm.setAttribute('aria-label', '链接到本节');
+    h2.appendChild(perm);
+  });
+
+  var links = {};
+  Array.prototype.forEach.call(toc.querySelectorAll('a'), function (a, i) {
+    links[sections[i].id] = a;
+  });
+
+  if ('IntersectionObserver' in window) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        Array.prototype.forEach.call(toc.querySelectorAll('a'), function (a) {
+          a.classList.remove('active');
+        });
+        if (links[e.target.id]) links[e.target.id].classList.add('active');
+      });
+    }, { rootMargin: '-64px 0px -70% 0px', threshold: 0 });
+    sections.forEach(function (s) { obs.observe(s); });
+  }
+
+  var q = document.getElementById('q');
+  q.addEventListener('input', function () {
+    var v = q.value.trim().toLowerCase();
+    sections.forEach(function (sec, i) {
+      var hide = !!v && sec.textContent.toLowerCase().indexOf(v) === -1;
+      sec.classList.toggle('hidden', hide);
+      var a = toc.querySelectorAll('a')[i];
+      if (a) a.classList.toggle('hidden', hide);
+    });
+  });
+})();
+</script>
+
+<!--
+  新增笔记：复制下面这段，追加到 <main id="notes"> 里任意位置即可。
+  id 可省略（会自动生成），填英文短 id 便于分享锚点；标题会自动进入左侧目录。
+
+  <section id="topic-slug">
+    <h2>标题</h2>
+    <p>正文…</p>
+  </section>
+-->
+</body>
+</html>
