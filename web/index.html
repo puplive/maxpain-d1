@@ -2427,7 +2427,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   var _subCWallSh, _subPWallSh, _subCWallH, _subPWallH, _subCWallOi, _subPWallOi, _subCWallDays, _subPWallDays;
   var _subGam, _subVeg, _subMaxGamAbs, _subMaxVeg, _hasVega;
   var _oiChain = null, _oiHoverIdx = -1;
-  const subVis = { gex: false, skew: false, vr: false, iv: false, futVol: false, futOi: false, skewVal: false, atr: true, mpConf: false, noise: true, oids: true, hdg: false, dex: false, vanna: false, charm: false, gam: false, veg: false };
+  const subVis = { gex: false, skew: false, vr: false, iv: false, futVol: false, futOi: false, skewVal: false, atr: false, mpConf: false, noise: false, oids: true, hdg: true, dex: true, vanna: false, charm: false, gam: false, veg: false };
   
   // HTML 图例栏（水平可滚动）
   function syncLegend() {
