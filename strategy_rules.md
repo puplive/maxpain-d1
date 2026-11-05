@@ -90,16 +90,15 @@ N 默认 0（关闭）。用意：顺方向赚到后暂停反方向开仓，避�
 
 ### 3.2 ATR 追踪止损（优先级 2）
 
-追踪止损线每日计算，写入 `stopCurve`。执行时按日期区分：
+每日止损统一按下列规则计算（`stopCurve[d]` = 当日生效止损，无滞后）：
 
-**入场第 2 天**（前一条 stopCurve 记录的 stop 仍是 entryStopLevel）：
-- 重新根据昨日收盘计算追踪止损
-- 做多：`stop = max(prevClose - atr × atrMult, entryStopLevel)`
-- 做空：`stop = min(prevClose + atr × atrMult, entryStopLevel)`
+- **当天开仓**：用开仓价算出的入场止损 `entryStopLevel`
+- **保本锁已激活**：`entryPx ± (peakPx - entryPx) × lockPct`（峰值/激活状态截至昨日收盘）
+- **其余情况**：用昨日收盘价 + 昨日 ATR 计算
+  - 做多：`stop = max(prevClose - atr × atrMult, entryStopLevel)`
+  - 做空：`stop = min(prevClose + atr × atrMult, entryStopLevel)`
 
-**第 3 天起**：
-- 直接使用前一天 stopCurve 中已计算好的止损值
-- 不再重新计算
+当日收盘后再算出“明日止损”（今日收盘 + 今日 ATR + 收盘后的峰值/锁定状态），用于前端展示；次日实际生效的止损与之相同。
 
 ### 3.3 保本锁
 

@@ -522,7 +522,7 @@ function calcATR(data, period) {
 }
 
 // 实盘订单追踪止损: 与策略回测同款算法(入场ATR止损 + ATR追踪 + 保本锁定), 方向和开仓价取记录值
-// 返回从入场日起的 [{idx, stop}] 序列 (stop 为当日收盘后有效的追踪止损)
+// 返回从入场日起的 [{idx, stop, next}] 序列 (stop 为当日生效止损, next 为当日收盘后算出的次日止损)
 function buildManualStop(data, atr, o, params, ei) {
   const isLong = o.direction === 'long';
   const entryPx = o.price;
@@ -542,7 +542,6 @@ function buildManualStop(data, atr, o, params, ei) {
       const atrStop = isLong ? prevClose - f(i) * params.atrMult : prevClose + f(i) * params.atrMult;
       s = isLong ? Math.max(atrStop, entryStop) : Math.min(atrStop, entryStop);
     }
-    curve.push({ idx: i, stop: s });
     const r = data[i];
     prevClose = r.c;
     if (isLong && r.h > peakPx) {
@@ -552,6 +551,18 @@ function buildManualStop(data, atr, o, params, ei) {
       peakPx = r.l;
       if (params.beTh > 0 && params.lockPct > 0 && !beActive && peakPx <= entryPx * (1 - params.beTh / params.lockPct)) beActive = true;
     }
+    // 明日止损: 用今日收盘 + 今日ATR + 收盘后的峰值/锁定状态计算
+    let ns;
+    if (beActive) {
+      const prof = isLong ? peakPx - entryPx : entryPx - peakPx;
+      ns = isLong ? entryPx + prof * (params.lockPct || 0) : entryPx - prof * (params.lockPct || 0);
+    } else {
+      const aN = atr[Math.max(period, i)];
+      const aV = isNaN(aN) ? r.c * 0.005 : aN;
+      const atrStop = isLong ? r.c - aV * params.atrMult : r.c + aV * params.atrMult;
+      ns = isLong ? Math.max(atrStop, entryStop) : Math.min(atrStop, entryStop);
+    }
+    curve.push({ idx: i, stop: s, next: ns });
   }
   return curve;
 }
@@ -877,6 +888,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, revIdx, b
     const oiSkew = row._oiSkew !== undefined ? row._oiSkew
       : (prevCo !== null ? (prevCo - prevPo) / (prevCo + prevPo + 1e-10) : (co - po) / (co + po + 1e-10));
     let reason = '';
+    let dayStop = null;  // 当日止损(用昨日收盘/昨日ATR算出, 当天开仓则用开仓价)
     if (pos) {
       const curFc = row.fut_contract;
       const prevFc = _fullIdx > 0 ? fullData[_fullIdx - 1].fut_contract : null;
@@ -899,19 +911,21 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, revIdx, b
       }
 
       if (!exitPx) {
+        // 当日止损: 用昨日收盘价 + 昨日ATR 计算(状态截至昨日); 当天开仓的用开仓价算出的入场止损
         let stop;
-        if (stopCurve.length > 0 && stopCurve[stopCurve.length - 1].stop === pos.entryStopLevel) {
-          // 入场第二天（前一条止损还是 entryStopLevel）：重新计算追踪止损
-          const atrVal = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
-          if (pos.direction === 'long') {
-            stop = Math.max(isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT, pos.entryStopLevel);
-          } else {
-            stop = Math.min(isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT, pos.entryStopLevel);
-          }
+        if (pos.entryDate === d) {
+          stop = pos.entryStopLevel;
+        } else if (pos.beActive) {
+          const _pp = pos.direction === 'long' ? pos.peakPx - pos.entryPx : pos.entryPx - pos.peakPx;
+          stop = pos.direction === 'long' ? pos.entryPx + _pp * LOCK_PCT : pos.entryPx - _pp * LOCK_PCT;
         } else {
-          // 之后的直接用前一天计算好的止损线
-          stop = stopCurve[stopCurve.length - 1].stop;
+          const atrVal = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
+          const atrStop = pos.direction === 'long'
+            ? (isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT)
+            : (isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT);
+          stop = pos.direction === 'long' ? Math.max(atrStop, pos.entryStopLevel) : Math.min(atrStop, pos.entryStopLevel);
         }
+        dayStop = stop;
         if (stop != null) {
           if (pos.direction === 'long') {
             if (op < stop) { exitPx = op; reason = stop === pos.entryPx ? '保本出场' : (stop > pos.entryPx ? '追踪止盈' : '止损'); }  // 开盘跳空穿越 → 开盘价离场
@@ -1047,26 +1061,22 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, revIdx, b
         if (BE_TH > 0 && LOCK_PCT > 0 && !pos.beActive && pos.peakPx <= pos.entryPx * (1 - BE_TH / LOCK_PCT)) pos.beActive = true;
       }
     }
+    let _nextStop = null;
     if (pos) {
       const _breakLevel = pos.direction === 'long' ? prevBep : prevBec;
-      const atrVal = fullAtr[Math.max(ATR_PERIOD, _fullIdx - 1)];
-      let _s;
-      if (pos.entryDate === d) {
-        _s = pos.direction === 'long'
-          ? (isNaN(atrVal) ? op * (1 - 0.005) : op - atrVal * ENTRY_ATR)
-          : (isNaN(atrVal) ? op * (1 + 0.005) : op + atrVal * ENTRY_ATR);
-      } else if (pos.beActive) {
+      // 当日止损: 当天开仓用开仓价, 否则用昨日收盘价/昨日ATR算出的值
+      const _s = pos.entryDate === d ? pos.entryStopLevel : dayStop;
+      // 明日止损: 用今日收盘 + 今日ATR + 收盘后的峰值/锁定状态
+      if (pos.beActive) {
         const _pp = pos.direction === 'long' ? pos.peakPx - pos.entryPx : pos.entryPx - pos.peakPx;
-        _s = pos.direction === 'long' ? pos.entryPx + _pp * LOCK_PCT : pos.entryPx - _pp * LOCK_PCT;
+        _nextStop = pos.direction === 'long' ? pos.entryPx + _pp * LOCK_PCT : pos.entryPx - _pp * LOCK_PCT;
       } else {
-        const atrStop = pos.direction === 'long'
-          ? (isNaN(atrVal) ? prevClose * (1 - 0.005) : prevClose - atrVal * ATR_MULT)
-          : (isNaN(atrVal) ? prevClose * (1 + 0.005) : prevClose + atrVal * ATR_MULT);
-        _s = pos.direction === 'long'
-          ? Math.max(atrStop, pos.entryStopLevel)
-          : Math.min(atrStop, pos.entryStopLevel);
+        const _na = fullAtr[Math.max(ATR_PERIOD, _fullIdx)];
+        const _av = isNaN(_na) ? px * 0.005 : _na;
+        const _as = pos.direction === 'long' ? px - _av * ATR_MULT : px + _av * ATR_MULT;
+        _nextStop = pos.direction === 'long' ? Math.max(_as, pos.entryStopLevel) : Math.min(_as, pos.entryStopLevel);
       }
-      stopCurve.push({ d, stop: _s, breakLevel: _breakLevel, start: pos.entryDate === d });
+      stopCurve.push({ d, stop: _s, next: _nextStop, breakLevel: _breakLevel, start: pos.entryDate === d });
     } else {
       stopCurve.push({ d, stop: null, breakLevel: null });
     }
@@ -1075,7 +1085,7 @@ function _runCore(data, fullData, firstIdx, params, mult, nextDirPred, revIdx, b
     prevMp = mp;
     prevBec = bec; prevBep = bep; prevIvs = ivs;
     eqCurve.push({ d, eq: mtmEq });
-    stateByDate[d] = { eq: mtmEq, posOpen: !!pos, skipLong, skipShort };
+    stateByDate[d] = { eq: mtmEq, posOpen: !!pos, skipLong, skipShort, nextStop: _nextStop };
   }
   // 最后一单持仓浮盈浮亏计入 eq
   if (pos) {
@@ -1183,10 +1193,21 @@ function runBacktest() {
   const accWarnIdx = computeAccWarnIdx(fullData, nextDirPred, params.accWindow, params.accStreak);
   const { preds: tradingPred, revIdx } = gatePreds(nextDirPred, accWarnIdx, params.accMode);
   const core = _runCore(data, fullData, 0, params, MULT, tradingPred, revIdx, btStartIdx, btEndIdx);
+  // 实盘持仓的追踪止损曲线（与图表同口径），供明日推演显示
+  const _liveAtr = calcATR(data, params.atrPeriod);
+  const _liveStops = [];
+  if (MANUAL_ORDERS && MANUAL_ORDERS.length) {
+    for (const o of MANUAL_ORDERS) {
+      if (o.status !== 'open') continue;
+      const _ei = data.findIndex(r => r.d === o.date);
+      if (_ei < 0) continue;
+      _liveStops.push({ order: o, ei: _ei, curve: buildManualStop(data, _liveAtr, o, params, _ei) });
+    }
+  }
   // Pre-compute analysis for every candle for dynamic hover
   window._analysisCache = [];
   for (let i = 0; i < data.length; i++) {
-    window._analysisCache[i] = genAnalysis(data, fullData, params, nextDirPred, core.trades, i, core.stateByDate, core.atrRatio, core.fastVol, core.slowVol, core.priceSlope);
+    window._analysisCache[i] = genAnalysis(data, fullData, params, nextDirPred, core.trades, i, core.stateByDate, core.atrRatio, core.fastVol, core.slowVol, core.priceSlope, core.stopCurve, _liveStops);
   }
   const _lastAnalysis = window._analysisCache[data.length - 1];
   const { trades, eq, eqCurve, stopCurve, peakEq, maxDd, CAP, openPos, posDays } = core;
@@ -1243,13 +1264,23 @@ function runBacktest() {
   });
   // 权益曲线回撤段: 从峰值回落到重新创新高, 按开始年份归属
   const ddByYr = {};
+  const allDdSegs = [];
   {
     let pk = -Infinity, pkD = null, segStart = null, segPeak = -Infinity, segTr = -Infinity;
     const closeSeg = (endD, unrecovered) => {
       if (segStart !== null && segPeak > 0 && segTr < segPeak) {
+        const seg = {
+          start: segStart, end: endD,
+          depth: (segPeak - segTr) / segPeak * 100,
+          amount: segPeak - segTr,
+          days: Math.max(1, Math.round((new Date(endD) - new Date(segStart)) / 864e5)),
+          peak: segPeak, trough: segTr,
+          unrecovered: !!unrecovered,
+        };
+        allDdSegs.push(seg);
         const y = segStart.slice(0, 4);
         if (!ddByYr[y]) ddByYr[y] = [];
-        ddByYr[y].push({ depth: (segPeak - segTr) / segPeak * 100, days: Math.max(1, Math.round((new Date(endD) - new Date(segStart)) / 864e5)), unrecovered: !!unrecovered });
+        ddByYr[y].push({ depth: seg.depth, days: seg.days, unrecovered: seg.unrecovered });
       }
       segStart = null;
     };
@@ -1260,6 +1291,12 @@ function runBacktest() {
     });
     closeSeg(eqCurve[eqCurve.length - 1].d, true);
   }
+  const ddBig = allDdSegs.filter(s => s.depth > 15).sort((a, b) => b.depth - a.depth);
+  const ddRowsHtml = ddBig.length ? ddBig.map(s =>
+    '<tr><td class="neg">-' + round1(s.depth) + '%</td><td>' + s.start + '</td><td>' + s.end + '</td>' +
+    '<td class="num">' + fmt(Math.round(s.amount)) + '</td><td class="num">' + s.days + '天' + (s.unrecovered ? '+' : '') + '</td>' +
+    '<td class="num">' + fmt(Math.round(s.peak)) + '</td><td class="num">' + fmt(Math.round(s.trough)) + '</td></tr>'
+  ).join('') : '<tr><td colspan="7" style="text-align:center;color:#576574;">无超过 15% 的回撤区间</td></tr>';
   const yrDd = {};
   Object.keys(ddByYr).forEach(y => {
     const segs = ddByYr[y];
@@ -1316,13 +1353,6 @@ function runBacktest() {
     return '<tr><td>' + (d==='long'?'做多':'做空') + '</td><td class="num">' + g.length + '</td><td class="num ' + cls(pnl) + '">' + fmt(pnl) + '</td><td class="num ' + cls(pnl/g.length) + '">' + fmt(Math.round(pnl/g.length)) + '</td><td class="num">' + round1(w.length/g.length*100) + '%</td><td class="num">' + (lp>0?round2(wp/lp):'∞') + '</td></tr>';
   }).filter(s=>s).join('');
 
-  let pv = CAP, pd = data[0].d, mdd = 0, ds = '', de = '';
-  eqCurve.forEach(({d, eq}) => {
-    if (eq > pv) { pv = eq; pd = d; }
-    const dd = (pv - eq) / pv * 100;
-    if (dd > mdd) { mdd = dd; ds = pd; de = d; }
-  });
-
   const recent = trades.slice().reverse();
 
   result.innerHTML = '\
@@ -1354,7 +1384,7 @@ function runBacktest() {
         <label style="cursor:pointer;" title="Zero Gamma(Γ翻转点): 在现价±显示带%范围扫描假设价格, 重算各行权价Γ×OI(Call正/Put负, 跨月汇总OI, T=近月连续dte), 总Γ变号处为翻转点(取离现价最近)。&#10;价格在其上方: 做市商总Gamma为正, 逆势对冲(买跌卖涨), 抑制波动→稳定模式。&#10;价格在其下方: 总Gamma为负, 顺势对冲(追涨杀跌), 放大波动→动量模式。&#10;区间内同号(无变号)则不画线。"><input type="checkbox" id="t_zg" onchange="toggleChartLine()"> <span style="color:#b388ff">ZeroGamma</span></label>\
         <label style="cursor:pointer;" title="Magnet(磁力点): 现价±显示带%内按|Γ×OI|加权平均的行权价(Call/Put各自Γ取绝对值), 理论引力中心 → 价格有向其靠拢的倾向。&#10;Pin(钉住点): 现价±显示带%内OI(Call+Put, 跨月汇总)最集中的行权价, 代表持仓锚定效应。&#10;口径: oc_chain跨月汇总OI, T=近月连续dte; SHFE无IV, Magnet不显示。"><input type="checkbox" id="t_mag" onchange="toggleChartLine()"> <span style="color:#74b9ff">Magnet</span>/<span style="color:#fdcb6e">Pin</span></label>\
         <label style="cursor:pointer;" title="最近月CallΔ≈0.25 / PutΔ≈-0.25 所在行权价: 绿=上边界, 红=下边界"><input type="checkbox" id="t_d25" onchange="toggleChartLine()"> <span style="color:#5cd85a">Δ25</span></label>\
-        <label style="cursor:pointer;" title="OI重心: 白=合计, 青=Call重心, 品红=Put重心 (均在现价±显示带%内)"><input type="checkbox" id="t_oic" onchange="toggleChartLine()"> <span style="color:#ffffff">OI重心</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期货成交量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期货持仓量</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span> <span style="color:#576574">|</span> <span style="color:#00d2d3">净对冲</span><span style="color:#576574">=当日全部月份Σ(Δ×OI)净额, >0净买期货/&lt;0净卖期货</span> <span style="color:#576574">|</span> <span style="color:#e17055">DEX方向</span><span style="color:#576574">=Σ(Δ×OI)/ΣOI(OI加权平均Δ), [-1,1]; &gt;0对冲盘偏买/&lt;0偏卖</span> <span style="color:#576574">|</span> <span style="color:#b388ff">Vanna流</span><span style="color:#576574">=IV降1点(0.01)做市商净买入手数(Call+/Put-), &gt;0=IV压缩买盘推涨/&lt;0=卖压, IV越极端影响越大</span> <span style="color:#576574">|</span> <span style="color:#fd79a8">Charm流</span><span style="color:#576574">=时间流逝1天做市商净买入手数(Δ随时间衰减的对冲流), &gt;0=净买(买盘)/&lt;0=净卖(卖压), 越临近到期影响越大</span> <span style="color:#576574">|</span> <span style="color:#f6b93b">Gamma场景</span><span style="color:#576574">=价格±1%时做市商需额外买卖的手数, 涨1%买/跌1%卖, 与净对冲共用刻度</span> <span style="color:#576574">|</span> <span style="color:#cddc39">Vega</span><span style="color:#576574">=期权持仓对IV变动的敏感度(元/1%IV), 做市商净卖期权, IV升1%约亏这个数, 独立刻度</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
+        <label style="cursor:pointer;" title="OI重心: 白=合计, 青=Call重心, 品红=Put重心 (均在现价±显示带%内)"><input type="checkbox" id="t_oic" onchange="toggleChartLine()"> <span style="color:#ffffff">OI重心</span></label>      </span></h2><div class="chart-main"><canvas id="chart"></canvas><canvas id="subChart"></canvas><canvas id="oiChart"></canvas><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%;display:none" id="oiHint"><span style="color:#5cd85a">绿柱=看涨OI</span> <span style="color:#ff6b6b">红柱=看跌OI</span> <span style="color:#e8c84a">黄线=现价</span> <span style="color:#a29bfe">紫线=痛点(MP)</span> 最高柱=资金集中区</div><div style="font-size:10px;color:#576574;padding:2px 0 0 0;line-height:1.5;flex:0 0 100%" id="subHint"><span style="color:#a55eea">GEX 做市商的对冲行为会让市场变稳定还是变剧烈 +稳定器,-放大器</span> <span style="color:#576574">|</span> <span style="color:#fdcb6e">OI偏度</span><span style="color:#576574">=(Call-Put)/(Call+Put), >0看涨持仓多/或期货空头对冲降低风险还会跌, <0看跌持仓多/或期货多头对冲降低风险还会涨</span> <span style="color:#576574">|</span> <span style="color:#5cd85a">OI净差</span><span style="color:#576574">=Call总持仓-Put总持仓(手), >0绿柱Call持仓占优/做市商净空Call多, <0红柱Put持仓占优/做市商净空Put多</span> <span style="color:#576574">|</span> <span style="color:#48dbfb">偏度差</span><span style="color:#576574">=OI偏度日变化, >0偏多增加</span> <span style="color:#576574">|</span> <span style="color:#ff9f43">量比</span><span style="color:#576574">=Call成交/Put成交, >1看涨活跃, &lt;1看跌活跃</span> <span style="color:#576574">|</span> <span style="color:#2ecc71">IV偏度</span><span style="color:#576574">=虚值Put IV-虚值Call IV, &lt;0 Call更贵=看涨情绪强(Call抢筹), >0 Put更贵=避险情绪强(Put对冲)</span> <span style="color:#576574">|</span> <span style="color:#54a0ff">期货成交量</span> <span style="color:#576574">|</span> <span style="color:#f368e0">期货持仓量</span> <span style="color:#576574">|</span> <span style="color:#e84393">ATR(' + params.atrPeriod + ')</span><span style="color:#576574">=平均波幅, 大=波动加剧, 小=盘整</span> <span style="color:#576574">|</span> <span style="color:#00b894">MP置信</span><span style="color:#576574">=MP价位持仓占比, 越高说明市场共识越集中, 价格越难偏离MP</span> <span style="color:#576574">|</span> <span style="color:#00d2d3">净对冲</span><span style="color:#576574">=当日全部月份Σ(Δ×OI)净额, >0净买期货/&lt;0净卖期货</span> <span style="color:#576574">|</span> <span style="color:#e17055">DEX方向</span><span style="color:#576574">=Σ(Δ×OI)/ΣOI(OI加权平均Δ), [-1,1]; &gt;0对冲盘偏买/&lt;0偏卖</span> <span style="color:#576574">|</span> <span style="color:#b388ff">Vanna流</span><span style="color:#576574">=IV降1点(0.01)做市商净买入手数(Call+/Put-), &gt;0=IV压缩买盘推涨/&lt;0=卖压, IV越极端影响越大</span> <span style="color:#576574">|</span> <span style="color:#fd79a8">Charm流</span><span style="color:#576574">=时间流逝1天做市商净买入手数(Δ随时间衰减的对冲流), &gt;0=净买(买盘)/&lt;0=净卖(卖压), 越临近到期影响越大</span> <span style="color:#576574">|</span> <span style="color:#f6b93b">Gamma场景</span><span style="color:#576574">=价格±1%时做市商需额外买卖的手数, 涨1%买/跌1%卖, 与净对冲共用刻度</span> <span style="color:#576574">|</span> <span style="color:#cddc39">Vega</span><span style="color:#576574">=期权持仓对IV变动的敏感度(元/1%IV), 做市商净卖期权, IV升1%约亏这个数, 独立刻度</span></div></div><div class="chart-info" id="chartInfo"><div style="color:#576574;padding-top:60px;text-align:center;">悬停K线<br>查看详情</div></div></div>\
     ' + '<div id="candleAnalysis">' + _lastAnalysis + '</div>' + '\
     <div class="chart-wrap"><h2>权益曲线</h2><canvas id="eqChart" style="width:100%;height:200px;display:block;"></canvas></div>\
     <div class="section"><h2>按年份</h2><table><tr><th>年份</th><th class="num">笔数</th><th class="center">多/空</th><th class="num">总PnL</th><th class="num">年化%</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">最大回撤区间</th><th class="num">最长回撤期</th></tr>' + yrHtml + '</table></div>\
@@ -1362,8 +1392,7 @@ function runBacktest() {
     <div class="section"><h2>按退出原因</h2><table><tr><th>原因</th><th class="num">笔数</th><th class="num">占比</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">均持仓</th></tr>' + rsHtml + '</table></div>\
     <div class="section"><h2>按持仓天数</h2><table><tr><th>持仓</th><th class="num">笔数</th><th class="num">总PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + holdHtml + '</table></div>\
     <div class="section"><h2>按方向</h2><table><tr><th>方向</th><th class="num">笔数</th><th class="num">总PnL</th><th class="num">均PnL</th><th class="num">胜率</th><th class="num">盈亏比</th></tr>' + dirHtml + '</table></div>\
-    <div class="section"><h2>最大回撤区间</h2><table><tr><th>回撤</th><th>开始</th><th>结束</th><th class="num">峰值权益</th><th class="num">谷底权益</th></tr>\
-      <tr><td class="neg">-' + round1(mdd) + '%</td><td>' + ds + '</td><td>' + de + '</td><td class="num">' + fmt(Math.round(pv)) + '</td><td class="num">' + fmt(Math.round(eqCurve[eqCurve.length-1].eq)) + '</td></tr></table></div>\
+    <div class="section"><h2>回撤区间（大于15%，按回撤从大到小）</h2><table><tr><th>回撤</th><th>开始</th><th>结束</th><th class="num">回撤金额</th><th class="num">持续天数</th><th class="num">峰值权益</th><th class="num">谷底权益</th></tr>' + ddRowsHtml + '</table></div>\
     <div class="section"><h2>全部交易</h2><table class="recent"><tr><th>入场</th><th>出场</th><th>方向</th><th class="num">手数</th><th class="num">开仓价</th><th class="num">平仓价</th><th class="num">PnL</th><th>原因</th><th class="num">持仓</th></tr>\
       ' + recent.map(t => '<tr><td>' + t.entry + '</td><td>' + t.exit + '</td><td>' + dirText(t.dir) + '</td><td class="num">' + t.qty + '</td><td class="num">' + t.entryPx.toFixed(0) + '</td><td class="num">' + t.exitPx.toFixed(0) + '</td><td class="num ' + cls(t.pnl) + '">' + fmt(Math.round(t.pnl)) + '</td><td>' + t.reason + '</td><td class="num">' + Math.round(t.hold) + '天</td></tr>').join('') + '</table></div>';
   const realSection = buildRealOrderSection(data, MANUAL_ORDERS);
@@ -1374,7 +1403,7 @@ function runBacktest() {
     else result.insertAdjacentHTML('beforeend', realSection);
   }
 
-function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, stateByDate, atrRatio, fastVol, slowVol, priceSlope) {
+function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, stateByDate, atrRatio, fastVol, slowVol, priceSlope, stopCurve, liveStops) {
   const n = data.length;
   const idx = targetIdx !== undefined ? targetIdx : n - 1;
   const r = data[idx];
@@ -1639,6 +1668,18 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
   ).join('');
 
   const projHtml = projFactors.map(p => '<div style="padding:2px 0;font-size:12px;color:#8395a7;">- ' + p + '</div>').join('');
+  // 今日收盘后算出的次日止损价
+  const _stateR = stateByDate ? stateByDate[r.d] : null;
+  const _ns = _stateR && _stateR.nextStop != null ? _stateR.nextStop : null;
+  const nextStopHtml = _ns != null
+    ? '<div style="padding:2px 0;font-size:12px;color:#ff9f43;">- 明日止损 <b>' + _ns.toFixed(0) + '</b></div>'
+    : '';
+  // 实盘持仓的明日止损（next 为当日收盘后算出、次日生效）
+  const liveStopHtml = (liveStops || []).map(ms => {
+    const k = idx - ms.ei;
+    if (k < 0 || !ms.curve[k] || ms.curve[k].next == null) return '';
+    return '<div style="padding:2px 0;font-size:12px;color:#ff4757;">- 实盘' + (ms.order.direction === 'long' ? '多' : '空') + ' ' + (ms.order.qty || 1) + '手 明日止损 <b>' + ms.curve[k].next.toFixed(0) + '</b></div>';
+  }).join('');
   const watchHtml = watchItems.map(w => '<div style="padding:2px 0;font-size:12px;color:#8395a7;">- ' + w + '</div>').join('');
 
   return '<div class="chart-wrap" style="margin-top:12px;">' +
@@ -1652,6 +1693,8 @@ function genAnalysis(data, fullData, params, nextDirPred, trades, targetIdx, sta
     '</div>' +
     '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #2d3436;">' +
       '<div style="font-size:13px;color:#8395a7;font-weight:600;margin-bottom:4px;">明日推演</div>' +
+      nextStopHtml +
+      liveStopHtml +
       projHtml +
     '</div>' +
     '<div style="margin-top:8px;padding-top:10px;border-top:1px solid #2d3436;">' +
@@ -2255,21 +2298,17 @@ function optimizeParam() {
     mult: cfg.mult,
   };
 
-  // 构建每个参数的取值数组; 组合数超上限则自动加粗最大维度的步长
+  // 构建每个参数的取值数组; 组合数超上限直接提示, 不自动加粗步长
   const vals = selected.map(k => buildOptVals(k, OPT_PARAMS[k].range[0], OPT_PARAMS[k].range[1], OPT_PARAMS[k].range[2]));
-  let combos = vals.reduce((s, a) => s * a.length, 1);
-  let coarsened = false, guard = 0;
-  while (combos > OPT_MAX_COMBO && guard++ < 20) {
-    let mi = 0, mlen = 0;
-    vals.forEach((a, i) => { if (a.length > mlen) { mlen = a.length; mi = i; } });
-    const [mn, mx, st] = OPT_PARAMS[selected[mi]].range;
-    vals[mi] = buildOptVals(selected[mi], mn, mx, st * Math.pow(2, guard));
-    combos = vals.reduce((s, a) => s * a.length, 1);
-    coarsened = true;
+  const combos = vals.reduce((s, a) => s * a.length, 1);
+  const labels = selected.map(k => OPT_PARAMS[k].label).join('+');
+  if (combos > OPT_MAX_COMBO) {
+    result.innerHTML = '<div class="error">' + labels + ' 组合数 ' + combos + ' 超过上限 ' + OPT_MAX_COMBO + ', 请减少所选参数</div>';
+    status.textContent = '组合数 ' + combos + ' 超过 ' + OPT_MAX_COMBO + ', 未执行';
+    return;
   }
 
-  const labels = selected.map(k => OPT_PARAMS[k].label).join('+');
-  status.textContent = '扫描 ' + labels + ' (' + combos + '组合' + (coarsened ? ', 步长已加粗' : '') + ')...';
+  status.textContent = '扫描 ' + labels + ' (' + combos + '组合)...';
   result.innerHTML = '<div class="loading">扫描中...</div>';
 
   const token = ++OPT_TOKEN;
@@ -2346,7 +2385,7 @@ function optimizeParam() {
     result.innerHTML = '<div class="section"><h2>' + labels + ' 联合优化结果（按最终权益排序）</h2>\
       <p style="font-size:12px;color:#576574;margin-bottom:8px;">最优组合: ' + bestDesc + '</p>\
       <table><tr>' + head + '</tr>' + rows + (values.length > show.length ? '<tr><td colspan="' + (selected.length + 9) + '" style="text-align:center;color:#576574;font-size:12px;">仅显示前 ' + show.length + ' / ' + values.length + ' 个组合</td></tr>' : '') + '</table></div>';
-    status.textContent = '优化完成 | 扫描 ' + values.length + '组合' + (coarsened ? '(步长已加粗)' : '') + ' | 最优 ' + bestDesc + ' → ' + fmt(best.endEq);
+    status.textContent = '优化完成 | 扫描 ' + values.length + '组合 | 最优 ' + bestDesc + ' → ' + fmt(best.endEq);
     const idMap = { lookback:'p_lookback', minPct:'p_min_pct', entryAtrMult:'p_entry_atr', atrPeriod:'p_atr_period', atrMult:'p_atr_mult', beTh:'p_be_th', maxPos:'p_max_pos', lockPct:'p_lock_pct', skipCount:'p_skip', volFilterLow:'p_vol_low', volFilterHigh:'p_vol_high', volWindow:'p_vol_window', volTarget:'p_vol_target', volTargetCap:'p_vol_target_cap', ewmaFilterHigh:'p_ewma_high', ewmaFilterLow:'p_ewma_low', priceSlopeTh:'p_slope_th', slopeDays:'p_slope_days', pbSlopeTh:'p_pb_slope_th' };
     for (let k = 0; k < selected.length; k++) {
       const key = selected[k], v = best.vals[k], meta = OPT_PARAMS[key];
@@ -2420,6 +2459,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   var _subFutVol, _subMinFv, _subMaxFv;
   var _subFutOi, _subMinFoi, _subMaxFoi;
   var _subSkew, _subMinSk, _subMaxSk;
+  var _subOiNet;
 	  var _subAtr, _subTr, _subMinAtr, _subMaxAtr;
 	  var _subMpConf, _subMinMc, _subMaxMc;
 	  var _subNoiseL, _subNoiseS, _subMinNoise, _subMaxNoise;
@@ -2427,7 +2467,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   var _subCWallSh, _subPWallSh, _subCWallH, _subPWallH, _subCWallOi, _subPWallOi, _subCWallDays, _subPWallDays;
   var _subGam, _subVeg, _subMaxGamAbs, _subMaxVeg, _hasVega;
   var _oiChain = null, _oiHoverIdx = -1;
-  const subVis = { gex: false, skew: false, vr: false, iv: false, futVol: false, futOi: false, skewVal: false, atr: false, mpConf: false, noise: false, oids: true, hdg: true, dex: true, vanna: false, charm: false, gam: false, veg: false };
+  const subVis = { gex: false, skew: false, vr: false, iv: false, futVol: false, futOi: false, skewVal: true, atr: false, mpConf: false, noise: false, oids: true, hdg: true, dex: true, vanna: false, charm: false, gam: false, veg: false, oiNet: false };
   
   // HTML 图例栏（水平可滚动）
   function syncLegend() {
@@ -2448,6 +2488,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     const legData = [
       { key: 'gex', label: 'GEX', color: '#a55eea' },
       { key: 'skewVal', label: 'OI偏度', color: '#fdcb6e' },
+      { key: 'oiNet', label: 'OI净差(C-P)', color: '#5cd85a' },
       { key: 'skew', label: '偏度差', color: '#48dbfb' },
       { key: 'vr', label: '量比', color: '#ff9f43' },
       { key: 'iv', label: 'IV偏度', color: '#2ecc71' },
@@ -2505,6 +2546,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     _subFutVol = new Float64Array(n);
     _subFutOi = new Float64Array(n);
     _subSkew = new Float64Array(n);
+    _subOiNet = new Float64Array(n);
 	    _subAtr = new Float64Array(n);
 	    _subTr = new Float64Array(n);
 	    _subMpConf = new Float64Array(n);
@@ -2559,6 +2601,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       const _oiT = r.oi_total != null ? r.oi_total : (r.co + r.po);
       _subGexN[i] = (g !== 0 && _oiT > 0 && r.c > 0) ? g / (_oiT * r.c * r.c) * 1e4 : 0;
       _subSkew[i] = sk;
+      _subOiNet[i] = (r.co || 0) - (r.po || 0);
       _subSkewD[i] = sd;
       _subVr[i] = v;
       _subIv[i] = ivv;
@@ -2875,7 +2918,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           const isOpen = o.status === 'open' && o.date <= row.d;
           const ms = manualStops.find(x => x.order.id === o.id);
           const msk = ms ? idx - ms.ei : -1;
-          const curStop = ms && msk >= 0 && ms.curve[msk] ? ms.curve[msk].stop : null;
+          const curStop = ms && msk >= 0 && ms.curve[msk] ? ms.curve[msk].next : null;
           const dSign = o.direction === 'long' ? 1 : -1;
           let pnlTxt = '';
           if (isOpen) {
@@ -2888,7 +2931,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           const sameDay = o.date === row.d;
           const datePfx = sameDay ? '' : ' <span style="color:#576574;font-size:10px;">开' + o.date.slice(5) + '</span>';
           manualHtml += '<div class="sig" style="background:#e8c84a15;border:1px solid #e8c84a33;"><b>实盘' + (isOpen ? '持仓' : (o.date === row.d ? '记录' : '平仓')) + '</b>' + datePfx + ' ' + dirText(o.direction) + ' ' + (o.qty || 1) + '手 @' + (o.price != null ? o.price.toFixed(0) : '-') +
-            (curStop != null ? ' <span style="color:#ff4757">止损' + curStop.toFixed(0) + '</span>' : (o.stop_price != null ? ' <span style="color:#ff4757">止损' + o.stop_price.toFixed(0) + '</span>' : '')) + pnlTxt +
+            (curStop != null ? ' <span style="color:#ff4757">明日止损' + curStop.toFixed(0) + '</span>' : (o.stop_price != null ? ' <span style="color:#ff4757">止损' + o.stop_price.toFixed(0) + '</span>' : '')) + pnlTxt +
             (isOpen
               ? ' <button class="ord-btn" style="padding:1px 6px;font-size:10px;" onclick="quickCloseReal(' + o.id + ',&quot;' + row.d + '&quot;,' + row.c + ')">平仓</button>'
               : ' <span style="color:#576574;font-size:10px;">' + (o.exit_date ? '[' + o.exit_date + ']' : '[已平仓]') + '</span>') +
@@ -2901,9 +2944,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
           if (nextDir === 'long' && o.direction === 'short') risks.push('明日信号偏多, 与空单方向相反');
           if (nextDir === 'short' && o.direction === 'long') risks.push('明日信号偏空, 与多单方向相反');
           if (ms && msk >= 0) {
-            // 止损触发检查: 与策略一致, 入场日用入场止损, 第2天用当天重算的追踪止损, 之后用前一日止损线
-            const ci = msk <= 1 ? msk : msk - 1;
-            const ts = ms.curve[ci] ? ms.curve[ci].stop : null;
+            // 止损触发检查: 当日止损(入场日用入场止损, 之后用昨日收盘算出)
+            const ts = ms.curve[msk] ? ms.curve[msk].stop : null;
             if (ts != null) {
               const trig = o.direction === 'long'
                 ? (msk === 0 ? row.l < ts : (row.o < ts || row.l < ts))
@@ -3071,6 +3113,20 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
 
     function toY(v) { return pad.top + ch - (v - minP) * scaleY; }
     function toX(i) { return pad.left + i * state.barW - offset; }
+
+    // 虚拟K线处的右对齐标签(避免超出右边界), 用于显示明日止损价
+    function drawGhostStopLabel(txt, price, color) {
+      ctx.save();
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'right';
+      const tw = ctx.measureText(txt).width;
+      const tx = W - pad.right - 2, ty = toY(price) - 5;
+      ctx.fillStyle = 'rgba(15,25,35,0.85)';
+      ctx.fillRect(tx - tw - 2, ty - 11, tw + 4, 14);
+      ctx.fillStyle = color;
+      ctx.fillText(txt, tx, ty);
+      ctx.restore();
+    }
 
     ctx.fillStyle = '#0f1923';
     ctx.fillRect(0, 0, W, H);
@@ -3547,6 +3603,13 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         }
         i = runEnd + 1;
       }
+      // 末根K线可见时延伸到虚拟K线: 显示明日要用的止损
+      if (showGhost && stopCurve[n - 1] && stopCurve[n - 1].stop !== null && stopCurve[n - 1].next != null) {
+        ctx.beginPath();
+        ctx.moveTo(toX(n - 1), toY(stopCurve[n - 1].stop));
+        ctx.lineTo(toX(n), toY(stopCurve[n - 1].next));
+        ctx.stroke();
+      }
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
       ctx.restore();
@@ -3562,17 +3625,38 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       ctx.setLineDash([4, 4]);
       ctx.globalAlpha = 0.9;
       ctx.beginPath();
-      let started = false;
+      let started = false, lx = 0, ly = 0, lstop = null, ghostStop = false;
       for (let k = lo; k < end && k < n; k++) {
         const pt = ms.curve[k - ms.ei];
         if (!pt) break;
         const x = toX(k), y = toY(pt.stop);
         if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+        lx = x; ly = y; lstop = pt.stop;
+      }
+      // 末根K线可见时延伸到虚拟K线: 显示实盘明日止损
+      if (started && showGhost && n - 1 >= lo && n - 1 >= ms.ei) {
+        const _lp = ms.curve[n - 1 - ms.ei];
+        if (_lp && _lp.next != null) {
+          lx = toX(n); ly = toY(_lp.next); lstop = _lp.next; ghostStop = true;
+          ctx.lineTo(lx, ly);
+        }
       }
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
       ctx.restore();
+      if (lstop != null) {
+        if (ghostStop) {
+          drawGhostStopLabel('实盘明日止损 ' + lstop.toFixed(0), lstop, '#ff4757');
+        } else {
+          ctx.save();
+          ctx.fillStyle = '#ff4757';
+          ctx.font = '11px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText('实盘止损 ' + lstop.toFixed(0), lx + 4, ly + 4);
+          ctx.restore();
+        }
+      }
     }
 
     let tmIdx = 0;
@@ -3824,7 +3908,11 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
     ctx.fillText('MP', toX(lastVis) + 4, toY(data[lastVis].mp) - 2);
     if (stopCurve && stopCurve.length === n && stopCurve[lastVis].stop !== null) {
       ctx.fillStyle = '#ff9f43';
-      ctx.fillText('止损', toX(lastVis) + 4, toY(stopCurve[lastVis].stop) + 4);
+      if (showGhost && stopCurve[n - 1].next != null) {
+        drawGhostStopLabel('明日止损 ' + stopCurve[n - 1].next.toFixed(0), stopCurve[n - 1].next, '#ff9f43');
+      } else {
+        ctx.fillText('止损 ' + stopCurve[lastVis].stop.toFixed(0), toX(lastVis) + 4, toY(stopCurve[lastVis].stop) + 4);
+      }
     }
     if (stopCurve && stopCurve.length === n && stopCurve[lastVis].breakLevel != null) {
       ctx.strokeStyle = '#a55eea'; ctx.lineWidth = 1; ctx.setLineDash([5, 3]);
@@ -3918,7 +4006,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
       let vMinIv = Infinity, vMaxIv = -Infinity;
       let vMinFv = Infinity, vMaxFv = -Infinity, vMinFoi = Infinity, vMaxFoi = -Infinity; let vMinSk = Infinity, vMaxSk = -Infinity; let vMinAtr = Infinity, vMaxAtr = -Infinity; let vMinTr = Infinity, vMaxTr = -Infinity; let vMinMc = Infinity, vMaxMc = -Infinity;
       let vMinNoise = Infinity, vMaxNoise = -Infinity;
-      let vMaxHdgAbs = 0, vMaxVeg = 0, vMaxDexAbs = 0, vMaxVannaAbs = 0, vMaxCharmAbs = 0;
+      let vMaxHdgAbs = 0, vMaxVeg = 0, vMaxDexAbs = 0, vMaxVannaAbs = 0, vMaxCharmAbs = 0, vMaxON = 0;
       for (let i = start; i < end && i < n; i++) {
         const g = _subGex[i];
         if (g !== 0) { if (g < vMinG) vMinG = g; if (g > vMaxG) vMaxG = g; }
@@ -3934,6 +4022,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         if (fv !== 0) { if (fv < vMinFv) vMinFv = fv; if (fv > vMaxFv) vMaxFv = fv; }
         const skv = _subSkew[i];
         if (skv !== 0) { if (skv < vMinSk) vMinSk = skv; if (skv > vMaxSk) vMaxSk = skv; }
+        const onv = _subOiNet[i];
+        if (onv !== 0 && Math.abs(onv) > vMaxON) vMaxON = Math.abs(onv);
         const foi = _subFutOi[i];
         if (foi !== 0) { if (foi < vMinFoi) vMinFoi = foi; if (foi > vMaxFoi) vMaxFoi = foi; }
           const atrv2 = _subAtr[i];
@@ -4266,19 +4356,37 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         }
       }
 
-      if (subVis.skewVal) {
+      // OI净差柱: Call总持仓-Put总持仓, 0轴上绿(Call多)下红(Put多)
+      if (subVis.oiNet && vMaxON > 0) {
         for (let i = start; i < end && i < n; i++) {
-          const sv = _subSkew[i];
-          if (sv === 0) continue;
+          const nv = _subOiNet[i];
+          if (nv === 0) continue;
           const x = toX(i);
-          const y0 = s2y(0, vMinSk, vMaxSk);
-          const y1 = s2y(sv, vMinSk, vMaxSk);
+          const y0 = s2y(0, -vMaxON, vMaxON);
+          const y1 = s2y(nv, -vMaxON, vMaxON);
           const bw = Math.max(1, state.barW * 0.5);
-          sctx.fillStyle = sv > 0 ? '#fdcb6e' : '#e17055';
+          sctx.fillStyle = nv > 0 ? '#5cd85a' : '#ff6b6b';
           sctx.globalAlpha = 0.5;
           sctx.fillRect(x - bw / 2, Math.min(y0, y1), bw, Math.abs(y1 - y0));
           sctx.globalAlpha = 1;
         }
+      }
+
+      // OI偏度折线: (Call-Put)/(Call+Put), 用对称刻度使 0 轴与净差柱对齐
+      const vSkAbs = Math.max(Math.abs(vMinSk), Math.abs(vMaxSk));
+      if (subVis.skewVal && isFinite(vSkAbs) && vSkAbs > 0) {
+        sctx.strokeStyle = '#fdcb6e';
+        sctx.lineWidth = 1;
+        sctx.beginPath();
+        started = false;
+        for (let i = start; i < end && i < n; i++) {
+          const sv = _subSkew[i];
+          if (!isFinite(sv)) { started = false; continue; }
+          const x = toX(i);
+          const y = s2y(sv, -vSkAbs, vSkAbs);
+          if (!started) { sctx.moveTo(x, y); started = true; } else sctx.lineTo(x, y);
+        }
+        sctx.stroke();
       }
 
       if (subVis.skew) {
@@ -4579,6 +4687,12 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
         if (subVis.skewVal) {
           sctx.fillStyle = '#fdcb6e';
           sctx.fillText('OI偏度: ' + (skv >= 0 ? '+' : '') + (skv * 100).toFixed(1) + '%   C:' + Math.round(data[state.hoverIdx].co).toLocaleString() + ' P:' + Math.round(data[state.hoverIdx].po).toLocaleString(), hx + 4, hoverY);
+          hoverY += 12;
+        }
+        if (subVis.oiNet) {
+          const netv = Math.round(_subOiNet[hi]);
+          sctx.fillStyle = netv >= 0 ? '#5cd85a' : '#ff6b6b';
+          sctx.fillText('OI净差: ' + (netv >= 0 ? '+' : '') + netv.toLocaleString(), hx + 4, hoverY);
           hoverY += 12;
         }
         if (subVis.futVol) {
@@ -5278,6 +5392,8 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
 
   window._chartRender = render;
   render();
+  // 默认显示最后一根K线的右侧详情（含实盘持仓的明日止损），无需悬停
+  if (state.hoverIdx < 0 && n > 0) updateInfo(n - 1);
 }
 
 function toggleChartLine() {
