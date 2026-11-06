@@ -312,8 +312,8 @@ let ORD_NEW_PX = '';   // 新增订单默认价格(预填所选K线收盘)
 // 期权成熟品种（快速切换栏，写死）：MP 跟随价格、非长期不动的品种
 const MATURE_SYMS = ['SA', 'FG', 'TA', 'AG', 'AU', 'P', 'PS', 'SI', 'LC'];
 let defaultParams = {
-  lookback: 5,
-  minPct: 0.1,
+  lookback: 10,
+  minPct: 0.2,
   maxPos: 100,
   margin: 15,
   beTh: 1,
@@ -2467,7 +2467,7 @@ function drawChart(data, trades, params, stopCurve, nextDirPred, openPos, eqCurv
   var _subCWallSh, _subPWallSh, _subCWallH, _subPWallH, _subCWallOi, _subPWallOi, _subCWallDays, _subPWallDays;
   var _subGam, _subVeg, _subMaxGamAbs, _subMaxVeg, _hasVega;
   var _oiChain = null, _oiHoverIdx = -1;
-  const subVis = { gex: false, skew: false, vr: false, iv: false, futVol: false, futOi: false, skewVal: true, atr: false, mpConf: false, noise: false, oids: true, hdg: true, dex: true, vanna: false, charm: false, gam: false, veg: false, oiNet: false };
+  const subVis = { gex: false, skew: false, vr: false, iv: false, futVol: false, futOi: false, skewVal: false, atr: false, mpConf: false, noise: false, oids: true, hdg: true, dex: true, vanna: false, charm: false, gam: false, veg: false, oiNet: false };
   
   // HTML 图例栏（水平可滚动）
   function syncLegend() {
