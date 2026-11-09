@@ -1,13 +1,13 @@
 # Max Pain 趋势跟踪策略规则（v5）
 
-**实际代码逻辑**：以 `web/index.html` 前端实现为准。以下策略规则文档保持同步。
+**实际代码逻辑**：以 `web/index.html` 前端实现为准，本文件已按当前代码同步（2026-11-09）。
 
 ---
 
 ## 1. 策略架构
 
 ```
-MP 趋势方向 → EMA 方向判断 + 价格同侧过滤 → ATR 追踪止损 + 保本锁 + 方向反转出场 + 连胜跳过
+MP 趋势方向（EMA + 窗口净变化）→ 波动率/连胜过滤 → ATR 追踪止损 + 保本锁 + 方向反转出场
 ```
 
 MP 趋势跟踪。核心逻辑：MP 方向代表期权市场"最痛"位置漂移方向，跟随这个方向交易。
@@ -16,34 +16,39 @@ MP 趋势跟踪。核心逻辑：MP 方向代表期权市场"最痛"位置漂移
 
 ## 2. 开仓逻辑
 
-### 2.1 MP 趋势方向 — 21 日 EMA
+### 2.1 MP 趋势方向 — MP 的 EMA + 窗口净变化
 
-使用 21 日 EMA 判断 MP 趋势方向（非线性回归），带 buffer 阈值过滤：
+对最近 `lookback` 个 MP 值做 EMA，并要求窗口净变化同向，过滤 V 型假信号：
 
 ```
-ema = (close × k) + (prevEma × (1 - k)), k = 2 / (period + 1)
+ema = 从窗口第一个 MP 开始递推，k = 2 / (period + 1)
+
+up   = last > ema × (1 + minPct) 且 last > first
+down = last < ema × (1 - minPct) 且 last < first
+其余 → null（震荡，不开仓）
 ```
 
-| latest > ema × (1 + threshold) | up |
-| latest < ema × (1 - threshold) | down |
-| 其余 | null |
+- 换月（`expiry` 变化）后 MP 会跳空；窗口不足时用换月前 MP 按跳空差额复权补齐
+- 方向在收盘后计算（`computeNextDirPred`），次日开盘执行
 
 ### 2.2 入场条件
 
 ```
-MP趋势 up   + prevClose > prevMp  → 开多
-MP趋势 down + prevClose < prevMp  → 开空
+前一日方向 = long   → 次日开盘开多
+前一日方向 = short  → 次日开盘开空
+前一日方向 = null   → 不开仓
 ```
 
-- 使用前日收盘价（`prevClose`）和前日 MP（`prevMp`）避免预知未来
-- 价格必须在 MP 同侧：做多时前收盘在 MP 之上，做空时前收盘在 MP 之下
-- 额外检查盈亏平衡点穿破过滤（`bec`/`bep` 穿透判定结合 BE 结构过滤）
+- 当前实现**没有**“价格与 MP 同侧”过滤，方向完全由 2.1 的 MP 趋势决定
+- 当前实现**没有** BE-MP 交叉入场过滤；BEC/BEP 穿破只做展示参考
+- 开仓前还会经过波动率分位、EWMA 波动率、价格斜率、连胜跳过等过滤（参数为 0 时关闭）
 
 ### 2.3 波动率自适应过滤
 
-ATR/价格比率计算百分位，过滤过低/过高波动率区间：
-- 默认过滤 5% 以下和 95% 以上分位的波动率
+ATR/价格比率计算历史百分位，过滤过低/过高波动率区间：
+- 默认关闭（`volFilterLow/High` 为 0/100）；保存的优化参数通常设为 5%~95%
 - 低波动 → 趋势弱；高波动 → 噪音多，均不做
+- `volWindow=0` 表示分位统计用全部历史
 
 ### 2.4 仓位计算
 
@@ -60,9 +65,11 @@ qty = floor(alloc / dn)          # 向下取整
 开仓瞬间检查当前 K 线的 lo/hi 是否已触发出场价，触发则立即止损：
 
 ```
-long:  stop = open - atr * entryAtrMult
-short: stop = open + atr * entryAtrMult
+long:  stop = 开盘价 - 昨日ATR * entryAtrMult
+short: stop = 开盘价 + 昨日ATR * entryAtrMult
 ```
+
+ATR 缺失时回退为开仓价的 0.5%。
 
 ### 2.6 连胜跳过
 
@@ -83,10 +90,12 @@ N 默认 0（关闭）。用意：顺方向赚到后暂停反方向开仓，避�
 
 | 方向 | 出场条件 |
 |------|---------|
-| 多头 | MP 趋势由 `up` 变为 `down` 或 `null` |
-| 空头 | MP 趋势由 `down` 变为 `up` 或 `null` |
+| 多头 | MP 的 EMA 方向变为 `down` |
+| 空头 | MP 的 EMA 方向变为 `up` |
 
-趋势不存在时持仓逻辑失效。出场后同一根 K 线可反向开仓。
+- 出场判断用 `emaDirection`：只看 EMA 偏离，**不含** 2.1 的窗口净变化条件
+- 方向为 `null`（震荡）时**不**触发方向反转出场，持仓交给追踪止损/保本锁
+- 按开盘价出场；出场后同一根 K 线可反向开仓
 
 ### 3.2 ATR 追踪止损（优先级 2）
 
@@ -111,6 +120,9 @@ N 默认 0（关闭）。用意：顺方向赚到后暂停反方向开仓，避�
 
 激活后，最低锁定止损 `entryPx + (peakPx - entryPx) × lockPct`
 
+- 策略核心用**收盘价**更新 `peakPx` 并判断是否激活，不用最高/最低价
+- 当日生效止损用截至昨日收盘的峰值；收盘后再按今日峰值算出明日止损
+
 ### 3.4 执行顺序
 
 逐日检查：
@@ -124,20 +136,22 @@ N 默认 0（关闭）。用意：顺方向赚到后暂停反方向开仓，避�
 
 | 参数 | 默认 | 范围 | 说明 |
 |------|------|------|------|
-| lookback | 21 | 5~60 | 趋势计算窗口 |
-| minPct | 0.1% | 0.2~5% | MP 趋势分类阈值（越大越难出方向） |
-| maxPos | 50% | 5~60% | 单笔最大资金占用（50万以上生效） |
-| margin | 15% | — | 交易所标准保证金率 |
-| beTh | 1.0% | 0~5% | 激活保本锁所需盈利 |
-| entryAtrMult | 1.0 | 0.5~3 | 入场止损 ATR 乘数 |
-| atrPeriod | 14 | 7~30 | ATR 计算周期 |
-| atrMult | 1.3 | 0.5~3 | 追踪止损 ATR 乘数 |
-| lockPct | 50% | 10~70% | 锁定峰值利润比例 |
-| volFilterLow | 5% | 0~50 | 波动率过滤下限百分位 |
-| volFilterHigh | 95% | 50~100 | 波动率过滤上限百分位 |
+| lookback | 10 | 5~60 | 趋势计算窗口 |
+| minPct | 0.2% | 0~10% | MP 趋势分类阈值（越大越难出方向） |
+| maxPos | 100% | 5~100% | 单笔最大资金占用（50万以上生效） |
+| margin | 15% | 5~50% | 交易所标准保证金率 |
+| beTh | 1.0% | 0~10% | 激活保本锁所需盈利 |
+| entryAtrMult | 0.5 | 0.5~5 | 入场止损 ATR 乘数 |
+| atrPeriod | 5 | 5~60 | ATR 计算周期 |
+| atrMult | 0.5 | 0.5~5 | 追踪止损 ATR 乘数 |
+| lockPct | 50% | 0~100% | 锁定峰值利润比例 |
+| volFilterLow | 0%（关闭） | 0~50 | 波动率过滤下限百分位 |
+| volFilterHigh | 100%（关闭） | 50~100 | 波动率过滤上限百分位 |
 | capital | 100,000 | — | 初始权益 |
 | capLimit | 200 | 0~1000 | 单笔名义本金上限（万元），0=不限 |
-| skipCount | 0 | 0~5 | 盈利后跳过同向信号次数 |
+| skipCount | 0 | 0~10 | 盈利后跳过同向信号次数 |
+
+> 默认值取 `web/index.html` 的 `defaultParams`（未保存参数时的回退值）。实际扫描优先使用 `strategy_params` 表里按品种保存的优化参数；旧页面历史优化值可用 `python -m scripts.sync_legacy_params` 同步到新库。优化器可能产生超出输入框范围的 ATR 周期（如 100+），新工作台表单已放宽到 250。
 
 ---
 
@@ -151,13 +165,13 @@ N 默认 0（关闭）。用意：顺方向赚到后暂停反方向开仓，避�
 | v2 | MP趋势斜率 | 发散门 | trail+锁定+结构击穿+方向反转 | — |
 | v3 | MP趋势+R² | 趋势MP附近/震荡BE附近 | 结构+痛点止盈+方向反转+trail | 自适应双模式 |
 | v4 | MP趋势+ADX | ADX筛状态+RSI筛入场 | 结构+痛点止盈+方向反转+ATR | ADX+RSI+ATR |
-| **v5** | **MP趋势(EMA)** | **价格同侧+波动率过滤** | **方向反转+ATR追踪+保本锁+连胜跳过** | **纯MP** |
+| **v5** | **MP趋势(EMA+净变化)** | **波动率分位+连胜跳过** | **方向反转+ATR追踪+保本锁** | **纯MP** |
 
 **当前 v5 实际实现**：
-- 方向：21 日 EMA 而非线性回归
-- 出场：ATR 追踪 stopCurve（第 2 天重算，第 3 天起用缓存值）
-- 入场第 1 天：entryStopLevel = open ± atr × entryAtrMult
-- 入场第 2 天起：trackingStop = prevClose ± atr × atrMult（保底 entryStopLevel）
+- 方向：`lookback` 日 MP 的 EMA + 窗口净变化（`mpDirection`），没有价格同侧过滤
+- 出场：方向反转（`emaDirection`）+ 每日重算的 ATR 追踪止损 + 保本锁
+- 入场第 1 天：entryStopLevel = open ± 昨日ATR × entryAtrMult
+- 入场第 2 天起：trackingStop = prevClose ± 昨日ATR × atrMult（保底 entryStopLevel）
 - 趋势分析/结构击穿仅显示参考，不参与出场决策
 
 ---
