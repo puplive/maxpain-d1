@@ -9,6 +9,7 @@
 ```
 ├── .github/workflows/daily-update.yml  # 全量数据更新 workflow（手动触发）
 ├── scripts/
+│   ├── expiry_rules.py                 # 期权到期日规则（三所统一维护）
 │   ├── convert_czce.py                 # CZCE 官网 TXT → data/czce/*.json
 │   ├── convert_dce_xlsx.py             # DCE 官网 XLSX → data/dce/*.json
 │   ├── convert_shfe.py                 # SHFE 官网 XLSX → data/shfe/*.json
@@ -32,6 +33,7 @@
 ├── web/
 │   ├── data/                           # 前端静态数据（由 build_web_data.py 生成）
 │   │   ├── index.json                  # 品种列表 + 合约乘数
+│   │   ├── expiries.json               # 各品种期权到期日历（app 日历页用）
 │   │   └── {symbol}.json               # 按品种拆分的全量数据
 │   ├── index.html                      # 回测页面
 │   ├── train.html                      # 模拟训练
@@ -77,9 +79,33 @@ python scripts/build_web_data.py
 1. 读取 `data/` 下所有 `*.json`（不限目录层级、不限年份）
 2. 按品种+日期去重合并，排序后写入 `web/data/{symbol}.json`
 3. 同时生成 `web/data/index.json`（品种列表 + 合约乘数 + 名称映射）
+   和 `web/data/expiries.json`（各品种期权到期日历，app 日历页使用）
 4. 每个记录包含：`d, o, c, h, l, mp, co, po, bec, bep, vr, ivs, gex, oc_chain, expiry, dte, oi_total, oi_pcr, oi_max_strike, vol_call, vol_put, vol_total, fut_vol, fut_oi, fut_turnover, atm_iv`
 
 > 前端所有计算（MP 趋势、止损、信号判定等）均在浏览器端完成，数据文件只提供原始指标。
+
+### 期权到期日规则
+
+统一维护在 `scripts/expiry_rules.py`，三个转换脚本只调用 `last_trading_day()`，
+不要在别处硬编码交易日计数。规则按「交易所 + 品种 + 合约交割月」区分，历史重建
+使用当时生效的口径。
+
+| 交易所 | 交割月范围 | 最后交易日 |
+|--------|-----------|-----------|
+| DCE | <= 2412 | 交割月前一月第 5 个交易日 |
+| DCE | >= 2501 | 交割月前一月第 12 个交易日（大商所〔2023〕65 号，C/M 无特殊） |
+| CZCE | <= 1904 | 交割月前两月倒数第 5 个交易日 |
+| CZCE | 1905 ~ 2312 | 交割月前一月第 3 个交易日（白糖 1909 起） |
+| CZCE | >= 2401 | 交割月前一月第 15 个日历日（含）之前的倒数第 3 个交易日 |
+| CZCE | >= 2711 | 常规改为前一月第 13 个交易日（2026-11-06 公告） |
+| CZCE AP/CJ/PX | >= 2501 | 交割月前两月倒数第 3 个交易日（系列期权；2711 起改为前两月第 13 个交易日） |
+| SHFE | 常规 | 交割月前一月倒数第 5 个交易日 |
+| SHFE | FU | 交割月前一月倒数第 10 个交易日（2025-09-10 上市） |
+| SHFE | SC | 交割月前一月倒数第 13 个交易日 |
+
+历史数据里 `expiry/dte/gex` 的 T 都取决于该规则；改动后需重跑对应年份的转换脚本，
+再执行 `python scripts/build_web_data.py`。CZCE 三位合约码（如 TA602）只有 1 位年份，
+转换脚本用交易日所在年份推断年代，不要改回固定 `+2020`。
 
 ### 带宽参数（前端可调）
 

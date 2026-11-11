@@ -19,6 +19,9 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / 'data' / 'dce'
 XLSX_DIR = ROOT / 'file' / 'dce'
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from expiry_rules import last_trading_day
+
 DCE_SYMBOLS = {
     'M': 'm', 'C': 'c', 'L': 'l', 'V': 'v', 'PP': 'pp',
     'I': 'i', 'PG': 'pg', 'Y': 'y', 'P': 'p', 'A': 'a',
@@ -75,8 +78,8 @@ def _build_calendar(fut):
 
 
 def _dce_expiry(calendar, contract_code):
-    """DCE 到期日：交割月前一个月的第12个交易日
-    特殊品种(C,M)：交割月前二个月的第12个交易日
+    """DCE 到期日：规则见 scripts/expiry_rules.py
+    2501 系列起为交割月前一月第12个交易日，之前第5个；C/M 无特殊规则。
     """
     m = re.search(r'[a-z]+(\d{4})$', str(contract_code))
     if not m:
@@ -86,29 +89,8 @@ def _dce_expiry(calendar, contract_code):
     ym = m.group(1)
     yr = 2000 + int(ym[:2])
     mo = int(ym[2:4])
-    ref_yr = 2000 + int(ym[:2])
-    if yr < ref_yr - 2:
-        yr += 100
-    # Special: C (玉米), M (豆粕) → 前二个月
-    special = sym in ('C', 'M')
-    if special:
-        if mo <= 2:
-            mo += 10; yr -= 1
-        else:
-            mo -= 2
-    else:
-        if mo == 1:
-            mo = 12; yr -= 1
-        else:
-            mo -= 1
-    exp_ym = f'{yr:04d}-{mo:02d}'
-    trade_dates = calendar.get(exp_ym, [])
-    if not trade_dates:
-        return 30
-    if len(trade_dates) < 12:
-        return 30
-    # 第12个交易日
-    return trade_dates[11]
+    expiry = last_trading_day('DCE', sym, yr, mo, calendar)
+    return expiry or 30
 
 
 def _calc_T_dce(contract_code, trade_date_str, calendar):

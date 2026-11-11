@@ -14,6 +14,9 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / 'data' / 'shfe'
 FILE_DIR = ROOT / 'file' / 'shfe'
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from expiry_rules import last_trading_day
+
 SHFE_PREFIX_MAP = {s: s for s in [
     'AG','AL','AO','AU','BR','BU','CU','FU','HC','LU','NI','NR','PB',
     'RB','RU','SC','SN','SP','SS','WR','ZN','BC',
@@ -129,8 +132,8 @@ def _build_calendar(fut):
 
 
 def _shfe_expiry(calendar, contract_code):
-    """SHFE 到期日：交割月前一个月的倒数第5个交易日
-    SC (原油/能源中心)：交割月前一个月的倒数第13个交易日
+    """SHFE 到期日：规则见 scripts/expiry_rules.py
+    常规为交割月前一月倒数第5个交易日；SC 倒数第13；FU 倒数第10（2025-09 上市）。
     """
     m = re.search(r'[A-Z]+(\d{4})$', str(contract_code))
     if not m:
@@ -140,19 +143,8 @@ def _shfe_expiry(calendar, contract_code):
     ym = m.group(1)
     yr = 2000 + int(ym[:2])
     mo = int(ym[2:4])
-    if mo == 1:
-        mo = 12; yr -= 1
-    else:
-        mo -= 1
-    exp_ym = f'{yr:04d}-{mo:02d}'
-    trade_dates = calendar.get(exp_ym, [])
-    if not trade_dates:
-        return 30
-    # SC: 倒数第13个交易日, 其他: 倒数第5个交易日
-    n = 13 if sym in ('SC',) else 5
-    if len(trade_dates) < n:
-        return 30
-    return trade_dates[-n]
+    expiry = last_trading_day('SHFE', sym, yr, mo, calendar)
+    return expiry or 30
 
 
 def _calc_T_shfe(contract_code, trade_date_str, calendar):

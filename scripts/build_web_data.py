@@ -64,6 +64,9 @@ SYMBOL_CFG = {
     'FU': {'name': '燃料油',   'exchange': 'shfe', 'mult': 10},
     'BU': {'name': '沥青',     'exchange': 'shfe', 'mult': 10},
     'SP': {'name': '纸浆',     'exchange': 'shfe', 'mult': 10},
+    'HC': {'name': '热轧卷板', 'exchange': 'shfe', 'mult': 10},
+    'SS': {'name': '不锈钢',   'exchange': 'shfe', 'mult': 5},
+    'LU': {'name': '低硫燃料油','exchange': 'ine', 'mult': 10},
     # INE
     'SC': {'name': '原油',     'exchange': 'ine', 'mult': 1000},
     'NR': {'name': '20号胶',   'exchange': 'ine', 'mult': 10},
@@ -110,8 +113,33 @@ def main():
     index = {'symbols': symbols, 'names': names, 'mult': mults}
     (OUT_DIR / 'index.json').write_text(json.dumps(index, ensure_ascii=False))
 
+    # 期权到期日历：每个品种历史上出现过的到期日
+    # expiry 是当天「最近到期」的日期，近月合约逐日滚动，所以每个品种的最新一条
+    # 就是下一个到期日；按品种去重后供 app 日历页使用
+    expiry_items = []
+    for sym in symbols:
+        cfg = SYMBOL_CFG.get(sym, {})
+        seen = set()
+        for rec in sorted(pool[sym].values(), key=lambda r: r['d']):
+            exp = rec.get('expiry')
+            if not isinstance(exp, str) or exp in seen:
+                continue
+            seen.add(exp)
+            expiry_items.append({
+                'symbol': sym,
+                'name': cfg.get('name', sym),
+                'exchange': cfg.get('exchange', ''),
+                'expiry': exp,
+                'contract': rec.get('opt_contract'),
+                'last_date': rec['d'],
+            })
+    expiry_items.sort(key=lambda item: (item['expiry'], item['symbol']))
+    (OUT_DIR / 'expiries.json').write_text(
+        json.dumps({'items': expiry_items}, ensure_ascii=False)
+    )
+
     total = sum(len(pool[sym]) for sym in symbols)
-    print(f'✅ {len(symbols)} 品种, {total} 条 → {OUT_DIR}/')
+    print(f'✅ {len(symbols)} 品种, {total} 条, {len(expiry_items)} 个到期日 → {OUT_DIR}/')
 
 
 if __name__ == '__main__':

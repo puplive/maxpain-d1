@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / 'data' / 'czce'
 FILE_DIR = ROOT / 'file' / 'czce'
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from expiry_rules import last_trading_day
+
 CZCE_PREFIX_MAP = {
     'TA': 'TA', 'MA': 'MA', 'SA': 'SA', 'SR': 'SR', 'CF': 'CF',
     'RM': 'RM', 'OI': 'OI', 'PK': 'PK', 'PF': 'PF', 'SM': 'SM',
@@ -71,49 +74,27 @@ def _build_calendar(fut):
     return cal
 
 
-def _czce_expiry(calendar, contract_code):
-    """CZCE 到期日：交割月前一个月第15个日历日之前(含)的倒数第3个交易日
-    特殊品种(CJ,PX)：交割月前二个月最后一个日历日之前(含)的倒数第3个交易日
+def _czce_expiry(calendar, contract_code, ref_date=None):
+    """CZCE 到期日：规则见 scripts/expiry_rules.py
+    含 2019（前一月第3个交易日）、2024（15日前倒数第3）、2026-11（2711 起第13个）
+    三次调整；AP/CJ/PX 为前二个月倒数第3。
+    3 位合约码只有 1 位年份，用 ref_date（交易日）判断年代。
     """
-    from datetime import date, datetime
     m = re.search(r'[A-Z]+(\d{3})$', str(contract_code))
     if not m:
         return 30
     sym = re.match(r'^[A-Z]+', str(contract_code))
-    sym = sym.group(0) if sym else ''
+    sym = sym.group(0).upper() if sym else ''
     ym = m.group(1)
-    yr = int(ym[0]) + 2020
+    ref_year = int(ref_date[:4]) if ref_date else 2020
+    yr = 2010 + int(ym[0])
+    while yr < ref_year - 5:
+        yr += 10
+    while yr > ref_year + 5:
+        yr -= 10
     mo = int(ym[1:3])
-    special = sym.upper() in ('CJ', 'PX')
-    if special:
-        # 交割月前二个月
-        if mo <= 2:
-            mo += 10
-            yr -= 1
-        else:
-            mo -= 2
-    else:
-        # 交割月前一个月
-        if mo == 1:
-            mo = 12
-            yr -= 1
-        else:
-            mo -= 1
-    exp_ym = f'{yr:04d}-{mo:02d}'
-    trade_dates = calendar.get(exp_ym, [])
-    if not trade_dates:
-        return 30
-    if special:
-        # CJ/PX: 交割月前二个月全部交易日 → 倒数第3个
-        pool = trade_dates
-    else:
-        # 常规: 第15个日历日之前(含)的交易日
-        cutoff = date(yr, mo, 15)
-        pool = [d for d in trade_dates
-                if datetime.strptime(d, '%Y-%m-%d').date() <= cutoff]
-    if len(pool) < 3:
-        return 30
-    return pool[-3]
+    expiry = last_trading_day('CZCE', sym, yr, mo, calendar)
+    return expiry or 30
 
 
 def calc_max_pain(opt_df):
@@ -143,7 +124,7 @@ def _calc_T(contract_code, trade_date_str, calendar):
     2027+月份无日历数据时回退到15号近似
     """
     from datetime import datetime, date
-    expiry_str = _czce_expiry(calendar, contract_code)
+    expiry_str = _czce_expiry(calendar, contract_code, trade_date_str)
     if not isinstance(expiry_str, (int, float)):
         td = datetime.strptime(trade_date_str, '%Y-%m-%d').date()
         ex = datetime.strptime(expiry_str, '%Y-%m-%d').date()
@@ -469,7 +450,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
             if code in seen_codes:
                 continue
             seen_codes.add(code)
-            expiry_str = _czce_expiry(calendar, code)
+            expiry_str = _czce_expiry(calendar, code, date)
             if isinstance(expiry_str, str):
                 if nearest_expiry is None or expiry_str < nearest_expiry:
                     nearest_expiry = expiry_str
