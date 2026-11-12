@@ -1,5 +1,6 @@
 """将 data/czce/*.json + data/dce/*.json 合并拆分成 web/data/{symbol}.json
-并在 web/data/index.json 记录品种列表
+并生成 web/data/index.json（品种列表）、expiries.json（期权日历）、
+screen.json（看板筛选用轻量尾部数据）
 
 用法: python scripts/build_web_data.py
 """
@@ -86,6 +87,13 @@ SYMBOL_CFG = {
 # 各品种合约乘数（跨交易所统一）
 SYM_MULT = {sym: cfg['mult'] for sym, cfg in SYMBOL_CFG.items()}
 
+# 看板筛选需要的字段（与 app/backend/app/services/data_source.py 的 TAIL_FIELDS 一致）
+SCREEN_FIELDS = (
+    'd', 'o', 'h', 'l', 'c',
+    'mp', 'bec', 'bep', 'gpk', 'gex',
+    'oi_pcr', 'ivs', 'vr', 'atm_iv',
+)
+
 
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -107,10 +115,18 @@ def main():
         records = sorted(pool[sym].values(), key=lambda r: r['d'])
         (OUT_DIR / f'{sym}.json').write_text(json.dumps(records, ensure_ascii=False))
 
-    # index.json
+    # index.json；交易所供前端下拉框标注品种归属
     names = {sym: SYMBOL_CFG[sym]['name'] for sym in symbols if sym in SYMBOL_CFG}
     mults = {sym: SYM_MULT[sym] for sym in symbols if sym in SYM_MULT}
-    index = {'symbols': symbols, 'names': names, 'mult': mults}
+    exchanges = {
+        sym: SYMBOL_CFG[sym]['exchange'] for sym in symbols if sym in SYMBOL_CFG
+    }
+    index = {
+        'symbols': symbols,
+        'names': names,
+        'mult': mults,
+        'exchange': exchanges,
+    }
     (OUT_DIR / 'index.json').write_text(json.dumps(index, ensure_ascii=False))
 
     # 期权到期日历：每个品种历史上出现过的到期日
@@ -136,6 +152,18 @@ def main():
     expiry_items.sort(key=lambda item: (item['expiry'], item['symbol']))
     (OUT_DIR / 'expiries.json').write_text(
         json.dumps({'items': expiry_items}, ensure_ascii=False)
+    )
+
+    # 看板筛选用轻量尾部数据：整份品种文件含 oc_chain，全量解析太慢
+    # 这里预生成最近 61 根日线（窗口上限 60 + 1，供上穿/下穿比对前一日）
+    screen_tail = {}
+    for sym in symbols:
+        rows = sorted(pool[sym].values(), key=lambda r: r['d'])[-61:]
+        screen_tail[sym] = [
+            {key: rec.get(key) for key in SCREEN_FIELDS} for rec in rows
+        ]
+    (OUT_DIR / 'screen.json').write_text(
+        json.dumps(screen_tail, ensure_ascii=False, separators=(',', ':'))
     )
 
     total = sum(len(pool[sym]) for sym in symbols)

@@ -6,3 +6,7 @@ data.json
 file
 .wrangler/
 .claude/
+.venv/
+*.db
+.env
+app/frontend/dist/

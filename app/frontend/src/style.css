@@ -1,0 +1,119 @@
+/* 全局基础样式与通用布局工具类 */
+
+:root {
+  color-scheme: dark;
+  /* 与 App.vue 的 Naive UI themeOverrides 保持同一套配色 */
+  --bg: #0b0f14;
+  --panel: #121a22;
+  --border: #1f2b37;
+  --text: #dbe4ee;
+  --text-dim: #8b97a6;
+  --accent: #4c8dff;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* 细滚动条，避免右侧出现粗大的默认滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #263241;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 看板：自适应列数的卡片网格 */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+/* 页面顶部工具条（筛选、按钮、提示） */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.toolbar-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.metric {
+  font-size: 20px;
+  font-weight: 600;
+  color: #7fb0ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.hint {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.placeholder {
+  padding: 48px;
+  text-align: center;
+  color: #6b7280;
+}
+
+/* 迷你图 canvas 的默认尺寸，实际像素由组件按 DPR 设置 */
+.mini-chart {
+  display: block;
+  width: 100%;
+  height: 120px;
+}
+
+/* 参数表单：自动换列的多列布局 */
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0 16px;
+}
+
+/* 标签行：多空数量等 */
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 卡片标题：名称 + 辅助说明 */
+.card-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.card-title .symbol {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}

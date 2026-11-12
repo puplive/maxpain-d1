@@ -34,6 +34,7 @@
 │   ├── data/                           # 前端静态数据（由 build_web_data.py 生成）
 │   │   ├── index.json                  # 品种列表 + 合约乘数
 │   │   ├── expiries.json               # 各品种期权到期日历（app 日历页用）
+│   │   ├── screen.json                 # 各品种最近 61 根日线轻量字段（app 看板筛选用）
 │   │   └── {symbol}.json               # 按品种拆分的全量数据
 │   ├── index.html                      # 回测页面
 │   ├── train.html                      # 模拟训练
@@ -78,8 +79,10 @@ python scripts/build_web_data.py
 流程：
 1. 读取 `data/` 下所有 `*.json`（不限目录层级、不限年份）
 2. 按品种+日期去重合并，排序后写入 `web/data/{symbol}.json`
-3. 同时生成 `web/data/index.json`（品种列表 + 合约乘数 + 名称映射）
-   和 `web/data/expiries.json`（各品种期权到期日历，app 日历页使用）
+3. 同时生成 `web/data/index.json`（品种列表 + 合约乘数 + 名称映射）、
+   `web/data/expiries.json`（各品种期权到期日历，app 日历页使用）、
+   `web/data/screen.json`（各品种最近 61 根日线的筛选字段，app 看板筛选用；
+   不要改回让后端解析完整品种文件，单文件含 oc_chain，逐个解析会卡死）
 4. 每个记录包含：`d, o, c, h, l, mp, co, po, bec, bep, vr, ivs, gex, oc_chain, expiry, dte, oi_total, oi_pcr, oi_max_strike, vol_call, vol_put, vol_total, fut_vol, fut_oi, fut_turnover, atm_iv`
 
 > 前端所有计算（MP 趋势、止损、信号判定等）均在浏览器端完成，数据文件只提供原始指标。
