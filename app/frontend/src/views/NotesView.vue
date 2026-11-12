@@ -682,6 +682,8 @@ onMounted(() => {
 .check-comment {
   font-size: 13px;
   white-space: pre-wrap;
+  min-width: 0;
+  flex: 1;
 }
 
 .check-form {
