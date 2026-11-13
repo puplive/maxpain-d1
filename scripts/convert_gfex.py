@@ -6,7 +6,7 @@ import argparse, json, os, re, sys, time
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from pathlib import Path
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
@@ -92,13 +92,26 @@ def _build_calendar(fut):
     return cal
 
 
+def _fifth_weekday(year, month):
+    """该月第5个工作日(周一~周五，不含节假日)，到期月交易日历未覆盖时的近似值"""
+    d = date(year, month, 1)
+    n = 0
+    while True:
+        if d.weekday() < 5:
+            n += 1
+            if n == 5:
+                return d.isoformat()
+        d += timedelta(days=1)
+
+
 def _gfex_expiry(calendar, contract_code):
     """GFEX 期权到期日: 标的期货交割月份前一个月的第5个交易日
     contract_code 如 lc2602 / lc2602-C-100000
+    日历未覆盖到期月时按第5个工作日近似，等该月数据到齐后重跑即修正。
     """
     m = re.search(r'([A-Za-z]+)(\d{4})', str(contract_code))
     if not m:
-        return 30
+        return '9999-12-31'
     ym = m.group(2)
     yr = 2000 + int(ym[:2])
     mo = int(ym[2:4])
@@ -109,12 +122,12 @@ def _gfex_expiry(calendar, contract_code):
     exp_ym = f'{yr:04d}-{mo:02d}'
     trade_dates = calendar.get(exp_ym, [])
     if len(trade_dates) < 5:
-        return 30
+        return _fifth_weekday(yr, mo)
     return trade_dates[4]   # 第5个交易日
 
 
 def _gfex_T(contract_code, trade_date_str, calendar):
-    """到期年限 T。日历缺失(如跨年合约)回退到交割月前一月的15号近似"""
+    """到期年限 T。日历缺失(如跨年合约)回退到交割月前一月第5个工作日近似"""
     m = re.search(r'([A-Za-z]+)(\d{4})', str(contract_code))
     if not m:
         return 30 / 365
@@ -131,8 +144,7 @@ def _gfex_T(contract_code, trade_date_str, calendar):
     if len(trade_dates) >= 5:
         ex = date.fromisoformat(trade_dates[4])
         return max((ex - td).days / 365, 7 / 365)
-    # 回退: 交割月前一个月15号
-    expiry = date(yr, mo, 15)
+    expiry = date.fromisoformat(_fifth_weekday(yr, mo))
     return max((expiry - td).days / 365, 7 / 365)
 
 
@@ -394,30 +406,13 @@ def process_one(sym, fut, opt, mult=10):
         nearest_expiry = None
         nearest_code = None
         nearest_dte = 0
-        seen_codes = set()
         for code in codes.str.extract(r'^([A-Za-z]+\d{4})', expand=False).dropna().unique():
-            if code in seen_codes:
-                continue
-            seen_codes.add(code)
             expiry_str = _gfex_expiry(calendar, code)
-            if isinstance(expiry_str, str):
-                if nearest_expiry is None or expiry_str < nearest_expiry:
-                    nearest_expiry = expiry_str
-                    nearest_code = code
-            else:
-                m2 = re.search(r'([A-Za-z]+)(\d{4})', str(code))
-                if m2:
-                    ym2 = m2.group(2)
-                    yr2 = 2000 + int(ym2[:2])
-                    mo2 = int(ym2[2:4])
-                    if mo2 == 1:
-                        mo2 = 12; yr2 -= 1
-                    else:
-                        mo2 -= 1
-                    approx = f'{yr2:04d}-{mo2:02d}-15'
-                    if nearest_expiry is None or approx < nearest_expiry:
-                        nearest_expiry = approx
-                        nearest_code = code
+            if nearest_expiry is None or expiry_str < nearest_expiry:
+                nearest_expiry = expiry_str
+                nearest_code = code
+        if nearest_expiry == '9999-12-31':
+            nearest_expiry = nearest_code = None
         if nearest_expiry:
             td = pd.Timestamp(date).date()
             ex = pd.Timestamp(nearest_expiry).date()

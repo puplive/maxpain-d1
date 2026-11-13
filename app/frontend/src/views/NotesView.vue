@@ -30,6 +30,7 @@ import {
 } from '../api/client'
 import { useMarketStore } from '../stores/market'
 import { useRouter } from 'vue-router'
+import { renderMarkdown, stripMarkdown } from '../utils/markdown'
 
 const store = useMarketStore()
 const router = useRouter()
@@ -175,6 +176,11 @@ const current = computed(
   () => notes.value.find((note) => note.id === activeId.value) ?? null,
 )
 
+// 查看态把 Markdown 原文渲染成格式化 HTML；渲染器内部已转义原始内容
+const contentHtml = computed(() =>
+  current.value?.content ? renderMarkdown(current.value.content) : '',
+)
+
 const drawerTitle = computed(() => {
   if (editing.value) {
     return activeId.value == null ? '新建笔记' : '编辑笔记'
@@ -194,7 +200,7 @@ function dateRange(note: Note) {
 }
 
 function excerpt(note: Note) {
-  return note.content.replace(/\s+/g, ' ').slice(0, 90)
+  return stripMarkdown(note.content).slice(0, 90)
 }
 
 function applyNote(note: Note) {
@@ -475,7 +481,7 @@ onMounted(() => {
             v-model:value="form.content"
             type="textarea"
             :rows="14"
-            placeholder="结论、依据、适用条件、失效条件……"
+            placeholder="支持 Markdown：标题 #、列表 -、加粗 **、代码 `…`、引用 >、表格 |…|"
           />
         </div>
         <div class="form-actions">
@@ -521,9 +527,8 @@ onMounted(() => {
           </n-popconfirm>
         </div>
 
-        <div class="note-content">
-          {{ current.content || '（暂无内容）' }}
-        </div>
+        <div v-if="current.content" class="note-content" v-html="contentHtml" />
+        <div v-else class="note-content empty">（暂无内容）</div>
 
         <n-divider title-placement="left">验证记录</n-divider>
         <div class="check-list">
@@ -658,13 +663,147 @@ onMounted(() => {
 }
 
 .note-content {
-  padding: 12px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #0f161d;
-  white-space: pre-wrap;
   line-height: 1.7;
   font-size: 13px;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+}
+
+.note-content.empty {
+  color: var(--text-dim);
+}
+
+/* v-html 生成的 Markdown 内容需要 :deep 才能命中 scoped 样式 */
+.note-content :deep(p) {
+  margin: 0 0 10px;
+}
+
+.note-content :deep(p:last-child),
+.note-content :deep(ul:last-child),
+.note-content :deep(ol:last-child),
+.note-content :deep(pre:last-child),
+.note-content :deep(table:last-child),
+.note-content :deep(blockquote:last-child) {
+  margin-bottom: 0;
+}
+
+.note-content :deep(h1),
+.note-content :deep(h2),
+.note-content :deep(h3),
+.note-content :deep(h4),
+.note-content :deep(h5),
+.note-content :deep(h6) {
+  margin: 16px 0 8px;
+  line-height: 1.4;
+  color: #e6edf3;
+}
+
+.note-content :deep(h1:first-child),
+.note-content :deep(h2:first-child),
+.note-content :deep(h3:first-child) {
+  margin-top: 0;
+}
+
+.note-content :deep(h1) {
+  font-size: 19px;
+}
+.note-content :deep(h2) {
+  font-size: 17px;
+}
+.note-content :deep(h3) {
+  font-size: 15px;
+}
+.note-content :deep(h4),
+.note-content :deep(h5),
+.note-content :deep(h6) {
+  font-size: 13px;
+}
+
+.note-content :deep(ul),
+.note-content :deep(ol) {
+  margin: 6px 0 10px;
+  padding-left: 22px;
+}
+
+.note-content :deep(li) {
+  margin: 3px 0;
+}
+
+.note-content :deep(strong) {
+  color: #e6edf3;
+}
+
+.note-content :deep(del) {
+  opacity: 0.6;
+}
+
+.note-content :deep(code) {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #16212c;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.note-content :deep(pre) {
+  margin: 8px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #0b1119;
+  overflow-x: auto;
+}
+
+.note-content :deep(pre code) {
+  padding: 0;
+  background: transparent;
+  line-height: 1.6;
+}
+
+.note-content :deep(blockquote) {
+  margin: 8px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid #2c4763;
+  color: var(--text-dim);
+}
+
+.note-content :deep(a) {
+  color: #7fb0ff;
+  text-decoration: none;
+}
+
+.note-content :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.note-content :deep(table) {
+  width: 100%;
+  margin: 8px 0 10px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.note-content :deep(th),
+.note-content :deep(td) {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.note-content :deep(th) {
+  background: #16212c;
+  font-weight: 600;
+}
+
+.note-content :deep(hr) {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid var(--border);
 }
 
 .check-list {

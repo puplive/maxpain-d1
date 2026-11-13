@@ -248,6 +248,12 @@ onMounted(load)
   padding: 6px 8px;
 }
 
+/* 今天的格子铺一层浅白透明背景，日期数字保持原样 */
+.calendar-panel :deep(.n-calendar-cell--current),
+.calendar-panel :deep(.n-calendar-cell--current:hover) {
+  background-color: rgba(255, 255, 255, 0.07);
+}
+
 .day-events {
   display: flex;
   flex-wrap: wrap;

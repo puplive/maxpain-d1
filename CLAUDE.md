@@ -105,6 +105,10 @@ python scripts/build_web_data.py
 | SHFE | 常规 | 交割月前一月倒数第 5 个交易日 |
 | SHFE | FU | 交割月前一月倒数第 10 个交易日（2025-09-10 上市） |
 | SHFE | SC | 交割月前一月倒数第 13 个交易日 |
+| GFEX | 常规 | 标的期货交割月前一月第 5 个交易日（规则在 `convert_gfex.py`，不在 expiry_rules.py） |
+
+GFEX 到期月交易日历未覆盖时（跨年合约、原始文件只到当月）按该月第 5 个工作日近似，
+不要用固定 15 号；等该月交易日数据到齐后重跑转换脚本即自动修正。
 
 历史数据里 `expiry/dte/gex` 的 T 都取决于该规则；改动后需重跑对应年份的转换脚本，
 再执行 `python scripts/build_web_data.py`。CZCE 三位合约码（如 TA602）只有 1 位年份，
