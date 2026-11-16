@@ -288,7 +288,7 @@ def load_all_futures(year):
         return {}
     df = pd.concat(all_df, ignore_index=True)
     df['date'] = df['交易日期'].astype(str).str.strip()
-    for c in ['今开盘', '最高价', '最低价', '今收盘', '成交量(手)', '持仓量', '成交额(万元)']:
+    for c in ['今开盘', '最高价', '最低价', '今收盘', '今结算', '成交量(手)', '持仓量', '成交额(万元)']:
         if c in df.columns:
             df[c] = _clean_num(df[c])
 
@@ -360,6 +360,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
         if r.get('今收盘', 0) > 0:
             fut_dates[date_i] = {'o': float(r.get('今开盘', 0)), 'c': float(r.get('今收盘', 0)),
                                  'h': float(r.get('最高价', 0)), 'l': float(r.get('最低价', 0)),
+                                 'settle': float(r.get('今结算', 0)),
                                  'fv': float(r.get('成交量(手)', 0)),
                                  'foi': float(r.get('持仓量', 0)),
                                  'fto': float(r.get('成交额(万元)', 0)),
@@ -538,7 +539,7 @@ def process_one(sym, fut, opt, date=None, mult=10):
                 oc_val = round(float(fut_match['今收盘'].iloc[0]), 2)
 
         result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2), 'oc': oc_val,
-                        'h': row['h'], 'l': row['l'],
+                        'h': row['h'], 'l': row['l'], 'settle': row['settle'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep,
                         'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'gpk': gpk, 'oc_chain': oc_chain,
                         'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,

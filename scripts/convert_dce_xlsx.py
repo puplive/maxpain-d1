@@ -268,6 +268,10 @@ def process_symbol(sym, prefix, year, date=None):
     fut['low'] = pd.to_numeric(fut['最低价'], errors='coerce').fillna(0)
     fut['open_interest'] = pd.to_numeric(fut['持仓量'], errors='coerce').fillna(0)
     fut['turnover'] = pd.to_numeric(fut['成交额'], errors='coerce').fillna(0)
+    if '结算价' in fut.columns:
+        fut['settle'] = pd.to_numeric(fut['结算价'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+    else:
+        fut['settle'] = 0.0
 
     # 解析合约月份，用于近月连续
     fut['contract_ym'] = fut['合约名称'].str.extract(r'(\d{4})$')[0]
@@ -485,6 +489,7 @@ def process_symbol(sym, prefix, year, date=None):
         result[dt] = {
             'd': dt, 'o': round(float(row['open']), 2), 'c': round(px, 2),
             'h': round(float(row['high']), 2), 'l': round(float(row['low']), 2),
+            'settle': round(float(row.get('settle', 0)), 2),
             'nc': round(fut_nc.get(dt, px), 2), 'oc': oc_val,
             'mp': mp, 'co': co, 'po': po,
             'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'gpk': gpk,

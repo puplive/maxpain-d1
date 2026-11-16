@@ -328,7 +328,7 @@ def load_all_futures(year):
     if not all_df: return {}
     df = pd.concat(all_df, ignore_index=True)
     df['date'] = pd.to_datetime((df['交易日期'] if '交易日期' in df.columns else df['日期']).astype(str)).dt.strftime('%Y-%m-%d')
-    for c in ['开盘价','最高价','最低价','收盘价','成交量','持仓量','成交金额(万元)']:
+    for c in ['开盘价','最高价','最低价','收盘价','结算价','成交量','持仓量','成交金额(万元)']:
         if c in df.columns: df[c] = _clean_num(df[c])
 
     # 过滤掉期权合约（含 C/P 后缀的，如 SC2605C650）
@@ -395,6 +395,7 @@ def process_one(sym, fut, opt, mult=10):
         if r.get('收盘价', 0) > 0:
             fut_dates[date] = {'o': float(r.get('开盘价', 0)), 'c': float(r.get('收盘价', 0)),
                                'h': float(r.get('最高价', 0)), 'l': float(r.get('最低价', 0)),
+                               'settle': float(r.get('结算价', 0)),
                                'fv': float(r.get('成交量', 0)),
                                'foi': float(r.get('持仓量', 0)),
                                'fto': float(r.get('成交金额(万元)', 0)),
@@ -579,7 +580,7 @@ def process_one(sym, fut, opt, mult=10):
                 oc_val = round(float(fut_match['收盘价'].iloc[0]), 2)
 
         result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2),
-                        'h': row['h'], 'l': row['l'],
+                        'h': row['h'], 'l': row['l'], 'settle': row['settle'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep,
                         'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'gpk': gpk, 'oc': oc_val, 'oc_chain': oc_chain,
                         'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,

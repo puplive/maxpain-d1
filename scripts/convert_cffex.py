@@ -307,6 +307,7 @@ def process_one(sym, fut, opt, mult=100):
         if r.get('今收盘', 0) > 0:
             fut_dates[date] = {'o': float(r.get('今开盘', 0)), 'c': float(r.get('今收盘', 0)),
                                'h': float(r.get('最高价', 0)), 'l': float(r.get('最低价', 0)),
+                               'settle': float(r.get('今结算', 0)),
                                'fv': float(r.get('成交量', 0)),
                                'foi': float(r.get('持仓量', 0)),
                                'fto': float(r.get('成交金额', 0)),   # 单位已是万元
@@ -459,7 +460,7 @@ def process_one(sym, fut, opt, mult=100):
                 oc_val = round(float(fut_match['今收盘'].iloc[0]), 2)
 
         result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2),
-                        'h': row['h'], 'l': row['l'],
+                        'h': row['h'], 'l': row['l'], 'settle': row['settle'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep,
                         'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'gpk': gpk, 'oc': oc_val, 'oc_chain': oc_chain,
                         'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,

@@ -1013,6 +1013,12 @@ function fmt(value: number | null | undefined, digits = 2) {
   return value.toFixed(digits)
 }
 
+/** 收盘价与昨收的价差，带符号 */
+function fmtDiff(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return '-'
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}`
+}
+
 function predLabel(value: 'long' | 'short' | null) {
   return value === 'long' ? '多' : value === 'short' ? '空' : '震荡'
 }
@@ -1033,6 +1039,16 @@ const hoverData = computed(() => {
         trade.entry_date === bar.d || trade.exit_date === bar.d,
     ),
   }
+})
+
+// 收盘价与昨收的价差；数据里没有结算价，涨跌幅无法按交易所口径计算
+const hoverDiff = computed(() => {
+  const index = hoverIndex.value
+  if (index == null || index <= 0) return null
+  const bar = props.bars[index]
+  const prev = props.bars[index - 1]
+  if (!bar || !prev) return null
+  return bar.c - prev.c
 })
 
 // 收盘仍持仓：开仓日 ≤ 当天 < 平仓日；期末未平仓的区间用 open_position 兜底
@@ -1190,18 +1206,27 @@ const hoverTrades = computed(() => {
       <div v-if="hoverData" class="tooltip" :style="tooltipStyle">
         <div class="head">{{ hoverData.bar.d }}</div>
         <div class="row">
-          <span class="label">开/高</span>
-          <span>{{ fmt(hoverData.bar.o) }} / {{ fmt(hoverData.bar.h) }}</span>
+          <span class="label">收盘</span>
+          <span class="quote">
+            <span class="contract">{{ hoverData.bar.fut_contract ?? '-' }}</span>
+            <span>{{ fmt(hoverData.bar.c) }}</span>
+            <span :class="['chg', (hoverDiff ?? 0) >= 0 ? 'up' : 'down']">
+              {{ fmtDiff(hoverDiff) }}
+            </span>
+          </span>
         </div>
         <div class="row">
-          <span class="label">低/收</span>
-          <span>{{ fmt(hoverData.bar.l) }} / {{ fmt(hoverData.bar.c) }}</span>
+          <span class="label">开/高/低</span>
+          <span>
+            {{ fmt(hoverData.bar.o) }} / {{ fmt(hoverData.bar.h) }} /
+            {{ fmt(hoverData.bar.l) }}
+          </span>
         </div>
         <div class="row">
           <span class="label">MP</span>
           <span>{{ fmt(hoverData.bar.mp) }}</span>
         </div>
-        <div class="row">
+        <div v-if="show.be" class="row">
           <span class="label">BEC/BEP</span>
           <span>{{ fmt(hoverData.bar.bec) }} / {{ fmt(hoverData.bar.bep) }}</span>
         </div>
@@ -1211,10 +1236,6 @@ const hoverTrades = computed(() => {
             {{ hoverData.bar.expiry ?? '-' }} /
             {{ hoverData.bar.dte ?? '-' }}天
           </span>
-        </div>
-        <div class="row">
-          <span class="label">期货合约</span>
-          <span>{{ hoverData.bar.fut_contract ?? '-' }}</span>
         </div>
         <div
           v-for="item in hoverDerivatives"
@@ -1411,6 +1432,25 @@ const hoverTrades = computed(() => {
 
 .tooltip .label {
   color: #7b8a99;
+}
+
+/* 收盘行：合约代码 + 收盘价 + 涨跌幅挤在同一行 */
+.tooltip .quote {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.tooltip .contract {
+  color: #8fa3b8;
+}
+
+.tooltip .chg.up {
+  color: #5cd85a;
+}
+
+.tooltip .chg.down {
+  color: #ff6b6b;
 }
 
 .tooltip .pos {
