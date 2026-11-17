@@ -83,10 +83,24 @@ python scripts/build_web_data.py
    `web/data/expiries.json`（各品种期权到期日历，app 日历页使用）、
    `web/data/screen.json`（各品种最近 61 根日线的筛选字段，app 看板筛选用；
    不要改回让后端解析完整品种文件，单文件含 oc_chain，逐个解析会卡死）
-4. 每个记录包含：`d, o, c, h, l, settle, mp, co, po, bec, bep, vr, ivs, gex, oc_chain, expiry, dte, oi_total, oi_pcr, oi_max_strike, vol_call, vol_put, vol_total, fut_vol, fut_oi, fut_turnover, atm_iv`
+4. 每个记录包含：`d, o, c, h, l, settle, mp, co, po, bec, bep, vr, ivs, gex, oc_chain, ocm, expiry, dte, oi_total, oi_pcr, oi_max_strike, vol_call, vol_put, vol_total, fut_vol, fut_oi, fut_turnover, atm_iv`
    （`settle` 是主力期货合约当日结算价，供前端按交易所口径算涨跌幅；旧数据没有该字段）
 
 > 前端所有计算（MP 趋势、止损、信号判定等）均在浏览器端完成，数据文件只提供原始指标。
+
+### 期权链口径（oc_chain / ocm）
+
+- `oc_chain`：全月份按行权价汇总的轻量链，含 OI/IV/成交量/收盘价/Δ加权对冲当量，
+  供 MP/BEC/BEP、OI 类指标（Pin、OI 重心、25Δ）和 Δ 类指标使用。
+- `ocm`：按月拆分的轻量链 `[{"dte": 12, "k": [[strike, co, po, civ, piv], ...]}, ...]`，
+  只保留 OI 占比 ≥1% 的月份（最近月始终保留：临近到期 OI 很小但 Gamma ∝ 1/√T
+  、且到期前常被钉在某个行权价附近，贡献不可忽略），按 dte 升序；
+  `dte` 是距到期自然日（与记录 `dte` 一致，到期当天为 0；日历缺失时回退 T×365）；
+  由 `scripts/month_chain.py` 生成。
+- T 敏感指标（Call/Put Wall、Gamma 峰值、Magnet、ZeroGamma、Vanna、Charm）
+  在 app 后端逐月用各自的 `dte` 计算再汇总，避免远月被当成近月。
+- 旧数据没有 `ocm` 时自动回退「全月份 + 近月 dte」口径，重跑转换脚本后生效；
+  转换脚本改动后仍需 `python scripts/build_web_data.py` 才会写到 `web/data/`。
 
 ### 期权到期日规则
 
@@ -111,6 +125,14 @@ python scripts/build_web_data.py
 GFEX 到期月交易日历未覆盖时（跨年合约、原始文件只到当月）按该月第 5 个工作日近似，
 不要用固定 15 号；等该月交易日数据到齐后重跑转换脚本即自动修正。
 
+交易日历不再依赖 AKShare：`expiry_rules.py` 里的 `CN_HOLIDAYS` 休市表（2014–2027）
+配合 `trading_calendar()` 生成「周一至周五扣除休市日」。周末调休补班交易所也不开市，
+所以周末一律不是交易日。2014–2026 的区间已与新浪交易日历逐日核对一致，且包含
+2024-02-09 除夕休市、2020 春节延至 02-02 这类特殊口径；2027 来自国办发明电〔2026〕10号。
+每年 11 月国务院公布次年放假安排后，在 `CN_HOLIDAYS` 补下一年即可（不补则该年
+只按周一至周五近似，会把节假日当交易日）。CZCE/DCE/SHFE 转换脚本的 `_build_calendar()`
+都从这里取日历，再用期货实际成交日补充。
+
 历史数据里 `expiry/dte/gex` 的 T 都取决于该规则；改动后需重跑对应年份的转换脚本，
 再执行 `python scripts/build_web_data.py`。CZCE 三位合约码（如 TA602）只有 1 位年份，
 转换脚本用交易日所在年份推断年代，不要改回固定 `+2020`。
@@ -127,7 +149,7 @@ GFEX 到期月交易日历未覆盖时（跨年合约、原始文件只到当月
 
 - 重算时机：`runBacktest` / 运行蒙特卡洛 / 优化参数 前调用 `applyBandParams()`，带宽不变时用数组上的 `_bandKey` 跳过。
 - BEC/BEP 精确重算依赖转换脚本写入 `oc_chain` 的 `cwc/pwc`（OI加权期权收盘价）；旧数据缺该字段时回退到已存的 `bec/bep`。
-- Gamma峰值由前端按近月 `dte` 口径重算（与 Wall 一致），与转换脚本按各合约 T 的旧值可能有细微差异。
+- Gamma峰值由旧前端按近月 `dte` 口径重算（与 Wall 一致）；app 后端已改为按 `ocm` 逐月 dte 汇总（见「期权链口径」）。
 
 ### 次要路径（AKShare 拉取 CZCE）
 
@@ -182,7 +204,11 @@ python scripts/convert_shfe.py --date 20260629        # 某天
 python scripts/build_web_data.py
 ```
 
-> ⚠️ SHFE 的 XLSX 缺少 Delta/隐含波动率字段，IV 偏斜(IVS)和 GEX 计算结果不可靠（GEX 为 0）。
+> SHFE 的 XLSX 缺少 Delta/隐含波动率字段，由 Black-76 反推。反推输入统一用**结算价**
+> （期权结算价 + 标的期货结算价，缺失时回退收盘价），与交易所官方 Greeks 口径一致：
+> 用 CZCE/DCE 数据验证，结算价反推可复现官方 Delta 到 1% 量级（加权误差），
+> 收盘价反推则差 4~7%。所以 SHFE 的 IVS/GEX/25Δ/净对冲按结算价口径计算，但仍不如
+> 交易所直接给出的 Greeks 稳（IV 是模型反推的）。
 
 ## 部署
 

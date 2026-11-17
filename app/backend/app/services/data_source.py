@@ -21,7 +21,7 @@ LIGHT_FIELDS = (
 # oc_chain 每天几 KB，只有回测图会用到，不放进策略扫描的轻量缓存；
 # gex/vr/ivs 等标量供附图指标直接读取，体积很小
 CHART_FIELDS = LIGHT_FIELDS + (
-    "dte", "oc", "oc_chain",
+    "dte", "oc", "oc_chain", "ocm",
     "gex", "vr", "ivs", "oi_total", "fut_vol", "fut_oi", "gam", "veg",
 )
 

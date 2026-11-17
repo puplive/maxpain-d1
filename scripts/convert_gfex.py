@@ -11,6 +11,8 @@ from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 
+from month_chain import build_month_chain, expiry_dte
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / 'data' / 'gfex'
 FILE_DIR = ROOT / 'file' / 'gfex'
@@ -470,6 +472,12 @@ def process_one(sym, fut, opt, mult=10):
             chain_list.append(item)
         oc_chain = json.dumps(chain_list, separators=(',', ':'))
 
+        # 按月轻量链：后端逐月用各自 dte 算 Gamma 类指标再汇总
+        ser_all = codes.str.extract(r'^([A-Za-z]+\d{4})', expand=False)
+        ocm = build_month_chain(ser_all, o['strike'], o['oi'], o['type'], o['iv'],
+                                lambda s: expiry_dte(_gfex_expiry(calendar, s), date,
+                                                     _gfex_T(s, date, calendar) * 365))
+
         oc_val = None
         opt_underlying = codes.str.extract(r'^([A-Za-z]+\d{4})')[0]
         if not opt_underlying.isna().all():
@@ -481,7 +489,8 @@ def process_one(sym, fut, opt, mult=10):
         result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2),
                         'h': row['h'], 'l': row['l'], 'settle': row['settle'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep,
-                        'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'gpk': gpk, 'oc': oc_val, 'oc_chain': oc_chain,
+                        'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'gpk': gpk, 'oc': oc_val,
+                        'oc_chain': oc_chain, 'ocm': ocm,
                         'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,
                         'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
                         'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,

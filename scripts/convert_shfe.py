@@ -15,7 +15,8 @@ DATA_DIR = ROOT / 'data' / 'shfe'
 FILE_DIR = ROOT / 'file' / 'shfe'
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from expiry_rules import last_trading_day
+from expiry_rules import last_trading_day, trading_calendar
+from month_chain import build_month_chain, expiry_dte
 
 SHFE_PREFIX_MAP = {s: s for s in [
     'AG','AL','AO','AU','BR','BU','CU','FU','HC','LU','NI','NR','PB',
@@ -98,36 +99,21 @@ def parse_opt_code(code):
     return None
 
 
-_CAL_CACHE = None
-
-
-def _load_akshare_calendar():
-    """全局缓存：只调一次 AKShare 交易日历"""
-    global _CAL_CACHE
-    if _CAL_CACHE is not None:
-        return _CAL_CACHE
-    try:
-        import akshare as ak
-        df = ak.tool_trade_date_hist_sina()
-        cal = {}
-        for d in pd.to_datetime(df['trade_date']).dt.strftime('%Y-%m-%d'):
-            ym = d[:7]
-            cal.setdefault(ym, []).append(d)
-        _CAL_CACHE = cal
-    except Exception:
-        _CAL_CACHE = {}
-    return _CAL_CACHE
-
-
 def _build_calendar(fut):
     """构建交易日历: {YYYY-MM: [date1, date2, ...]}
-    优先从AKShare获取全年交易日(含未来月份)，再以期货实际数据补充
+    由 expiry_rules 的本地休市表生成（含 2027 年），再用期货实际数据补充，
+    不再依赖 AKShare（其数据只到 2026 年底）。
     """
-    cal = dict(_load_akshare_calendar())
-    for d in sorted(fut['date'].unique()):
+    dates = sorted(fut['date'].astype(str).unique())
+    if not dates:
+        return {}
+    cal = trading_calendar(int(dates[0][:4]) - 1, int(dates[-1][:4]) + 1)
+    for d in dates:
         ym = d[:7]
         if d not in cal.setdefault(ym, []):
             cal[ym].append(d)
+    for month_dates in cal.values():
+        month_dates.sort()
     return cal
 
 
@@ -360,8 +346,10 @@ def load_all_options(year):
     df = df.dropna(subset=['strike'])
     df['strike'] = df['strike'].astype(float)
 
-    for c, src in [('oi','持仓量'),('close','收盘价'),('volume','成交量')]:
+    for c, src in [('oi','持仓量'),('close','收盘价'),('settle','结算价'),('volume','成交量')]:
         if src in df.columns: df[c] = _clean_num(df[src])
+    if 'settle' not in df.columns:
+        df['settle'] = 0.0
 
     df['delta'] = pd.to_numeric(df.get('Delta', pd.Series([0]*len(df))), errors='coerce')
     iv_col = '隐含波动率' if '隐含波动率' in df.columns else None
@@ -421,17 +409,22 @@ def process_one(sym, fut, opt, mult=10):
 
         # ---- 计算 IV/Delta（SHFE XLSX 缺这两个字段） ----
         day_fut = fut[fut['date'] == date]
-        fut_price_map = dict(zip(day_fut['合约'], _clean_num(day_fut['收盘价'])))
+        # 反推用结算价口径（交易所官方 Greeks 同样基于结算价）：标的期货结算价、
+        # 期权结算价；缺失(0)时回退收盘价
+        fut_close = dict(zip(day_fut['合约'], _clean_num(day_fut['收盘价'])))
+        fut_settle = dict(zip(day_fut['合约'], _clean_num(day_fut['结算价']))) \
+            if '结算价' in day_fut.columns else {}
+        fut_price_map = {c: (fut_settle.get(c) or fut_close.get(c) or 0) for c in fut_close}
         # XLSX 无 IV 列 → iv 全为 0，需反推
         if o['iv'].isna().all() or (o['iv'] == 0).all():
             # 匹配每个期权对应的期货合约价
             codes = o['合约']
             parsed_parts = codes.str.extract(r'^([A-Z]{1,2})(\d{4})[CP]', expand=False)
             fcodes = parsed_parts[0].fillna('') + parsed_parts[1].fillna('')
-            S_arr = np.where(fcodes.isin(fut_price_map),
-                             fcodes.map(fut_price_map).fillna(px).values, px)
+            S_arr = fcodes.map(fut_price_map).fillna(0).values
+            S_arr = np.where(S_arr > 0, S_arr, px)
             K_arr = o['strike'].values
-            mkt_arr = o['close'].values
+            mkt_arr = np.where(o['settle'].values > 0, o['settle'].values, o['close'].values)
             is_call = (o['type'] == 'C').values
             # 按唯一合约码算 T
             unique_codes = codes.str.extract(r'^([A-Z]{1,2}\d{4})[CP]', expand=False).dropna().unique()
@@ -570,6 +563,12 @@ def process_one(sym, fut, opt, mult=10):
             chain_list.append(item)
         oc_chain = json.dumps(chain_list, separators=(',', ':'))
 
+        # 按月轻量链：后端逐月用各自 dte 算 Gamma 类指标再汇总
+        ser_all = o['合约'].astype(str).str.extract(r'^([A-Z]{1,2}\d{4})[CP]', expand=False)
+        ocm = build_month_chain(ser_all, o['strike'], o['oi'], o['type'], o['iv'],
+                                lambda s: expiry_dte(_shfe_expiry(calendar, s), date,
+                                                     _calc_T_shfe(s, date, calendar) * 365))
+
         # oc: 期权对应标的期货的收盘价（按期权持仓量最大的标的合约）
         oc_val = None
         opt_underlying = o['合约'].str.extract(r'^([A-Z]{1,2}\d{4})[CP]')[0]
@@ -582,7 +581,8 @@ def process_one(sym, fut, opt, mult=10):
         result[date] = {'d': date, 'o': row['o'], 'c': px, 'nc': round(fut_nc.get(date, px), 2),
                         'h': row['h'], 'l': row['l'], 'settle': row['settle'],
                         'mp': mp, 'co': co, 'po': po, 'bec': bec, 'bep': bep,
-                        'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'gpk': gpk, 'oc': oc_val, 'oc_chain': oc_chain,
+                        'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'gpk': gpk, 'oc': oc_val,
+                        'oc_chain': oc_chain, 'ocm': ocm,
                         'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,
                         'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
                         'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,

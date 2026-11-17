@@ -20,7 +20,8 @@ DATA_DIR = ROOT / 'data' / 'dce'
 XLSX_DIR = ROOT / 'file' / 'dce'
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from expiry_rules import last_trading_day
+from expiry_rules import last_trading_day, trading_calendar
+from month_chain import build_month_chain, expiry_dte
 
 DCE_SYMBOLS = {
     'M': 'm', 'C': 'c', 'L': 'l', 'V': 'v', 'PP': 'pp',
@@ -44,36 +45,21 @@ def parse_opt_code(code: str):
     return None
 
 
-_CAL_CACHE = None
-
-
-def _load_akshare_calendar():
-    """全局缓存：只调一次 AKShare 交易日历"""
-    global _CAL_CACHE
-    if _CAL_CACHE is not None:
-        return _CAL_CACHE
-    try:
-        import akshare as ak
-        df = ak.tool_trade_date_hist_sina()
-        cal = {}
-        for d in pd.to_datetime(df['trade_date']).dt.strftime('%Y-%m-%d'):
-            ym = d[:7]
-            cal.setdefault(ym, []).append(d)
-        _CAL_CACHE = cal
-    except Exception:
-        _CAL_CACHE = {}
-    return _CAL_CACHE
-
-
 def _build_calendar(fut):
     """构建交易日历: {YYYY-MM: [date1, date2, ...]}
-    优先从AKShare获取全年交易日(含未来月份)，再以期货实际数据补充
+    由 expiry_rules 的本地休市表生成（含 2027 年），再用期货实际数据补充，
+    不再依赖 AKShare（其数据只到 2026 年底）。
     """
-    cal = dict(_load_akshare_calendar())
-    for d in sorted(fut['date'].unique()):
+    dates = sorted(fut['date'].astype(str).unique())
+    if not dates:
+        return {}
+    cal = trading_calendar(int(dates[0][:4]) - 1, int(dates[-1][:4]) + 1)
+    for d in dates:
         ym = d[:7]
         if d not in cal.setdefault(ym, []):
             cal[ym].append(d)
+    for month_dates in cal.values():
+        month_dates.sort()
     return cal
 
 
@@ -477,6 +463,12 @@ def process_symbol(sym, prefix, year, date=None):
             chain_list.append(item)
         oc_chain = json.dumps(chain_list, separators=(',', ':'))
 
+        # 按月轻量链：后端逐月用各自 dte 算 Gamma 类指标再汇总
+        ser_all = opt['合约名称'].astype(str).str.extract(r'^([a-zA-Z]+\d{4})', expand=False)
+        ocm = build_month_chain(ser_all, opt['strike'], opt['oi'], opt['type'], opt['iv'],
+                                lambda s: expiry_dte(_dce_expiry(calendar, s), dt,
+                                                     _calc_T_dce(s, dt, calendar) * 365))
+
         # oc: 期权对应标的期货的收盘价（按期权持仓量最大的标的合约）
         oc_val = None
         opt_underlying = opt['合约名称'].str.extract(r'^(.+?)-')[0]
@@ -493,7 +485,7 @@ def process_symbol(sym, prefix, year, date=None):
             'nc': round(fut_nc.get(dt, px), 2), 'oc': oc_val,
             'mp': mp, 'co': co, 'po': po,
             'bec': bec, 'bep': bep, 'vr': vr, 'ivs': ivs, 'gex': gex, 'gam': gam, 'veg': veg, 'gpk': gpk,
-            'oc_chain': oc_chain,
+            'oc_chain': oc_chain, 'ocm': ocm,
             'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,
             'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
             'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,

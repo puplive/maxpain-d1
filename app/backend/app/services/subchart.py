@@ -4,7 +4,7 @@
 - gex / 归一化 gex、OI 偏度与偏度差、OI 净差、量比、IV 偏度、期货成交量/持仓量
 - ATR / TR（Wilder 平滑，周期取 atrPeriod）
 - MP 置信、净对冲（ΣΔ×OI）、DEX 方向
-- Vanna / Charm 流（只统计显示带内有 IV 的合约，和旧页一致）
+- Vanna / Charm 流（只统计显示带内有 IV 的合约；有按月链 ocm 时逐月用各自 dte）
 - Gamma 场景、Vega 直接用转换脚本写好的标量
 - 多头/空头噪音（lookback 日 Σ 毛刺 / ΣATR）
 
@@ -20,7 +20,7 @@ from functools import lru_cache
 
 from ..config import settings
 from .data_source import load_chart_history
-from .derivatives import _SQRT_1_2PI, _normalize_band
+from .derivatives import _SQRT_1_2PI, _normalize_band, iter_chain_entries
 
 _EMPTY_KEYS = (
     "gex", "gex_norm", "skew", "skew_delta", "oi_net", "vr", "iv",
@@ -102,9 +102,6 @@ def _calc_row(row: dict, prev_skew: float | None, prev_atr: float | None,
             spot = _num(row.get("oc"))
             if spot <= 0:
                 spot = close
-            dte = _num(row.get("dte"))
-            t = dte / 365 if dte > 0 else 1 / 365
-            sqrt_t = math.sqrt(t)
             rng = band / 100
             low_band = close * (1 - rng)
             high_band = close * (1 + rng)
@@ -114,8 +111,6 @@ def _calc_row(row: dict, prev_skew: float | None, prev_atr: float | None,
             best_dist = math.inf
             total_oi = 0.0
             hedge = 0.0
-            vanna = 0.0
-            charm = 0.0
             for item in chain:
                 if not isinstance(item, dict):
                     continue
@@ -134,15 +129,17 @@ def _calc_row(row: dict, prev_skew: float | None, prev_atr: float | None,
                     best_dist = dist
                     best_oi = contract_oi
 
-                if strike < low_band or strike > high_band:
-                    continue
-                civ = _num(item.get("civ"))
+            # Vanna/Charm 对 T 敏感：按月链逐月用各自 dte，旧数据回退近月 dte
+            vanna = 0.0
+            charm = 0.0
+            for strike, c_oi, p_oi, civ, piv, t, sqrt_t in iter_chain_entries(
+                row, chain, low_band, high_band
+            ):
                 if c_oi > 0 and civ > 0:
                     d1 = (math.log(spot / strike) + 0.5 * civ * civ * t) / (civ * sqrt_t)
                     npdf = _SQRT_1_2PI * math.exp(-0.5 * d1 * d1)
                     vanna += -npdf * (d1 - civ * sqrt_t) / civ * c_oi
                     charm += npdf * (d1 - civ * sqrt_t) / (2 * t) * c_oi
-                piv = _num(item.get("piv"))
                 if p_oi > 0 and piv > 0:
                     d1 = (math.log(spot / strike) + 0.5 * piv * piv * t) / (piv * sqrt_t)
                     npdf = _SQRT_1_2PI * math.exp(-0.5 * d1 * d1)
