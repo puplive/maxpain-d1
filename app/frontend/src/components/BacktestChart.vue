@@ -33,7 +33,7 @@ import {
   drawDerivatives,
   expandPriceRange,
 } from './chart/derivatives'
-import { drawLineSeries, type SeriesFrame } from './chart/draw'
+import { drawLineSeries, drawStepSeries, type SeriesFrame } from './chart/draw'
 import { drawOiChart, hasHedgeData, hasIvSmile } from './chart/oichart'
 import {
   computeRollRegions,
@@ -427,7 +427,7 @@ function draw() {
     drawLineSeries(ctx, bepSeries.value, COLORS.bep, 0.6, frame)
   }
   if (show.mp) {
-    drawLineSeries(ctx, mpSeries.value, COLORS.mp, 1, frame)
+    drawStepSeries(ctx, mpSeries.value, (v) => v, COLORS.mp, 1, frame, slot)
   }
   // 止损线：只画当日止损（虚线）；最后一根 K 线收盘仍持仓时，再向右延伸一格画明日止损
   if (show.stop) {
