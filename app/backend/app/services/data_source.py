@@ -23,6 +23,7 @@ LIGHT_FIELDS = (
 CHART_FIELDS = LIGHT_FIELDS + (
     "dte", "oc", "oc_chain", "ocm",
     "gex", "vr", "ivs", "oi_total", "fut_vol", "fut_oi", "gam", "veg",
+    "exv",
 )
 
 

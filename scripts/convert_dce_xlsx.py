@@ -300,6 +300,12 @@ def process_symbol(sym, prefix, year, date=None):
     opt_all['opt_volume'] = pd.to_numeric(opt_all['成交量'], errors='coerce').fillna(0)
     opt_all['delta'] = pd.to_numeric(opt_all['Delta'], errors='coerce')
     opt_all['iv'] = pd.to_numeric(opt_all['隐含波动率(%)'], errors='coerce').fillna(0) / 100
+    if '行权量' in opt_all.columns:
+        opt_all['exv'] = pd.to_numeric(
+            opt_all['行权量'].astype(str).str.replace(',', ''), errors='coerce'
+        ).fillna(0)
+    else:
+        opt_all['exv'] = 0.0
 
     opt_by_date = {str(d): g for d, g in opt_all.groupby('date')}
 
@@ -361,6 +367,8 @@ def process_symbol(sym, prefix, year, date=None):
         vol_call = cv
         vol_put = pv
         vol_total = round(cv + pv, 2)
+        # 当日合计行权量（手），只有到期日附近非零
+        exv = int(opt['exv'].sum())
         oi_total = float(opt['oi'].sum())
         call_oi_all = float(calls['oi'].sum())
         put_oi_all = float(puts['oi'].sum())
@@ -489,6 +497,7 @@ def process_symbol(sym, prefix, year, date=None):
             'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,
             'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
             'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,
+            'exv': exv,
             'fut_vol': float(row['volume']),
             'fut_oi': float(row['open_interest']),
             'fut_turnover': float(row['turnover']),

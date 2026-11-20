@@ -304,6 +304,70 @@ export const SUB_GROUPS: SubGroup[] = [
     ],
   },
   {
+    key: 'gflow',
+    label: '再平衡流量',
+    color: '#78e08f',
+    format: (point) => `再平衡流量 ${hand(point.gflow)}/日`,
+    series: [
+      {
+        color: '#78e08f',
+        value: (point) => point.gflow,
+        scale: 'positive',
+        scaleId: 'gflow',
+        zeroGap: true,
+      },
+    ],
+  },
+  {
+    key: 'gexp',
+    label: '到期周Γ占比',
+    color: '#8e44ad',
+    format: (point) => `到期周Γ占比 ${point.gexp.toFixed(1)}%`,
+    series: [
+      {
+        color: '#8e44ad',
+        value: (point) => point.gexp,
+        scale: 'positive',
+        scaleId: 'gexp',
+        zeroGap: true,
+      },
+    ],
+  },
+  {
+    key: 'exv',
+    label: '行权量',
+    color: '#d63031',
+    format: (point) => `行权量 ${Math.round(point.exv).toLocaleString()}手`,
+    series: [
+      {
+        color: '#d63031',
+        value: (point) => point.exv,
+        kind: 'bar',
+        alpha: 0.7,
+        scale: 'positive',
+        scaleId: 'exv',
+        zeroGap: true,
+      },
+    ],
+  },
+  {
+    key: 'liqp',
+    label: '被动压力',
+    color: '#fa8231',
+    format: (point) => `被动压力 ${signed(point.liqp, 1)}`,
+    series: [
+      {
+        color: '#fa8231',
+        value: (point) => point.liqp,
+        kind: 'bar',
+        sign: true,
+        scale: 'symmetric',
+        scaleId: 'liqp',
+        zeroGap: true,
+      },
+    ],
+  },
+  {
     key: 'gam',
     label: 'Gamma场景',
     color: '#f6b93b',

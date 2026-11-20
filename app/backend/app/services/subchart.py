@@ -5,6 +5,11 @@
 - ATR / TR（Wilder 平滑，周期取 atrPeriod）
 - MP 置信、净对冲（ΣΔ×OI）、DEX 方向
 - Vanna / Charm 流（只统计显示带内有 IV 的合约；有按月链 ocm 时逐月用各自 dte）
+- 再平衡流量 gflow：ΣΓ×OI×S×当日 ATR 波幅，即按当日实际波动预期需要的对冲手数；
+  到期周 Gamma 占比 gexp：dte≤7 的月份 Γ×OI 占全部月份比例
+- 行权量 exv：转换脚本写入的当日合计行权量（CZCE/DCE/GFEX 有，SHFE/CFFEX 为 0）
+- 被动压力 liqp：期货持仓量日减幅(%)×当日涨跌幅(%)，只取减仓日、按涨跌方向带符号；
+  作为强平/被动减仓的代理，不假设保证金率（保证金数据行情里拿不到）
 - Gamma 场景、Vega 直接用转换脚本写好的标量
 - 多头/空头噪音（lookback 日 Σ 毛刺 / ΣATR）
 
@@ -20,12 +25,20 @@ from functools import lru_cache
 
 from ..config import settings
 from .data_source import load_chart_history
-from .derivatives import _SQRT_1_2PI, _normalize_band, iter_chain_entries
+from .derivatives import (
+    _SQRT_1_2PI,
+    _gamma_oi,
+    _load_months,
+    _month_t,
+    _normalize_band,
+    iter_chain_entries,
+)
 
 _EMPTY_KEYS = (
     "gex", "gex_norm", "skew", "skew_delta", "oi_net", "vr", "iv",
     "fut_vol", "fut_oi", "atr", "tr", "mp_conf", "hdg", "dex",
-    "vanna", "charm", "gam", "veg", "noise_l", "noise_s",
+    "vanna", "charm", "gflow", "gexp", "exv", "liqp", "gam", "veg",
+    "noise_l", "noise_s",
 )
 
 
@@ -48,7 +61,8 @@ def _trim(value: float) -> float:
 
 
 def _calc_row(row: dict, prev_skew: float | None, prev_atr: float | None,
-              prev_close: float | None, band: float, atr_period: int) -> dict:
+              prev_close: float | None, prev_fut_oi: float | None,
+              band: float, atr_period: int) -> dict:
     """计算单日附图数值；行内字段约定见类文档。"""
     point: dict = {"d": row.get("d")}
     point.update({key: 0.0 for key in _EMPTY_KEYS})
@@ -79,6 +93,15 @@ def _calc_row(row: dict, prev_skew: float | None, prev_atr: float | None,
     point["fut_oi"] = _num(row.get("fut_oi"))
     point["gam"] = _num(row.get("gam"))
     point["veg"] = _num(row.get("veg"))
+    point["exv"] = _num(row.get("exv"))
+
+    # 被动压力代理：期货减仓幅度(%) × 当日涨跌幅(%)，只统计减仓日。
+    # 减仓越猛、波动越大越可能是强平/被动平仓；加仓日的波动不算被动压力
+    if (prev_fut_oi and prev_fut_oi > 0 and point["fut_oi"] > 0
+            and close > 0 and prev_close and prev_close > 0):
+        oi_drop = max(0.0, prev_fut_oi - point["fut_oi"]) / prev_fut_oi * 100
+        ret = (close - prev_close) / prev_close * 100
+        point["liqp"] = oi_drop * ret
 
     # 真实波幅与 Wilder ATR
     tr = high - low if prev_close is None else max(
@@ -153,7 +176,53 @@ def _calc_row(row: dict, prev_skew: float | None, prev_atr: float | None,
             point["vanna"] = vanna * 0.01
             point["charm"] = -charm / 365
 
+            # 再平衡流量：ΣΓ×OI×S×预期日波幅(ATR/收盘)，单位手；
+            # 到期周 Gamma 占比：dte≤7 的月份占全部月份 Γ×OI 的比例
+            gamma_total, gamma_week = _month_gamma(row, low_band, high_band, spot)
+            move = atr / close if atr > 0 and close > 0 else 0.01
+            point["gflow"] = gamma_total * spot * move
+            point["gexp"] = gamma_week / gamma_total * 100 if gamma_total > 0 else 0.0
+
     return point
+
+
+def _month_gamma(row: dict, low: float, high: float, spot: float) -> tuple[float, float]:
+    """按月链 ocm 汇总 Γ×OI，返回 (全部月份, dte≤7 的月份)。
+
+    没有 ocm 的旧数据返回 (0, 0)，gflow/gexp 也就为 0。
+    """
+    months = _load_months(row.get("ocm"))
+    if not months:
+        return 0.0, 0.0
+    total = 0.0
+    week = 0.0
+    for month in months:
+        if not isinstance(month, dict):
+            continue
+        t, sqrt_t = _month_t(month)
+        month_gamma = 0.0
+        for entry in month.get("k") or []:
+            if not isinstance(entry, (list, tuple)) or len(entry) < 5:
+                continue
+            strike = entry[0]
+            if not isinstance(strike, (int, float)) or strike <= 0:
+                continue
+            strike = float(strike)
+            if strike < low or strike > high:
+                continue
+            # 按月链条目 [行权价, 看涨OI, 看跌OI, 看涨IV, 看跌IV]
+            for oi_idx, iv_idx in ((1, 3), (2, 4)):
+                oi = entry[oi_idx]
+                iv = entry[iv_idx]
+                if not isinstance(oi, (int, float)) or not isinstance(iv, (int, float)):
+                    continue
+                if oi > 0 and iv > 0:
+                    month_gamma += _gamma_oi(strike, float(iv), float(oi), spot, t, sqrt_t)
+        total += month_gamma
+        dte = month.get("dte")
+        if isinstance(dte, (int, float)) and dte <= 7:
+            week += month_gamma
+    return total, week
 
 
 @lru_cache(maxsize=4)
@@ -166,12 +235,16 @@ def _cached(
     prev_skew: float | None = None
     prev_atr: float | None = None
     prev_close: float | None = None
+    prev_fut_oi: float | None = None
     for row in rows:
-        point = _calc_row(row, prev_skew, prev_atr, prev_close, band, atr_period)
+        point = _calc_row(
+            row, prev_skew, prev_atr, prev_close, prev_fut_oi, band, atr_period
+        )
         points.append(point)
         prev_skew = point["skew"]
         prev_atr = point["atr"]
         prev_close = _num(row.get("c"), prev_close or 0.0)
+        prev_fut_oi = point["fut_oi"]
 
     # 噪音：最近 lookback 天 Σmax(0, 昨收-最低) / ΣATR ×100，多空分别统计
     for index, point in enumerate(points):

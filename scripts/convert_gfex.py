@@ -293,7 +293,7 @@ def load_all_options(year):
     df = df.dropna(subset=['strike'])
     df['strike'] = df['strike'].astype(float)
 
-    for c, src in [('oi','持仓量'),('close','收盘价'),('volume','成交量')]:
+    for c, src in [('oi','持仓量'),('close','收盘价'),('volume','成交量'),('exv','行权量')]:
         if src in df.columns:
             df[c] = _clean_num(df[src])
     df['delta'] = pd.to_numeric(df.get('DELTA'), errors='coerce')
@@ -494,6 +494,7 @@ def process_one(sym, fut, opt, mult=10):
                         'expiry': nearest_expiry, 'dte': nearest_dte, 'opt_contract': nearest_code,
                         'oi_total': oi_total, 'oi_pcr': oi_pcr, 'oi_max_strike': oi_max_strike,
                         'vol_call': vol_call, 'vol_put': vol_put, 'vol_total': vol_total,
+                        'exv': int(o['exv'].sum()) if 'exv' in o.columns else 0,
                         'fut_vol': row['fv'], 'fut_oi': row['foi'], 'fut_turnover': row['fto'],
                         'fut_contract': row['fc'],
                         'atm_iv': atm_iv}

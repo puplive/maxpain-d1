@@ -7,6 +7,6 @@ file
 .wrangler/
 .claude/
 .venv/
-*.db
+# *.db
 .env
 app/frontend/dist/

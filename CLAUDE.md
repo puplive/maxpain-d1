@@ -99,6 +99,13 @@ python scripts/build_web_data.py
   由 `scripts/month_chain.py` 生成。
 - T 敏感指标（Call/Put Wall、Gamma 峰值、Magnet、ZeroGamma、Vanna、Charm）
   在 app 后端逐月用各自的 `dte` 计算再汇总，避免远月被当成近月。
+- 附图被动执行类指标（`app/backend/app/services/subchart.py`）：
+  `gflow` 是 ΣΓ×OI×S×当日 ATR 波幅的预计再平衡手数；`gexp` 是 dte≤7 月份
+  Γ×OI 占全部月份的比例；`vanna` 是 IV 降 1 点的手数；`charm` 是时间流逝 1 天的手数。
+  `exv` 是转换脚本写入的当日合计行权量（手）：CZCE/DCE/GFEX 原始文件有该字段，
+  SHFE/CFFEX 没有，读不到时按 0。`gflow/gexp` 依赖 `ocm`，旧数据没有 `ocm` 时为 0。
+  `liqp` 是强平/被动减仓的代理：期货持仓量日减幅(%)×当日涨跌幅(%)
+  （只统计减仓日、按涨跌方向带符号），不假设保证金率——保证金数据行情里没有。
 - 旧数据没有 `ocm` 时自动回退「全月份 + 近月 dte」口径，重跑转换脚本后生效；
   转换脚本改动后仍需 `python scripts/build_web_data.py` 才会写到 `web/data/`。
 

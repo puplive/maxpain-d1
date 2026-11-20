@@ -278,6 +278,14 @@ export interface SubchartPoint {
   dex: number
   vanna: number
   charm: number
+  /** 预计每日再平衡手数：ΣΓ×OI×S×当日ATR波幅（按全部月份各自dte） */
+  gflow: number
+  /** 到期周 Gamma 占比：dte≤7 的月份 Γ×OI / 全部月份 Γ×OI，单位 % */
+  gexp: number
+  /** 当日合计行权量（手），CZCE/DCE/GFEX 有，SHFE/CFFEX 为 0 */
+  exv: number
+  /** 被动压力代理：期货减仓幅度(%)×当日涨跌幅(%)，只统计减仓日 */
+  liqp: number
   gam: number
   veg: number
   /** lookback 日多头/空头噪音百分比 */
